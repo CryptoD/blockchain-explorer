@@ -1,0 +1,29 @@
+version: "3.8"
+
+services:
+  app:
+    build: .
+    container_name: blockchain-explorer-instance
+    ports:
+      - "3000:3000"
+    environment:
+      - DB_HOST=db
+      - DB_PORT=5432
+      - DB_USER=postgres
+      - DB_PASSWORD=mysecrSSDSDfetp234ksdassword
+      - DB_NAME=blockchain_explorer
+    depends_on:
+      - db
+
+  db:
+    image: postgres:13
+    container_name: blockchain-explorer-db
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=mysecrSSDSDfetp234ksdassword
+      - POSTGRES_DB=blockchain_explorer
+    volumes:
+      - db-data:/var/lib/postgresql/data
+
+volumes:
+  db-data:
