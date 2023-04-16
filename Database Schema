@@ -1,0 +1,58 @@
+Database Schema
+
+Here's a suggested database schema with the main tables and their relationships:
+
+    blocks - Stores information about each block.
+
+    id (Primary Key)
+    block_height (Unique)
+    block_hash (Unique)
+    parent_block_hash
+    timestamp
+    miner_address
+    block_reward
+    difficulty
+    num_transactions
+    total_transaction_volume
+
+    transactions - Stores information about each transaction.
+
+    id (Primary Key)
+    tx_hash (Unique)
+    block_id (Foreign Key to blocks)
+    from_address
+    to_address
+    amount
+    fee
+    nonce
+    timestamp
+
+    addresses - Stores information about each address.
+
+    id (Primary Key)
+    address (Unique)
+    balance
+
+    address_transactions - Stores the relationship between addresses and transactions.
+
+    id (Primary Key)
+    address_id (Foreign Key to addresses)
+    transaction_id (Foreign Key to transactions)
+
+    tokens - Stores information about each token/asset (if applicable).
+
+    id (Primary Key)
+    contract_address (Unique)
+    name
+    symbol
+    decimals
+    total_supply
+
+    token_holders - Stores the relationship between tokens and their holders.
+
+    id (Primary Key)
+    token_id (Foreign Key to tokens)
+    address_id (Foreign Key to addresses)
+    balance
+
+You can customize this schema based on the specific requirements of your blockchain explorer and the blockchain network you're targeting.

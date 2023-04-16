@@ -1,0 +1,32 @@
+Homepage / Dashboard: The homepage or dashboard provides an overview of the latest blocks, transactions, and other relevant network statistics (e.g., 
+hash rate, difficulty, total coins in circulation, etc.).
+
+Block Details: This feature allows users to view information about individual blocks, including the 
+block height, timestamp, miner, block reward, number of transactions, and the total transaction volume.
+
+Transaction Details: Users can explore details of individual transactions, including the transaction hash,
+input addresses, output addresses, total amount transferred, fees, and confirmations.
+
+Address Details: Users can view information about specific addresses, including the total balance, number 
+of transactions, received and sent amounts, and a list of associated transactions.
+
+Token/Asset Explorer: For blockchains that support custom tokens or assets, this feature allows users to view 
+information about specific tokens/assets, including the total supply, holders, and associated transactions.
+
+Search Functionality: A search bar allows users to enter a block height, transaction hash, or address to easily 
+navigate to the corresponding details page.
+
+Network Status: This feature displays information about the overall health and status of the blockchain 
+network, such as the current hash rate, difficulty, and network propagation.
+
+Mempool Viewer: This feature provides insights into the current state of the transaction mempool, 
+including pending transactions and their associated fees.
+
+Visualizations and Charts: Visualizations and charts help users understand trends and patterns in the 
+blockchain network data over time, such as transaction volume, fees, and mining rewards.
+
+API Access: A well-documented API allows developers to access and integrate the blockchain explorer's 
+data into their applications or services.
+
+Responsive Design: A mobile-friendly and responsive design ensures that the blockchain explorer is accessible 
+and user-friendly across various devices and screen sizes.
