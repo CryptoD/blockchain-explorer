@@ -49,5 +49,47 @@
             <input type="text" class="search-bar" placeholder="Search by block height, transaction hash, or address...">
         </div>
     </div>
+
+    
+    <script>
+        document.querySelector('.search-bar').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                // When the user presses the Enter key, perform the search
+                performSearch(e.target.value);
+            }
+        });
+    
+        function performSearch(query) {
+            // Send an AJAX request to your backend API
+            fetch('/api/search?q=' + encodeURIComponent(query))
+                .then(function (response) {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Failed to fetch data from the API');
+                    }
+                })
+                .then(function (data) {
+                    // Update the page content with the search results
+                    displaySearchResults(data);
+                })
+                .catch(function (error) {
+                    console.error('Error:', error);
+                    alert('An error occurred while searching the blockchain. Please try again later.');
+                });
+        }
+    
+        function displaySearchResults(data) {
+            // Display the search results on the page
+            // This is just a simple example; you can customize this function to display the results in any format you prefer
+            const resultDiv = document.createElement('div');
+            resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+            document.body.appendChild(resultDiv);
+        }
+    </script>
+    
+
+
+
 </body>
 </html>
