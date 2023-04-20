@@ -4,15 +4,15 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log"
+	"io/ioutil"
 	"net/http"
 	"strconv"
 
-	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 )
+
+var ErrNotFound = errors.New("not found")
 
 func main() {
 	router := gin.Default()
@@ -22,52 +22,60 @@ func main() {
 		c.File("index.html")
 	})
 
-	router.Run(":8080")
-
-	// Connect to Ethereum node
-	client, err := ethclient.Dial("https://delicate-twilight-silence.discover.quiknode.pro/d07e2d37b61844a0677b85210c8074b063e3b3d8/")
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	router.GET("/balance/:address", func(c *gin.Context) {
-		address := c.Param("address")
-
-		// Validate Ethereum address
-		if !common.IsHexAddress(address) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid address"})
+	router.GET("/api/search", func(c *gin.Context) {
+		query := c.Query("q")
+		if query == "" {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'q' is required"})
 			return
 		}
 
-		account := common.HexToAddress(address)
-
-		// Get account balance
-		balance, err := client.BalanceAt(c, account, nil)
+		resultType, data, err := searchBlockchain(query)
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			if err == ErrNotFound {
+				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
+			} else {
+				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
+			}
 			return
 		}
 
-		c.JSON(http.StatusOK, gin.H{"balance": fmt.Sprintf("%d", balance)})
+		response := map[string]interface{}{
+			"resultType": resultType,
+			"data":       data,
+		}
+
+		c.JSON(http.StatusOK, response)
 	})
 
-	router.Run(":3000") // Listen on port 3000
+	router.Run(":8080")
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
-	// Check if the query is an address, transaction ID, or block height
-	if isValidAddress(query) {
-		data, err := getAddressDetails(query)
-		return "address", data, err
-	} else if isValidTransactionID(query) {
-		data, err := getTransactionDetails(query)
-		return "transaction", data, err
-	} else if isValidBlockHeight(query) {
-		data, err := getBlockDetails(query)
-		return "block", data, err
-	} else {
-		return "", nil, errors.New("invalid search query")
+	// Make an API call to Blockchair to get information about the Bitcoin address
+	apiUrl := fmt.Sprintf("https://api.blockchair.com/bitcoin/dashboards/address/%s", query)
+	resp, err := http.Get(apiUrl)
+	if err != nil {
+		return "", nil, err
 	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode == http.StatusNotFound {
+		return "", nil, ErrNotFound
+	} else if resp.StatusCode != http.StatusOK {
+		return "", nil, fmt.Errorf("API request failed with status code %d", resp.StatusCode)
+	}
+
+	body, err := ioutil.ReadAll(resp.Body)
+	if err != nil {
+		return "", nil, err
+	}
+
+	var data map[string]interface{}
+	if err := json.Unmarshal(body, &data); err != nil {
+		return "", nil, err
+	}
+
+	return "address", data, nil
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
