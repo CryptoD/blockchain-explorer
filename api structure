@@ -1,50 +1,41 @@
-Suggested API structure, endpoints etc
-
     Get Block Details
-
-    Endpoint: /api/block/:blockHeight
-    Method: GET
-    Request: The block height is provided as a path parameter.
-    Response: JSON object containing block details.
+        Endpoint: /api/block/:blockHeight
+        Method: GET
+        Request: The block height is provided as a path parameter.
+        Response: JSON object containing block details.
 
     Get Transaction Details
-
-    Endpoint: /api/transaction/:txHash
-    Method: GET
-    Request: The transaction hash is provided as a path parameter.
-    Response: JSON object containing transaction details.
+        Endpoint: /api/transaction/:txHash
+        Method: GET
+        Request: The transaction hash is provided as a path parameter.
+        Response: JSON object containing transaction details.
 
     Get Address Details
-
-    Endpoint: /api/address/:address
-    Method: GET
-    Request: The wallet address is provided as a path parameter.
-    Response: JSON object containing address details, including balance and transaction history.
+        Endpoint: /api/address/:address
+        Method: GET
+        Request: The wallet address is provided as a path parameter.
+        Response: JSON object containing address details, including balance and transaction history.
 
     Get Token/Asset Details
-
-    Endpoint: /api/token/:tokenAddress
-    Method: GET
-    Request: The token contract address is provided as a path parameter.
-    Response: JSON object containing token/asset details, including total supply, holders, and transaction history.
+        Endpoint: /api/token/:tokenAddress
+        Method: GET
+        Request: The token contract address is provided as a path parameter.
+        Response: JSON object containing token/asset details, including total supply, holders, and transaction history.
 
     Search
-
-    Endpoint: /api/search
-    Method: GET
-    Request: Query parameter q containing the block height, transaction hash, or address.
-    Response: JSON object containing the search result type (block, transaction, or address) and the corresponding details.
+        Endpoint: /api/search
+        Method: GET
+        Request: Query parameter q containing the block height, transaction hash, or address.
+        Response: JSON object containing the search result type (block, transaction, or address) and the corresponding details.
 
     Get Network Status
-
-    Endpoint: /api/network/status
-    Method: GET
-    Request: None
-    Response: JSON object containing network status, including hash rate, difficulty, and propagation.
+        Endpoint: /api/network/status
+        Method: GET
+        Request: None
+        Response: JSON object containing network status, including hash rate, difficulty, and propagation.
 
     Get Mempool Information
-
-    Endpoint: /api/mempool
-    Method: GET
-    Request: None
-    Response: JSON object containing mempool information, such as pending transactions and associated fees.
+        Endpoint: /api/mempool
+        Method: GET
+        Request: None
+        Response: JSON object containing mempool information, such as pending transactions and associated fees.
