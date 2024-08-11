@@ -1,95 +1,98 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blockchain Explorer</title>
-    <style>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Blockchain Explorer</title>
+  <style>
     body {
-        font-family: Arial, sans-serif;
-        background-color: #f8f9fa;
-        margin: 0;
-        padding: 0;
-        display: flex;
-        justify-content: center;
-        align-items: center;
-        height: 70vh;
-        width: 100vw;
+      font-family: Arial, sans-serif;
+      background-color: #f8f9fa;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      justify-content: center;
+      align-items: center;
+      height: 70vh;
+      width: 100vw;
     }
-    
     .container {
-        text-align: center;
+      text-align: center;
     }
-    
     .logo {
-        max-width: 350px;
-        margin-bottom: 20px;
+      max-width: 350px;
+      margin-bottom: 20px;
     }
-    
+    .search-container {
+      position: relative;
+      display: inline-block;
+    }
     .search-bar {
-        position: relative;
-        width: 800px;
-        height: 30px;
-        padding: 10px 30px 10px 10px;
-        font-size: 20px;
-        border: 1px solid #ccc;
-        border-radius: 5px;
-        background-image: url("images/magnifying-glass.png");
-        background-repeat: no-repeat;
-        background-position: right 10px center;
+      width: 800px;
+      height: 30px;
+      padding: 10px 30px 10px 10px;
+      font-size: 20px;
+      border: 1px solid #ccc;
+      border-radius: 5px;
     }
-    
-    </style>
+    .search-icon {
+      position: absolute;
+      top: 50%;
+      right: 10px;
+      transform: translateY(-50%);
+      width: 20px;
+      height: 20px;
+      background-image: url("images/magnifying-glass.png");
+      background-repeat: no-repeat;
+      background-size: contain;
+      cursor: pointer;
+    }
+  </style>
 </head>
 <body>
-    <div class="container">
-        <img src="images/logo.jpg" alt="Blockchain Explorer Logo" class="logo">
-        <br><br><br>
-        <div>
-            <input type="text" class="search-bar" placeholder="Search by block height, transaction hash, or address...">
-        </div>
+  <div class="container">
+    <img src="images/logo.jpg" alt="Blockchain Explorer Logo" class="logo">
+    <br><br><br>
+    <div class="search-container">
+      <input type="text" id="search-input" class="search-bar" placeholder="Search by block height, transaction hash, or address...">
+      <span id="search-icon" class="search-icon"></span>
     </div>
+  </div>
+  <script>
+    document.querySelector('#search-input').addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') {
+        performSearch(e.target.value);
+      }
+    });
 
-    
-    <script>
-        document.querySelector('.search-bar').addEventListener('keydown', function (e) {
-            if (e.key === 'Enter') {
-                // When the user presses the Enter key, perform the search
-                performSearch(e.target.value);
-            }
+    document.querySelector('#search-icon').addEventListener('click', function () {
+      const query = document.querySelector('#search-input').value;
+      performSearch(query);
+    });
+
+    function performSearch(query) {
+      fetch('/api/search?q=' + encodeURIComponent(query))
+        .then(function (response) {
+          if (response.ok) {
+            return response.json();
+          } else {
+            throw new Error('Failed to fetch data from the API');
+          }
+        })
+        .then(function (data) {
+          displaySearchResults(data);
+        })
+        .catch(function (error) {
+          console.error('Error:', error);
+          alert('An error occurred while searching the blockchain. Please try again later.');
         });
-    
-        function performSearch(query) {
-            // Send an AJAX request to your backend API
-            fetch('/api/search?q=' + encodeURIComponent(query))
-                .then(function (response) {
-                    if (response.ok) {
-                        return response.json();
-                    } else {
-                        throw new Error('Failed to fetch data from the API');
-                    }
-                })
-                .then(function (data) {
-                    // Update the page content with the search results
-                    displaySearchResults(data);
-                })
-                .catch(function (error) {
-                    console.error('Error:', error);
-                    alert('An error occurred while searching the blockchain. Please try again later.');
-                });
-        }
-    
-        function displaySearchResults(data) {
-            // Display the search results on the page
-            // This is just a simple example; you can customize this function to display the results in any format you prefer
-            const resultDiv = document.createElement('div');
-            resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-            document.body.appendChild(resultDiv);
-        }
-    </script>
-    
+    }
 
-
-
+    function displaySearchResults(data) {
+      const resultDiv = document.createElement('div');
+      resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
+      document.body.appendChild(resultDiv);
+    }
+  </script>
 </body>
 </html>
