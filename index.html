@@ -1,98 +1,189 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Blockchain Explorer</title>
-  <style>
-    body {
-      font-family: Arial, sans-serif;
-      background-color: #f8f9fa;
-      margin: 0;
-      padding: 0;
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      height: 70vh;
-      width: 100vw;
-    }
-    .container {
-      text-align: center;
-    }
-    .logo {
-      max-width: 350px;
-      margin-bottom: 20px;
-    }
-    .search-container {
-      position: relative;
-      display: inline-block;
-    }
-    .search-bar {
-      width: 800px;
-      height: 30px;
-      padding: 10px 30px 10px 10px;
-      font-size: 20px;
-      border: 1px solid #ccc;
-      border-radius: 5px;
-    }
-    .search-icon {
-      position: absolute;
-      top: 50%;
-      right: 10px;
-      transform: translateY(-50%);
-      width: 20px;
-      height: 20px;
-      background-image: url("images/magnifying-glass.png");
-      background-repeat: no-repeat;
-      background-size: contain;
-      cursor: pointer;
-    }
-  </style>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Blockchain Explorer</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            background-color: #f8f9fa;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+            width: 100vw;
+        }
+        .container {
+            text-align: center;
+        }
+        .logo {
+            max-width: 350px;
+            margin-bottom: 20px;
+        }
+        .search-container {
+            position: relative;
+            display: inline-block;
+        }
+        .search-bar {
+            width: 800px;
+            height: 30px;
+            padding: 10px 30px 10px 10px;
+            font-size: 20px;
+            border: 1px solid #ccc;
+            border-radius: 5px;
+        }
+        .search-icon {
+            position: absolute;
+            top: 50%;
+            right: 10px;
+            transform: translateY(-50%);
+            width: 20px;
+            height: 20px;
+            background-image: url("images/magnifying-glass.png");
+            background-repeat: no-repeat;
+            background-size: contain;
+            cursor: pointer;
+        }
+        #result-container {
+            margin-top: 20px;
+            text-align: left;
+            max-width: 800px;
+            margin-left: auto;
+            margin-right: auto;
+        }
+        .result-item {
+            background-color: #fff;
+            border-radius: 5px;
+            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+            padding: 15px;
+            margin-bottom: 15px;
+        }
+        .result-title {
+            font-size: 18px;
+            font-weight: bold;
+            margin-bottom: 10px;
+        }
+        .result-detail {
+            margin-bottom: 5px;
+        }
+        .result-label {
+            font-weight: bold;
+        }
+        .error-message {
+            color: #dc3545;
+            font-weight: bold;
+        }
+    </style>
 </head>
 <body>
-  <div class="container">
-    <img src="images/logo.jpg" alt="Blockchain Explorer Logo" class="logo">
-    <br><br><br>
-    <div class="search-container">
-      <input type="text" id="search-input" class="search-bar" placeholder="Search by block height, transaction hash, or address...">
-      <span id="search-icon" class="search-icon"></span>
+    <div class="container">
+        <img src="images/logo.jpg" alt="Blockchain Explorer Logo" class="logo">
+        <br><br><br>
+        <div class="search-container">
+            <input type="text" id="search-input" class="search-bar" placeholder="Search by block height, transaction hash, or address...">
+            <span id="search-icon" class="search-icon"></span>
+        </div>
+        <div id="result-container"></div>
     </div>
-  </div>
-  <script>
-    document.querySelector('#search-input').addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') {
-        performSearch(e.target.value);
-      }
-    });
-
-    document.querySelector('#search-icon').addEventListener('click', function () {
-      const query = document.querySelector('#search-input').value;
-      performSearch(query);
-    });
-
-    function performSearch(query) {
-      fetch('/api/search?q=' + encodeURIComponent(query))
-        .then(function (response) {
-          if (response.ok) {
-            return response.json();
-          } else {
-            throw new Error('Failed to fetch data from the API');
-          }
-        })
-        .then(function (data) {
-          displaySearchResults(data);
-        })
-        .catch(function (error) {
-          console.error('Error:', error);
-          alert('An error occurred while searching the blockchain. Please try again later.');
+    <script>
+        document.querySelector('#search-input').addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                performSearch(e.target.value);
+            }
         });
-    }
 
-    function displaySearchResults(data) {
-      const resultDiv = document.createElement('div');
-      resultDiv.innerHTML = '<pre>' + JSON.stringify(data, null, 2) + '</pre>';
-      document.body.appendChild(resultDiv);
-    }
-  </script>
+        document.querySelector('#search-icon').addEventListener('click', function () {
+            const query = document.querySelector('#search-input').value;
+            performSearch(query);
+        });
+
+        function performSearch(query) {
+            fetch('/api/search?q=' + encodeURIComponent(query))
+                .then(function (response) {
+                    if (response.ok) {
+                        return response.json();
+                    } else {
+                        throw new Error('Failed to fetch data from the API');
+                    }
+                })
+                .then(function (data) {
+                    displaySearchResults(data);
+                })
+                .catch(function (error) {
+                    console.error('Error:', error);
+                    displayError('Blockchain search got the hiccups. Try again later.');
+                });
+        }
+
+        function displaySearchResults(data) {
+            const resultContainer = document.getElementById('result-container');
+            resultContainer.innerHTML = '';
+
+            if (data.resultType === 'address') {
+                displayAddressResult(data.data);
+            } else if (data.resultType === 'transaction') {
+                displayTransactionResult(data.data);
+            } else if (data.resultType === 'block') {
+                displayBlockResult(data.data);
+            } else {
+                displayError('Unknown result type');
+            }
+        }
+
+        function displayAddressResult(data) {
+            const addressData = data.data[Object.keys(data.data)[0]];
+            const resultHTML = `
+                <div class="result-item">
+                    <div class="result-title">Address Details</div>
+                    <div class="result-detail"><span class="result-label">Address:</span> ${addressData.address}</div>
+                    <div class="result-detail"><span class="result-label">Balance:</span> ${addressData.balance} BTC</div>
+                    <div class="result-detail"><span class="result-label">Total Received:</span> ${addressData.received} BTC</div>
+                    <div class="result-detail"><span class="result-label">Total Sent:</span> ${addressData.spent} BTC</div>
+                    <div class="result-detail"><span class="result-label">Transaction Count:</span> ${addressData.transaction_count}</div>
+                </div>
+            `;
+            document.getElementById('result-container').innerHTML = resultHTML;
+        }
+
+        function displayTransactionResult(data) {
+            const txData = data.data[Object.keys(data.data)[0]];
+            const resultHTML = `
+                <div class="result-item">
+                    <div class="result-title">Transaction Details</div>
+                    <div class="result-detail"><span class="result-label">Transaction Hash:</span> ${txData.hash}</div>
+                    <div class="result-detail"><span class="result-label">Block Height:</span> ${txData.block_id}</div>
+                    <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(txData.time * 1000).toLocaleString()}</div>
+                    <div class="result-detail"><span class="result-label">Amount:</span> ${txData.output_total} BTC</div>
+                    <div class="result-detail"><span class="result-label">Fee:</span> ${txData.fee} BTC</div>
+                    <div class="result-detail"><span class="result-label">Confirmations:</span> ${txData.confirmations}</div>
+                </div>
+            `;
+            document.getElementById('result-container').innerHTML = resultHTML;
+        }
+
+        function displayBlockResult(data) {
+            const blockData = data.data[Object.keys(data.data)[0]];
+            const resultHTML = `
+                <div class="result-item">
+                    <div class="result-title">Block Details</div>
+                    <div class="result-detail"><span class="result-label">Block Height:</span> ${blockData.id}</div>
+                    <div class="result-detail"><span class="result-label">Hash:</span> ${blockData.hash}</div>
+                    <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(blockData.time * 1000).toLocaleString()}</div>
+                    <div class="result-detail"><span class="result-label">Transaction Count:</span> ${blockData.transaction_count}</div>
+                    <div class="result-detail"><span class="result-label">Size:</span> ${blockData.size} bytes</div>
+                    <div class="result-detail"><span class="result-label">Weight:</span> ${blockData.weight}</div>
+                </div>
+            `;
+            document.getElementById('result-container').innerHTML = resultHTML;
+        }
+
+        function displayError(message) {
+            const resultContainer = document.getElementById('result-container');
+            resultContainer.innerHTML = `<div class="error-message">${message}</div>`;
+        }
+    </script>
 </body>
 </html>
