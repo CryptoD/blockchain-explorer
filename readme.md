@@ -10,9 +10,11 @@ The purpose of this project is to create a blockchain explorer that allows users
 
 This project is still in development and is not yet complete. The current focus is on building the search functionality and improving the user interface. 
 
-## Technologies Used
-
-This project is being built using HTML, CSS, JavaScript, and various blockchain APIs. 
+## Architecture
+- Frontend: React/Vue/Angular
+- Backend: Node.js/Express 
+- Database: PostgreSQL/MongoDB
+- Blockchain Integration: Web3.js/Ethers.js
 
 ## Usage
 

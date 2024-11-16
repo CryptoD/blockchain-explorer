@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"net/http"
+	"regexp"
 	"strconv"
 
 	"github.com/gin-gonic/gin"
@@ -124,11 +125,12 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 }
 
 func isValidTransactionID(txID string) bool {
-	// Bitcoin transaction IDs are 64 characters long hexadecimal strings.
-	if len(txID) == 64 {
-		return true
+	if len(txID) != 64 {
+		return false
 	}
-	return false
+	// Verify hex characters using regex
+	matched, _ := regexp.MatchString("^[0-9a-fA-F]{64}$", txID)
+	return matched
 }
 
 func getTransactionDetails(txID string) (map[string]interface{}, error) {

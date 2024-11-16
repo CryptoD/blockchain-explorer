@@ -1,0 +1,72 @@
+
+@media (max-width: 768px) {
+  .blockchain-info {
+    grid-template-columns: 1fr;
+  }
+  
+  .balance-info {
+    flex-direction: column;
+  }
+  
+  .transaction-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
+}
+
+.explorer-header {
+  display: flex;
+  align-items: center;
+  gap: 20px;
+  padding: 1rem;
+}
+/* Main balance component */
+.balance-details {
+  line-height: 1.5;
+  font-weight: normal;
+}
+
+/* Transaction component and elements */
+.transaction__addresses {
+  font-style: italic;
+}
+
+.transaction__details {
+  text-align: right;
+}
+
+/* Main blockchain layout container */
+.blockchain-info {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+  will-change: transform;
+}
+
+.balance-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
+.transaction-item {
+  display: grid;
+  grid-template-columns: minmax(100px, auto) 1fr minmax(120px, auto);
+  gap: 20px;
+  align-items: center;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .blockchain-info,
+  .balance-info,
+  .transaction-item {
+    transition: none;
+  }
+}
+
+:root {
+  --grid-gap: 20px;
+  --container-max-width: 1200px;
+}
