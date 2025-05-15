@@ -15,14 +15,22 @@
             align-items: center;
             height: 100vh;
             width: 100vw;
+            position: relative;
+            overflow: hidden;
+            position: relative;
+            overflow: hidden;
         }
         .container {
             text-align: center;
+            z-index: 1;
+            z-index: 1;
         }
         .logo {
             max-width: 350px;
             margin-bottom: 20px;
         }
+
+
         .search-container {
             position: relative;
             display: inline-block;
@@ -76,6 +84,7 @@
             color: #dc3545;
             font-weight: bold;
         }
+
     </style>
     <style>
         .loading {
@@ -202,7 +211,8 @@
         }
         function displaySearchResults(data) {
             const resultContainer = document.getElementById('result-container');
-            resultContainer.innerHTML = '';
+            resultContainer.innerHTML = '';  // Clear previous content
+            resultContainer.style.display = 'block';  // Show container when results are available
 
             if (data.resultType === 'address') {
                 displayAddressResult(data.data);
@@ -280,9 +290,6 @@
 </body>
 </html>
 
-// Add XSS protection by sanitizing data before insertion into innerHTML
-const sanitizeHTML = str => {
-    const div = document.createElement('div');
-    div.textContent = str;
-    return div.innerHTML;
-};
+    </script>
+</body>
+</html>
