@@ -1,106 +1,100 @@
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Blockchain Explorer</title>
+    <link rel="stylesheet" href="styles.css">
     <style>
-        body {
-            font-family: Arial, sans-serif;
-            background-color: #f8f9fa;
-            margin: 0;
-            padding: 0;
-            display: flex;
-            justify-content: center;
-            align-items: center;
-            height: 100vh;
-            width: 100vw;
-            position: relative;
-            overflow: hidden;
-            position: relative;
-            overflow: hidden;
-        }
-        .container {
-            text-align: center;
-            z-index: 1;
-            z-index: 1;
-        }
-        .logo {
-            max-width: 350px;
-            margin-bottom: 20px;
-        }
-
-
-        .search-container {
-            position: relative;
-            display: inline-block;
-        }
-        .search-bar {
-            width: 800px;
-            height: 30px;
-            padding: 10px 30px 10px 10px;
-            font-size: 20px;
-            border: 1px solid #ccc;
-            border-radius: 5px;
-        }
-        .search-icon {
-            position: absolute;
-            top: 50%;
-            right: 10px;
-            transform: translateY(-50%);
-            width: 20px;
-            height: 20px;
-            background-image: url("images/magnifying-glass.png");
-            background-repeat: no-repeat;
-            background-size: contain;
-            cursor: pointer;
-        }
-        #result-container {
-            margin-top: 20px;
-            text-align: left;
-            max-width: 800px;
-            margin-left: auto;
-            margin-right: auto;
-        }
-        .result-item {
-            background-color: #fff;
-            border-radius: 5px;
-            box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-            padding: 15px;
-            margin-bottom: 15px;
-        }
-        .result-title {
-            font-size: 18px;
-            font-weight: bold;
-            margin-bottom: 10px;
-        }
-        .result-detail {
-            margin-bottom: 5px;
-        }
-        .result-label {
-            font-weight: bold;
-        }
-        .error-message {
-            color: #dc3545;
-            font-weight: bold;
-        }
-
-    </style>
-    <style>
-        .loading {
-            display: inline-block;
-            font-size: 24px;
-            font-weight: bold;
-            color: #666;
-            animation: loading 1.4s infinite;
-        }
-
-        @keyframes loading {
-            0%, 20% { content: "⋅"; }
-            40% { content: "⋅⋅"; }
-            60% { content: "⋅⋅⋅"; }
-            80%, 100% { content: ""; }
-        }
+    /* Inline critical CSS for faster initial rendering */
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+        margin: 0;
+        padding: 0;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        height: 100vh;
+        width: 100vw;
+        position: relative;
+        overflow: hidden;
+    }
+    .container {
+        text-align: center;
+        z-index: 1;
+    }
+    .logo {
+        max-width: 350px;
+        margin-bottom: 20px;
+    }
+    .search-container {
+        position: relative;
+        display: inline-block;
+    }
+    .search-bar {
+        width: 800px;
+        height: 30px;
+        padding: 10px 30px 10px 10px;
+        font-size: 20px;
+        border: 1px solid #ccc;
+        border-radius: 5px;
+    }
+    .search-icon {
+        position: absolute;
+        top: 50%;
+        right: 10px;
+        transform: translateY(-50%);
+        width: 20px;
+        height: 20px;
+        background-image: url("images/magnifying-glass.png");
+        background-repeat: no-repeat;
+        background-size: contain;
+        cursor: pointer;
+    }
+    #result-container {
+        margin-top: 20px;
+        text-align: left;
+        max-width: 800px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    .result-item {
+        background-color: #fff;
+        border-radius: 5px;
+        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
+        padding: 15px;
+        margin-bottom: 15px;
+    }
+    .result-title {
+        font-size: 18px;
+        font-weight: bold;
+        margin-bottom: 10px;
+    }
+    .result-detail {
+        margin-bottom: 5px;
+    }
+    .result-label {
+        font-weight: bold;
+    }
+    .error-message {
+        color: #dc3545;
+        font-weight: bold;
+    }
+    .loading {
+        display: inline-block;
+        font-size: 24px;
+        font-weight: bold;
+        color: #666;
+        animation: loading 1.4s infinite;
+    }
+    @keyframes loading {
+        0%, 20% { content: "⋅"; }
+        40% { content: "⋅⋅"; }
+        60% { content: "⋅⋅⋅"; }
+        80%, 100% { content: ""; }
+    }
     </style>
 </head>
 <body>
@@ -114,182 +108,180 @@
         <div id="result-container"></div>
     </div>
     <script>
-        // Add debounce utility function
-        function debounce(func, wait) {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
+    // Add debounce utility function
+    function debounce(func, wait) {
+        let timeout;
+        return function(...args) {
+            clearTimeout(timeout);
+            timeout = setTimeout(() => func.apply(this, args), wait);
+        };
+    }
+
+    // Create debounced version of performSearch
+    const debouncedSearch = debounce(performSearch, 500);
+
+    // Update event listeners to use debounced search
+    document.querySelector('#search-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') {
+            debouncedSearch(e.target.value);
         }
+    });
 
-        // Create debounced version of performSearch
-        const debouncedSearch = debounce(performSearch, 500);
+    document.querySelector('#search-icon').addEventListener('click', function() {
+        const query = document.querySelector('#search-input').value;
+        debouncedSearch(query);
+    });
 
-        // Update event listeners to use debounced search
-        document.querySelector('#search-input').addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                debouncedSearch(e.target.value);
-            }
-        });
-
-        document.querySelector('#search-icon').addEventListener('click', function() {
-            const query = document.querySelector('#search-input').value;
-            debouncedSearch(query);
-        });
-        function validateSearchQuery(query) {
-            // Remove whitespace
-            const cleanQuery = query.trim();
-    
-            // Check if empty
-            if (!cleanQuery) {
-                return {
-                    isValid: false,
-                    error: "Please enter a search term"
-                };
-            }
-
-            // Check minimum length (typical blockchain addresses/hashes are at least 26 chars)
-            if (cleanQuery.length < 8) {
-                return {
-                    isValid: false,
-                    error: "Search term too short"
-                };
-            }
-
-            // Regex for valid blockchain data
-            const validPatterns = {
-                // Hex format for transaction hashes and block hashes
-                hash: /^[0-9a-fA-F]{64}$/,
-                // Common address formats (BTC, ETH)
-                address: /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^0x[0-9a-fA-F]{40}$/,
-                // Block height (numbers only)
-                blockHeight: /^\d+$/
-            };
-
-            // Check if query matches any valid pattern
-            const isValidFormat = Object.values(validPatterns).some(pattern => 
-                pattern.test(cleanQuery)
-            );
-
+    function validateSearchQuery(query) {
+        // Remove whitespace
+        const cleanQuery = query.trim();
+        
+        // Check if empty
+        if (!cleanQuery) {
             return {
-                isValid: isValidFormat,
-                error: isValidFormat ? null : "Invalid search format"
+                isValid: false,
+                error: "Please enter a search term"
             };
         }
 
-        // Update performSearch to use validation
-        function showLoading() {
-            const resultContainer = document.getElementById('result-container');
-            resultContainer.innerHTML = '<div class="loading">Searching</div>';
+        // Check minimum length (typical blockchain addresses/hashes are at least 26 chars)
+        if (cleanQuery.length < 8) {
+            return {
+                isValid: false,
+                error: "Search term too short"
+            };
         }
 
-        function performSearch(query) {
-            const validation = validateSearchQuery(query);
-    
-            if (!validation.isValid) {
-                displayError(validation.error);
-                return;
-            }
-
-            showLoading();
-    
-            fetch('/api/search?q=' + encodeURIComponent(query))
-                .then(function(response) {
-                    if (response.ok) {
-                        return response.json();
-                    }
-                    throw new Error('Failed to fetch data from the API');
-                })
-                .then(function(data) {
-                    displaySearchResults(data);
-                })
-                .catch(function(error) {
-                    console.error('Error:', error);
-                    displayError('Blockchain search got the hiccups. Try again later.');
-                });
-        }
-        function displaySearchResults(data) {
-            const resultContainer = document.getElementById('result-container');
-            resultContainer.innerHTML = '';  // Clear previous content
-            resultContainer.style.display = 'block';  // Show container when results are available
-
-            if (data.resultType === 'address') {
-                displayAddressResult(data.data);
-            } else if (data.resultType === 'transaction') {
-                displayTransactionResult(data.data);
-            } else if (data.resultType === 'block') {
-                displayBlockResult(data.data);
-            } else {
-                displayError('Unknown result type');
-            }
-        }
-
-        function displayAddressResult(data) {
-            const addressData = data.data[Object.keys(data.data)[0]];
-            const resultHTML = `
-                <div class="result-item">
-                    <div class="result-title">Address Details</div>
-                    <div class="result-detail"><span class="result-label">Address:</span> ${addressData.address}</div>
-                    <div class="result-detail"><span class="result-label">Balance:</span> ${addressData.balance} BTC</div>
-                    <div class="result-detail"><span class="result-label">Total Received:</span> ${addressData.received} BTC</div>
-                    <div class="result-detail"><span class="result-label">Total Sent:</span> ${addressData.spent} BTC</div>
-                    <div class="result-detail"><span class="result-label">Transaction Count:</span> ${addressData.transaction_count}</div>
-                </div>
-            `;
-            document.getElementById('result-container').innerHTML = resultHTML;
-        }
-
-        function displayTransactionResult(data) {
-            const txData = data.data[Object.keys(data.data)[0]];
-            const resultHTML = `
-                <div class="result-item">
-                    <div class="result-title">Transaction Details</div>
-                    <div class="result-detail"><span class="result-label">Transaction Hash:</span> ${txData.hash}</div>
-                    <div class="result-detail"><span class="result-label">Block Height:</span> ${txData.block_id}</div>
-                    <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(txData.time * 1000).toLocaleString()}</div>
-                    <div class="result-detail"><span class="result-label">Amount:</span> ${txData.output_total} BTC</div>
-                    <div class="result-detail"><span class="result-label">Fee:</span> ${txData.fee} BTC</div>
-                    <div class="result-detail"><span class="result-label">Confirmations:</span> ${txData.confirmations}</div>
-                </div>
-            `;
-            document.getElementById('result-container').innerHTML = resultHTML;
-        }
-
-        function displayBlockResult(data) {
-            const blockData = data.data[Object.keys(data.data)[0]];
-            const resultHTML = `
-                <div class="result-item">
-                    <div class="result-title">Block Details</div>
-                    <div class="result-detail"><span class="result-label">Block Height:</span> ${blockData.id}</div>
-                    <div class="result-detail"><span class="result-label">Hash:</span> ${blockData.hash}</div>
-                    <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(blockData.time * 1000).toLocaleString()}</div>
-                    <div class="result-detail"><span class="result-label">Transaction Count:</span> ${blockData.transaction_count}</div>
-                    <div class="result-detail"><span class="result-label">Size:</span> ${blockData.size} bytes</div>
-                    <div class="result-detail"><span class="result-label">Weight:</span> ${blockData.weight}</div>
-                </div>
-            `;
-            document.getElementById('result-container').innerHTML = resultHTML;
-        }
-
-        // Error message constants
-        const ERROR_MESSAGES = {
-            API_FAILURE: 'Blockchain search got the hiccups. Try again later.',
-            UNKNOWN_RESULT: 'Unknown result type',
-            NETWORK_ERROR: 'Network connection issue. Please check your internet.',
-            INVALID_SEARCH: 'Invalid search format',
-            EMPTY_SEARCH: 'Please enter a search term'
+        // Regex for valid blockchain data
+        const validPatterns = {
+            // Hex format for transaction hashes and block hashes
+            hash: /^[0-9a-fA-F]{64}$/,
+            // Common address formats (BTC, ETH)
+            address: /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^0x[0-9a-fA-F]{40}$/,
+            // Block height (numbers only)
+            blockHeight: /^\d+$/
         };
 
-        // Update displayError usage
-        function displayError(errorType) {
-            const resultContainer = document.getElementById('result-container');
-            resultContainer.innerHTML = `<div class="error-message">${ERROR_MESSAGES[errorType]}</div>`;
-        }
-    </script>
-</body>
-</html>
+        // Check if query matches any valid pattern
+        const isValidFormat = Object.values(validPatterns).some(pattern => 
+            pattern.test(cleanQuery)
+        );
 
+        return {
+            isValid: isValidFormat,
+            error: isValidFormat ? null : "Invalid search format"
+        };
+    }
+
+    // Update performSearch to use validation
+    function showLoading() {
+        const resultContainer = document.getElementById('result-container');
+        resultContainer.innerHTML = '<div class="loading">Searching</div>';
+    }
+
+    function performSearch(query) {
+        const validation = validateSearchQuery(query);
+        
+        if (!validation.isValid) {
+            displayError(validation.error);
+            return;
+        }
+
+        showLoading();
+        
+        fetch('/api/search?q=' + encodeURIComponent(query))
+        .then(function(response) {
+            if (response.ok) {
+                return response.json();
+            }
+            throw new Error('Failed to fetch data from the API');
+        })
+        .then(function(data) {
+            displaySearchResults(data);
+        })
+        .catch(function(error) {
+            console.error('Error:', error);
+            displayError('Blockchain search got the hiccups. Try again later.');
+        });
+    }
+
+    function displaySearchResults(data) {
+        const resultContainer = document.getElementById('result-container');
+        resultContainer.innerHTML = '';  // Clear previous content
+        resultContainer.style.display = 'block';  // Show container when results are available
+
+        if (data.resultType === 'address') {
+            displayAddressResult(data.data);
+        } else if (data.resultType === 'transaction') {
+            displayTransactionResult(data.data);
+        } else if (data.resultType === 'block') {
+            displayBlockResult(data.data);
+        } else {
+            displayError('Unknown result type');
+        }
+    }
+
+    function displayAddressResult(data) {
+        const addressData = data.data[Object.keys(data.data)[0]];
+        const resultHTML = `
+            <div class="result-item">
+                <div class="result-title">Address Details</div>
+                <div class="result-detail"><span class="result-label">Address:</span> ${addressData.address}</div>
+                <div class="result-detail"><span class="result-label">Balance:</span> ${addressData.balance} BTC</div>
+                <div class="result-detail"><span class="result-label">Total Received:</span> ${addressData.received} BTC</div>
+                <div class="result-detail"><span class="result-label">Total Sent:</span> ${addressData.spent} BTC</div>
+                <div class="result-detail"><span class="result-label">Transaction Count:</span> ${addressData.transaction_count}</div>
+            </div>
+        `;
+        document.getElementById('result-container').innerHTML = resultHTML;
+    }
+
+    function displayTransactionResult(data) {
+        const txData = data.data[Object.keys(data.data)[0]];
+        const resultHTML = `
+            <div class="result-item">
+                <div class="result-title">Transaction Details</div>
+                <div class="result-detail"><span class="result-label">Transaction Hash:</span> ${txData.hash}</div>
+                <div class="result-detail"><span class="result-label">Block Height:</span> ${txData.block_id}</div>
+                <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(txData.time * 1000).toLocaleString()}</div>
+                <div class="result-detail"><span class="result-label">Amount:</span> ${txData.output_total} BTC</div>
+                <div class="result-detail"><span class="result-label">Fee:</span> ${txData.fee} BTC</div>
+                <div class="result-detail"><span class="result-label">Confirmations:</span> ${txData.confirmations}</div>
+            </div>
+        `;
+        document.getElementById('result-container').innerHTML = resultHTML;
+    }
+
+    function displayBlockResult(data) {
+        const blockData = data.data[Object.keys(data.data)[0]];
+        const resultHTML = `
+            <div class="result-item">
+                <div class="result-title">Block Details</div>
+                <div class="result-detail"><span class="result-label">Block Height:</span> ${blockData.id}</div>
+                <div class="result-detail"><span class="result-label">Hash:</span> ${blockData.hash}</div>
+                <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(blockData.time * 1000).toLocaleString()}</div>
+                <div class="result-detail"><span class="result-label">Transaction Count:</span> ${blockData.transaction_count}</div>
+                <div class="result-detail"><span class="result-label">Size:</span> ${blockData.size} bytes</div>
+                <div class="result-detail"><span class="result-label">Weight:</span> ${blockData.weight}</div>
+            </div>
+        `;
+        document.getElementById('result-container').innerHTML = resultHTML;
+    }
+
+    // Error message constants
+    const ERROR_MESSAGES = {
+        API_FAILURE: 'Blockchain search got the hiccups. Try again later.',
+        UNKNOWN_RESULT: 'Unknown result type',
+        NETWORK_ERROR: 'Network connection issue. Please check your internet.',
+        INVALID_SEARCH: 'Invalid search format',
+        EMPTY_SEARCH: 'Please enter a search term'
+    };
+
+    // Update displayError usage
+    function displayError(errorType) {
+        const resultContainer = document.getElementById('result-container');
+        resultContainer.innerHTML = `<div class="error-message">${ERROR_MESSAGES[errorType]}</div>`;
+    }
     </script>
 </body>
 </html>

@@ -1,32 +1,56 @@
 
-@media (max-width: 768px) {
-  .blockchain-info {
-    grid-template-columns: 1fr;
-  }
-  
-  .balance-info {
-    flex-direction: column;
-  }
-  
-  .transaction-item {
-    grid-template-columns: 1fr;
-    gap: 10px;
-  }
+/* Root Variables */
+:root {
+  --grid-gap: 20px;
+  --container-max-width: 1200px;
 }
 
+/* Global Styles */
+body {
+  font-family: Arial, sans-serif;
+  margin: 0;
+  padding: 0;
+  box-sizing: border-box;
+}
+
+/* Header Styles */
 .explorer-header {
   display: flex;
   align-items: center;
   gap: 20px;
   padding: 1rem;
 }
-/* Main balance component */
+
+/* Main Blockchain Layout Container */
+.blockchain-info {
+  display: grid;
+  grid-template-columns: 230px 1fr;
+  gap: var(--grid-gap);
+  max-width: var(--container-max-width);
+  margin: 0 auto;
+  will-change: transform;
+}
+
+/* Balance Component Styles */
+.balance-info {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+}
+
 .balance-details {
   line-height: 1.5;
   font-weight: normal;
 }
 
-/* Transaction component and elements */
+/* Transaction Component Styles */
+.transaction-item {
+  display: grid;
+  grid-template-columns: minmax(100px, auto) 1fr minmax(120px, auto);
+  gap: var(--grid-gap);
+  align-items: center;
+}
+
 .transaction__addresses {
   font-style: italic;
 }
@@ -35,38 +59,27 @@
   text-align: right;
 }
 
-/* Main blockchain layout container */
-.blockchain-info {
-  display: grid;
-  grid-template-columns: 230px 1fr;
-  gap: 20px;
-  max-width: 1200px;
-  margin: 0 auto;
-  will-change: transform;
+/* Media Queries for Responsiveness */
+@media (max-width: 768px) {
+  .blockchain-info {
+    grid-template-columns: 1fr;
+  }
+
+  .balance-info {
+    flex-direction: column;
+  }
+
+  .transaction-item {
+    grid-template-columns: 1fr;
+    gap: 10px;
+  }
 }
 
-.balance-info {
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-}
-
-.transaction-item {
-  display: grid;
-  grid-template-columns: minmax(100px, auto) 1fr minmax(120px, auto);
-  gap: 20px;
-  align-items: center;
-}
-
+/* Accessibility and Performance */
 @media (prefers-reduced-motion: reduce) {
   .blockchain-info,
   .balance-info,
   .transaction-item {
     transition: none;
   }
-}
-
-:root {
-  --grid-gap: 20px;
-  --container-max-width: 1200px;
 }
