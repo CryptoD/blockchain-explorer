@@ -5,12 +5,36 @@
   --container-max-width: 1200px;
 }
 
+/* Root Variables */
+:root {
+  --grid-gap: 20px;
+  --container-max-width: 1200px;
+}
+
 /* Global Styles */
 body {
   font-family: Arial, sans-serif;
   margin: 0;
   padding: 0;
   box-sizing: border-box;
+}
+
+/* Accessibility and Performance */
+@media (prefers-reduced-motion: reduce) {
+  .blockchain-info,
+  .balance-info,
+  .transaction-item {
+    transition: none;
+  }
+}
+
+a, button {
+  outline: 2px solid transparent;
+  outline-offset: 2px;
+}
+
+a:focus, button:focus {
+  outline-color: blue;
 }
 
 /* Header Styles */
