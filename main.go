@@ -4,10 +4,12 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"io/ioutil"
 	"net/http"
+	"os"
 	"regexp"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
@@ -52,31 +54,55 @@ func main() {
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
-	// Make an API call to Blockchair to get information about the Bitcoin address
-	apiUrl := fmt.Sprintf("https://api.blockchair.com/bitcoin/dashboards/address/%s", query)
-	resp, err := http.Get(apiUrl)
+	// Validate the query first
+	var method string
+	var params []interface{}
+
+	// Determine the type of query and set appropriate method
+	switch {
+	case isValidAddress(query):
+		method = "getaddressinfo"
+		params = []interface{}{query}
+	case isValidTransactionID(query):
+		method = "getrawtransaction"
+		params = []interface{}{query, 1} // 1 means verbose output
+	case isValidBlockHeight(query):
+		method = "getblockbyheight"
+		height, _ := strconv.Atoi(query)
+		params = []interface{}{height, 1} // 1 means verbose output
+	default:
+		return "", nil, fmt.Errorf("invalid query format")
+	}
+
+	// Make JSON-RPC request to GetBlock
+	response, err := blockchairRequest(method, params)
 	if err != nil {
 		return "", nil, err
 	}
-	defer resp.Body.Close()
 
-	if resp.StatusCode == http.StatusNotFound {
-		return "", nil, ErrNotFound
-	} else if resp.StatusCode != http.StatusOK {
-		return "", nil, fmt.Errorf("API request failed with status code %d", resp.StatusCode)
-	}
-
-	body, err := ioutil.ReadAll(resp.Body)
-	if err != nil {
+	// Parse the response
+	var result map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &result); err != nil {
 		return "", nil, err
 	}
 
-	var data map[string]interface{}
-	if err := json.Unmarshal(body, &data); err != nil {
-		return "", nil, err
+	// Check for JSON-RPC error
+	if errorObj, ok := result["error"]; ok {
+		return "", nil, fmt.Errorf("JSON-RPC error: %v", errorObj)
 	}
 
-	return "address", data, nil
+	// Determine result type based on method
+	var resultType string
+	switch method {
+	case "getaddressinfo":
+		resultType = "address"
+	case "getrawtransaction":
+		resultType = "transaction"
+	case "getblockbyheight":
+		resultType = "block"
+	}
+
+	return resultType, result, nil
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
@@ -100,31 +126,42 @@ func searchHandler(w http.ResponseWriter, r *http.Request) {
 	json.NewEncoder(w).Encode(response)
 }
 
-const blockchairBaseURL = "https://api.blockchair.com/bitcoin"
+var (
+	baseURL = getEnvWithDefault("GETBLOCK_BASE_URL", "https://go.getblock.io/eb8cb69423354abb8d5e489adfc54742")
+	apiKey  = getEnvWithDefault("GETBLOCK_ACCESS_TOKEN", "eb8cb69423354abb8d5e489adfc54742")
+)
+
+func getEnvWithDefault(key, defaultValue string) string {
+	value := os.Getenv(key)
+	if value == "" {
+		return defaultValue
+	}
+	return value
+}
+
+// handleError standardizes error responses
+func handleError(c *gin.Context, err error, status int) {
+	c.JSON(status, gin.H{"error": err.Error()})
+}
 
 func isValidAddress(address string) bool {
-	// Bitcoin addresses are usually 26-35 characters long.
-	if len(address) >= 26 && len(address) <= 35 {
-		return true
+	// Bitcoin addresses are usually 26-35 characters long and start with specific characters
+	if len(address) < 26 || len(address) > 35 {
+		return false
+	}
+
+	// Check for valid address prefix
+	validPrefixes := []string{"1", "3", "bc1"}
+	for _, prefix := range validPrefixes {
+		if strings.HasPrefix(address, prefix) {
+			return true
+		}
 	}
 	return false
 }
 
-func getAddressDetails(address string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/dashboards/address/%s", blockchairBaseURL, address)
-	response, err := blockchairRequest(url)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	json.Unmarshal(response.Body(), &result)
-
-	return result, nil
-}
-
 func isValidTransactionID(txID string) bool {
+	// Transaction IDs are 64-character hex strings
 	if len(txID) != 64 {
 		return false
 	}
@@ -133,30 +170,14 @@ func isValidTransactionID(txID string) bool {
 	return matched
 }
 
-func getTransactionDetails(txID string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/dashboards/transaction/%s", blockchairBaseURL, txID)
-	response, err := blockchairRequest(url)
-
-	if err != nil {
-		return nil, err
-	}
-
-	var result map[string]interface{}
-	json.Unmarshal(response.Body(), &result)
-
-	return result, nil
-}
-
 func isValidBlockHeight(blockHeight string) bool {
 	// A simple check to see if the blockHeight string can be converted to an integer
 	_, err := strconv.Atoi(blockHeight)
 	return err == nil
 }
 
-func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
-	url := fmt.Sprintf("%s/dashboards/block/%s", blockchairBaseURL, blockHeight)
-	response, err := blockchairRequest(url)
-
+func getAddressDetails(address string) (map[string]interface{}, error) {
+	response, err := blockchairRequest("getaddressinfo", []interface{}{address})
 	if err != nil {
 		return nil, err
 	}
@@ -167,12 +188,63 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func blockchairRequest(url string) (*resty.Response, error) {
-	client := resty.New()
+func getTransactionDetails(txID string) (map[string]interface{}, error) {
+	response, err := blockchairRequest("getrawtransaction", []interface{}{txID, 1})
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	json.Unmarshal(response.Body(), &result)
+
+	return result, nil
+}
+
+func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
+	height, _ := strconv.Atoi(blockHeight)
+	response, err := blockchairRequest("getblockbyheight", []interface{}{height, 1})
+	if err != nil {
+		return nil, err
+	}
+
+	var result map[string]interface{}
+	json.Unmarshal(response.Body(), &result)
+
+	return result, nil
+}
+
+func blockchairRequest(method string, params []interface{}) (*resty.Response, error) {
+	if baseURL == "" || apiKey == "" {
+		return nil, errors.New("missing required environment variables")
+	}
+
+	client := resty.New().
+		SetTimeout(10 * time.Second).
+		SetRetryCount(3)
+
+	// Generate a unique ID for this request
+	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
+
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      requestID,
+		"method":  method,
+		"params":  params,
+	}
 
 	response, err := client.R().
 		SetHeader("Content-Type", "application/json").
-		Get(url)
+		SetHeader("x-api-key", apiKey).
+		SetBody(payload).
+		Post(baseURL)
 
-	return response, err
+	if err != nil {
+		return nil, fmt.Errorf("API request failed: %w", err)
+	}
+
+	if response.StatusCode() >= 400 {
+		return nil, fmt.Errorf("API error: %s", response.Status())
+	}
+
+	return response, nil
 }
