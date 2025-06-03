@@ -1,4 +1,3 @@
-
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -140,7 +139,7 @@
         if (!cleanQuery) {
             return {
                 isValid: false,
-                error: "Please enter a search term"
+                error: "EMPTY_SEARCH"
             };
         }
 
@@ -148,7 +147,7 @@
         if (cleanQuery.length < 8) {
             return {
                 isValid: false,
-                error: "Search term too short"
+                error: "INVALID_SEARCH"
             };
         }
 
@@ -169,11 +168,10 @@
 
         return {
             isValid: isValidFormat,
-            error: isValidFormat ? null : "Invalid search format"
+            error: isValidFormat ? null : "INVALID_SEARCH"
         };
     }
 
-    // Update performSearch to use validation
     function showLoading() {
         const resultContainer = document.getElementById('result-container');
         resultContainer.innerHTML = '<div class="loading">Searching</div>';
@@ -187,85 +185,8 @@
             return;
         }
 
-        showLoading();
-        
-        fetch('/api/search?q=' + encodeURIComponent(query))
-        .then(function(response) {
-            if (response.ok) {
-                return response.json();
-            }
-            throw new Error('Failed to fetch data from the API');
-        })
-        .then(function(data) {
-            displaySearchResults(data);
-        })
-        .catch(function(error) {
-            console.error('Error:', error);
-            displayError('Blockchain search got the hiccups. Try again later.');
-        });
-    }
-
-    function displaySearchResults(data) {
-        const resultContainer = document.getElementById('result-container');
-        resultContainer.innerHTML = '';  // Clear previous content
-        resultContainer.style.display = 'block';  // Show container when results are available
-
-        if (data.resultType === 'address') {
-            displayAddressResult(data.data);
-        } else if (data.resultType === 'transaction') {
-            displayTransactionResult(data.data);
-        } else if (data.resultType === 'block') {
-            displayBlockResult(data.data);
-        } else {
-            displayError('Unknown result type');
-        }
-    }
-
-    function displayAddressResult(data) {
-        const addressData = data.data[Object.keys(data.data)[0]];
-        const resultHTML = `
-            <div class="result-item">
-                <div class="result-title">Address Details</div>
-                <div class="result-detail"><span class="result-label">Address:</span> ${addressData.address}</div>
-                <div class="result-detail"><span class="result-label">Balance:</span> ${addressData.balance} BTC</div>
-                <div class="result-detail"><span class="result-label">Total Received:</span> ${addressData.received} BTC</div>
-                <div class="result-detail"><span class="result-label">Total Sent:</span> ${addressData.spent} BTC</div>
-                <div class="result-detail"><span class="result-label">Transaction Count:</span> ${addressData.transaction_count}</div>
-            </div>
-        `;
-        document.getElementById('result-container').innerHTML = resultHTML;
-    }
-
-    function displayTransactionResult(data) {
-        const txData = data.data[Object.keys(data.data)[0]];
-        const resultHTML = `
-            <div class="result-item">
-                <div class="result-title">Transaction Details</div>
-                <div class="result-detail"><span class="result-label">Transaction Hash:</span> ${txData.hash}</div>
-                <div class="result-detail"><span class="result-label">Block Height:</span> ${txData.block_id}</div>
-                <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(txData.time * 1000).toLocaleString()}</div>
-                <div class="result-detail"><span class="result-label">Amount:</span> ${txData.output_total} BTC</div>
-                <div class="result-detail"><span class="result-label">Fee:</span> ${txData.fee} BTC</div>
-                <div class="result-detail"><span class="result-label">Confirmations:</span> ${txData.confirmations}</div>
-            </div>
-        `;
-        document.getElementById('result-container').innerHTML = resultHTML;
-    }
-
-    function displayBlockResult(data) {
-        const blockData = data.data[Object.keys(data.data)[0]];
-        const resultHTML = `
-            <div class="result-item">
-                <div class="result-title">Block Details</div>
-                <div class="result-detail"><span class="result-label">Block Height:</span> ${blockData.id}</div>
-                <div class="result-detail"><span class="result-label">Hash:</span> ${blockData.hash}</div>
-                <div class="result-detail"><span class="result-label">Timestamp:</span> ${new Date(blockData.time * 1000).toLocaleString()}</div>
-                <div class="result-detail"><span class="result-label">Transaction Count:</span> ${blockData.transaction_count}</div>
-                <div class="result-detail"><span class="result-label">Size:</span> ${blockData.size} bytes</div>
-                <div class="result-detail"><span class="result-label">Weight:</span> ${blockData.weight}</div>
-            </div>
-        `;
-        document.getElementById('result-container').innerHTML = resultHTML;
+        // Redirect to bitcoin.html with the query parameter
+        window.location.href = `/bitcoin?q=${encodeURIComponent(query)}`;
     }
 
     // Error message constants

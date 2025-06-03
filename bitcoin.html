@@ -3,7 +3,7 @@
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Blockchain Explorer</title>
+    <title>Bitcoin Explorer</title>
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -59,6 +59,31 @@
             gap: 20px;
         }
 
+        .loading {
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+            color: #666;
+        }
+
+        .error {
+            color: #dc3545;
+            text-align: center;
+            padding: 20px;
+            font-size: 18px;
+        }
+
+        .back-link {
+            display: inline-block;
+            margin-bottom: 20px;
+            color: #0066cc;
+            text-decoration: none;
+        }
+
+        .back-link:hover {
+            text-decoration: underline;
+        }
+
         @media (max-width: 768px) {
             .header {
                 flex-direction: column;
@@ -76,61 +101,304 @@
     </style>
 </head>
 <body>
+    <a href="/" class="back-link">← Back to Search</a>
+    
     <div class="header">
         <img src="images/logo.jpg" width="100" alt="Explorer Logo">
         <h1>Bitcoin Blockchain Explorer</h1>
     </div>
 
-    <table>
-        <tr>
-            <th colspan="2">Network Status</th>
-        </tr>
-        <tr>
-            <td class="network-status">
-                <img src="images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
-                <div>
-                    <p>Blockchain: Bitcoin</p>
-                    <p>Network Status: <span style="color: green;">Operating</span></p>
-                </div>
-            </td>
-        </tr>
-    </table>
+    <div id="loading" class="loading">Loading data...</div>
+    <div id="error" class="error" style="display: none;"></div>
+    <div id="content" style="display: none;">
+        <table>
+            <tr>
+                <th colspan="2">Network Status</th>
+            </tr>
+            <tr>
+                <td class="network-status">
+                    <img src="images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
+                    <div>
+                        <p>Blockchain: Bitcoin</p>
+                        <p>Network Status: <span style="color: green;">Operating</span></p>
+                    </div>
+                </td>
+            </tr>
+        </table>
 
-    <table>
-        <tr>
-            <th colspan="2">Balance Details</th>
-        </tr>
-        <tr>
-            <td>Current Balance:</td>
-            <td>[Placeholder 1] BTC</td>
-        </tr>
-        <tr>
-            <td>Total Received:</td>
-            <td>[Placeholder 2] BTC</td>
-        </tr>
-        <tr>
-            <td>Total Sent:</td>
-            <td>[Placeholder 3] BTC</td>
-        </tr>
-    </table>
+        <!-- Address Details -->
+        <div id="address-details" style="display: none;">
+            <table>
+                <tr>
+                    <th colspan="2">Address Details</th>
+                </tr>
+                <tr>
+                    <td>Address:</td>
+                    <td id="address"></td>
+                </tr>
+                <tr>
+                    <td>Current Balance:</td>
+                    <td id="balance"></td>
+                </tr>
+                <tr>
+                    <td>Total Received:</td>
+                    <td id="received"></td>
+                </tr>
+                <tr>
+                    <td>Total Sent:</td>
+                    <td id="sent"></td>
+                </tr>
+            </table>
 
-    <table>
-        <tr>
-            <th colspan="3">Recent Transactions</th>
-        </tr>
-        <tr>
-            <th>Transaction Details</th>
-            <th>Amount</th>
-            <th>Status</th>
-        </tr>
-        <tr>
-            <td>
-                From: [Placeholder 4]<br>
-                To: [Placeholder 5]
-            </td>
-            <td>[Placeholder 6] BTC</td>
-            <td>Confirmations: 1</td>
-        </tr>
-    </table>
+            <table>
+                <tr>
+                    <th colspan="3">Recent Transactions</th>
+                </tr>
+                <tr>
+                    <th>Transaction Hash</th>
+                    <th>Amount</th>
+                    <th>Status</th>
+                </tr>
+                <tbody id="transactions">
+                    <!-- Transactions will be inserted here -->
+                </tbody>
+            </table>
+        </div>
+
+        <!-- Transaction Details -->
+        <div id="transaction-details" style="display: none;">
+            <table>
+                <tr>
+                    <th colspan="2">Transaction Details</th>
+                </tr>
+                <tr>
+                    <td>Transaction Hash:</td>
+                    <td id="tx-hash"></td>
+                </tr>
+                <tr>
+                    <td>Block Height:</td>
+                    <td id="tx-block"></td>
+                </tr>
+                <tr>
+                    <td>Timestamp:</td>
+                    <td id="tx-time"></td>
+                </tr>
+                <tr>
+                    <td>Amount:</td>
+                    <td id="tx-amount"></td>
+                </tr>
+                <tr>
+                    <td>Fee:</td>
+                    <td id="tx-fee"></td>
+                </tr>
+                <tr>
+                    <td>Confirmations:</td>
+                    <td id="tx-confirmations"></td>
+                </tr>
+            </table>
+
+            <table>
+                <tr>
+                    <th colspan="2">Inputs and Outputs</th>
+                </tr>
+                <tr>
+                    <td>From:</td>
+                    <td id="tx-from"></td>
+                </tr>
+                <tr>
+                    <td>To:</td>
+                    <td id="tx-to"></td>
+                </tr>
+            </table>
+        </div>
+
+        <!-- Block Details -->
+        <div id="block-details" style="display: none;">
+            <table>
+                <tr>
+                    <th colspan="2">Block Details</th>
+                </tr>
+                <tr>
+                    <td>Block Height:</td>
+                    <td id="block-height"></td>
+                </tr>
+                <tr>
+                    <td>Block Hash:</td>
+                    <td id="block-hash"></td>
+                </tr>
+                <tr>
+                    <td>Timestamp:</td>
+                    <td id="block-time"></td>
+                </tr>
+                <tr>
+                    <td>Transaction Count:</td>
+                    <td id="block-tx-count"></td>
+                </tr>
+                <tr>
+                    <td>Size:</td>
+                    <td id="block-size"></td>
+                </tr>
+                <tr>
+                    <td>Weight:</td>
+                    <td id="block-weight"></td>
+                </tr>
+            </table>
+        </div>
+    </div>
+
+    <script>
+        document.addEventListener('DOMContentLoaded', function() {
+            // Get query parameter
+            const urlParams = new URLSearchParams(window.location.search);
+            const query = urlParams.get('q');
+            
+            if (!query) {
+                showError('No search query provided');
+                return;
+            }
+            
+            // Fetch data from API
+            fetch(`/api/search?q=${encodeURIComponent(query)}`)
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('API request failed');
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Hide loading indicator
+                    document.getElementById('loading').style.display = 'none';
+                    document.getElementById('content').style.display = 'block';
+                    
+                    // Display data based on result type
+                    if (data.resultType === 'address') {
+                        displayAddressData(data.data);
+                    } else if (data.resultType === 'transaction') {
+                        displayTransactionData(data.data);
+                    } else if (data.resultType === 'block') {
+                        displayBlockData(data.data);
+                    } else {
+                        showError('Unknown result type');
+                    }
+                })
+                .catch(error => {
+                    console.error('Error:', error);
+                    showError('Failed to fetch data from the API');
+                });
+        });
+        
+        function showError(message) {
+            document.getElementById('loading').style.display = 'none';
+            const errorElement = document.getElementById('error');
+            errorElement.textContent = message;
+            errorElement.style.display = 'block';
+        }
+        
+        function displayAddressData(data) {
+            // Show address details section
+            document.getElementById('address-details').style.display = 'block';
+            
+            // Extract data from response
+            const addressData = data.result || {};
+            
+            // Populate address details
+            document.getElementById('address').textContent = addressData.address || 'N/A';
+            document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
+            document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
+            document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
+            
+            // Populate transactions
+            const transactionsContainer = document.getElementById('transactions');
+            transactionsContainer.innerHTML = '';
+            
+            if (addressData.transactions && addressData.transactions.length > 0) {
+                addressData.transactions.slice(0, 5).forEach(tx => {
+                    const row = document.createElement('tr');
+                    row.innerHTML = `
+                        <td><a href="/bitcoin?q=${tx.txid}">${shortenHash(tx.txid)}</a></td>
+                        <td>${formatBTC(tx.value || 0)}</td>
+                        <td>Confirmations: ${tx.confirmations || 0}</td>
+                    `;
+                    transactionsContainer.appendChild(row);
+                });
+            } else {
+                const row = document.createElement('tr');
+                row.innerHTML = '<td colspan="3">No transactions found</td>';
+                transactionsContainer.appendChild(row);
+            }
+        }
+        
+        function displayTransactionData(data) {
+            // Show transaction details section
+            document.getElementById('transaction-details').style.display = 'block';
+            
+            // Extract data from response
+            const txData = data.result || {};
+            
+            // Populate transaction details
+            document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
+            document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
+            document.getElementById('tx-time').textContent = txData.time ? 
+                new Date(txData.time * 1000).toLocaleString() : 'Pending';
+            document.getElementById('tx-amount').textContent = formatBTC(txData.value || 0);
+            document.getElementById('tx-fee').textContent = formatBTC(txData.fee || 0);
+            document.getElementById('tx-confirmations').textContent = txData.confirmations || 0;
+            
+            // Handle inputs and outputs
+            let fromAddresses = [];
+            let toAddresses = [];
+            
+            if (txData.vin && txData.vin.length > 0) {
+                txData.vin.forEach(input => {
+                    if (input.address) {
+                        fromAddresses.push(input.address);
+                    }
+                });
+            }
+            
+            if (txData.vout && txData.vout.length > 0) {
+                txData.vout.forEach(output => {
+                    if (output.scriptPubKey && output.scriptPubKey.addresses) {
+                        toAddresses = toAddresses.concat(output.scriptPubKey.addresses);
+                    }
+                });
+            }
+            
+            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ?
+                fromAddresses.map(addr => `<a href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
+            
+            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ?
+                toAddresses.map(addr => `<a href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
+        }
+        
+        function displayBlockData(data) {
+            // Show block details section
+            document.getElementById('block-details').style.display = 'block';
+            
+            // Extract data from response
+            const blockData = data.result || {};
+            
+            // Populate block details
+            document.getElementById('block-height').textContent = blockData.height || 'N/A';
+            document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
+            document.getElementById('block-time').textContent = blockData.time ? 
+                new Date(blockData.time * 1000).toLocaleString() : 'N/A';
+            document.getElementById('block-tx-count').textContent = 
+                blockData.tx ? blockData.tx.length : 0;
+            document.getElementById('block-size').textContent = 
+                blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
+            document.getElementById('block-weight').textContent = 
+                blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+        }
+        
+        function formatBTC(value) {
+            return `${parseFloat(value).toFixed(8)} BTC`;
+        }
+        
+        function shortenHash(hash) {
+            if (!hash) return 'N/A';
+            return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
+        }
+    </script>
 </body>
 </html>

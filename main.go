@@ -25,6 +25,11 @@ func main() {
 		c.File("index.html")
 	})
 
+	// Serve static files
+	router.Static("/images", "./images")
+	router.StaticFile("/bitcoin.html", "./bitcoin.html")
+
+	// Handle search API requests
 	router.GET("/api/search", func(c *gin.Context) {
 		query := c.Query("q")
 		if query == "" {
@@ -45,9 +50,22 @@ func main() {
 		response := map[string]interface{}{
 			"resultType": resultType,
 			"data":       data,
+			"query":      query,
 		}
 
 		c.JSON(http.StatusOK, response)
+	})
+
+	// Direct access to bitcoin details page
+	router.GET("/bitcoin", func(c *gin.Context) {
+		query := c.Query("q")
+		if query == "" {
+			c.Redirect(http.StatusFound, "/")
+			return
+		}
+
+		// Redirect to bitcoin.html with the query parameter
+		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
 	})
 
 	router.Run(":8080")
