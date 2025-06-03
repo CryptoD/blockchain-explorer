@@ -1,4 +1,4 @@
-version: "3.8"
+version: "3.9"
 
 services:
   app:
@@ -10,20 +10,25 @@ services:
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=mysecrSSDSDfetp234ksdassword
+      - DB_PASSWORD=${DB_PASSWORD}
       - DB_NAME=blockchain_explorer
     depends_on:
       - db
 
   db:
-    image: postgres:13
+    image: postgres:16
     container_name: blockchain-explorer-db
     environment:
       - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=mysecrSSDSDfetp234ksdassword
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
       - POSTGRES_DB=blockchain_explorer
     volumes:
       - db-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
 volumes:
   db-data:
