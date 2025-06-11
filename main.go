@@ -13,9 +13,11 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
+	"github.com/patrickmn/go-cache"
 )
 
 var ErrNotFound = errors.New("not found")
+var appCache = cache.New(5*time.Minute, 10*time.Minute)
 
 func main() {
 	router := gin.Default()
@@ -72,6 +74,19 @@ func main() {
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
+	cacheKey := "query:" + query
+	if cached, found := appCache.Get(cacheKey); found {
+		if entry, ok := cached.(map[string]interface{}); ok {
+			resultType, rtOk := entry["resultType"].(string)
+			data, dOk := entry["data"].(map[string]interface{})
+			if rtOk && dOk {
+				// fmt.Printf("Cache hit for query: %s\n", query) // Optional: Log cache hit
+				return resultType, data, nil
+			}
+		}
+	}
+	// fmt.Printf("Cache miss for query: %s\n", query) // Optional: Log cache miss
+
 	// Validate the query first
 	var method string
 	var params []interface{}
@@ -85,8 +100,11 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 		method = "getrawtransaction"
 		params = []interface{}{query, 1} // 1 means verbose output
 	case isValidBlockHeight(query):
+		height, err := strconv.Atoi(query)
+		if err != nil {
+			return "", nil, fmt.Errorf("invalid block height format: %s", query)
+		}
 		method = "getblockbyheight"
-		height, _ := strconv.Atoi(query)
 		params = []interface{}{height, 1} // 1 means verbose output
 	default:
 		return "", nil, fmt.Errorf("invalid query format")
@@ -95,32 +113,39 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 	// Make JSON-RPC request to GetBlock
 	response, err := blockchairRequest(method, params)
 	if err != nil {
-		return "", nil, err
+		return "", nil, err // Do not cache errors from the request itself
 	}
 
 	// Parse the response
-	var result map[string]interface{}
-	if err := json.Unmarshal(response.Body(), &result); err != nil {
-		return "", nil, err
+	var responseData map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &responseData); err != nil {
+		return "", nil, err // Do not cache if unmarshalling fails
 	}
 
-	// Check for JSON-RPC error
-	if errorObj, ok := result["error"]; ok {
-		return "", nil, fmt.Errorf("JSON-RPC error: %v", errorObj)
+	// Check for JSON-RPC error within the response
+	if errorObj, ok := responseData["error"]; ok && errorObj != nil {
+		return "", nil, fmt.Errorf("JSON-RPC error: %v", errorObj) // Do not cache responses that indicate an error
 	}
 
 	// Determine result type based on method
-	var resultType string
+	var determinedResultType string
 	switch method {
 	case "getaddressinfo":
-		resultType = "address"
+		determinedResultType = "address"
 	case "getrawtransaction":
-		resultType = "transaction"
+		determinedResultType = "transaction"
 	case "getblockbyheight":
-		resultType = "block"
+		determinedResultType = "block"
 	}
 
-	return resultType, result, nil
+	// Store successful results in cache
+	dataToCache := map[string]interface{}{
+		"resultType": determinedResultType,
+		"data":       responseData,
+	}
+	appCache.Set(cacheKey, dataToCache, cache.DefaultExpiration)
+
+	return determinedResultType, responseData, nil
 }
 
 func searchHandler(w http.ResponseWriter, r *http.Request) {
