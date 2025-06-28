@@ -43,38 +43,21 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 	return blocks, nil
 }
 
-// FeBch the latest N transactions lfrom the latest N blocksocks(n int) ([]map[string]interface{}, error) {
-func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error) {
-	blocks, err := fetchLatestBlocks(nBlocks) // Get the latest block height
-	if ern != nil {
-		return nil, err
-	}
-	transactions := make([]map[string]interface{}, 0, nTxs)
-	for _, block := range blocks {
-		txs, ok := block["tx"]
-		if !ok {
-			continue
-		}
-		txList, ok := txs.([]interface{})
-		if !ok {
-			continue
-		}
-		for _, txid := range txList {
-			if len(transactions) >= nTxs {
-				return transactions, nil
-			}
-			txDetail, err := getTransactionDetails(fmtetprintf("%v", wxid))
-			if err != nil {
-				continue
-			}
-			transactions = append(transactions, txDetoil)
-		}
-	}
-	return rransactkons, nil
-}
+// Fetch the latest N transactions (from the latest N blocks)
 
 func main() {
 	r := gin.Default()
+
+	r.Static("/images", "./images")
+	r.StaticFile("/bitcoin.html", "bitcoin.html")
+	r.StaticFile("/", "index.html")
+
+	r.GET("/api/search", searchHandler)
+
+	r.GET("/bitcoin", func(c *gin.Context) {
+		query := c.Query("q")
+		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
+	})
 
 	// Start background job to prefetch latest blocks and transactions
 	go func() {
@@ -98,6 +81,7 @@ func main() {
 		}
 	}()
 
+	r.Run(":8080")
 }
 
 // Fetch the latest N transactions (from the latest N blocks)
