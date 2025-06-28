@@ -114,45 +114,6 @@ func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error
 	return transactions, nil
 }
 
-func main() {
-	r := gin.Default()
-
-	r.Static("/images", "./images")
-	r.StaticFile("/bitcoin.html", "bitcoin.html")
-	r.StaticFile("/", "index.html")
-
-	r.GET("/api/search", searchHandler)
-
-	r.GET("/bitcoin", func(c *gin.Context) {
-		query := c.Query("q")
-		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
-	})
-
-	// Start background job to prefetch latest blocks and transactions
-	go func() {
-		ticker := time.NewTicker(30 * time.Second)
-		defer ticker.Stop()
-		for {
-			// Initial run and every tick
-			func() {
-				const numBlocks = 5
-				const numTxs = 10
-				blocks, err := fetchLatestBlocks(numBlocks)
-				if err == nil {
-					appCache.Set("latest_blocks", blocks, cache.DefaultExpiration)
-				}
-				txs, err := fetchLatestTransactions(numBlocks, numTxs)
-				if err == nil {
-					appCache.Set("latest_transactions", txs, cache.DefaultExpiration)
-				}
-			}()
-			<-ticker.C
-		}
-	}()
-
-	r.Run(":8080")
-}
-
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
 	// ... existing code ...
 	return "", nil, ErrNotFound
