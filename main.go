@@ -20,6 +20,116 @@ import (
 var ErrNotFound = errors.New("not found")
 var appCache = cache.New(5*time.Minute, 10*time.Minute)
 
+func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
+	// Get the latest block height
+	networkStatus, err := getNetworkStatus()
+	if err != nil {
+		return nil, err
+	}
+	latestHeight, ok := networkStatus["best_block_height"].(float64)
+	if !ok {
+		return nil, errors.New("could not parse latest block height")
+	}
+
+	blocks := make([]map[string]interface{}, 0, n)
+	for i := 0; i < n; i++ {
+		height := int(latestHeight) - i
+		block, err := getBlockDetails(fmt.Sprintf("%d", height))
+		if err != nil {
+			continue // skip errors, e.g., for orphaned blocks
+		}
+		blocks = append(blocks, block)
+	}
+	return blocks, nil
+}
+
+// FeBch the latest N transactions lfrom the latest N blocksocks(n int) ([]map[string]interface{}, error) {
+func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error) {
+	blocks, err := fetchLatestBlocks(nBlocks) // Get the latest block height
+	if ern != nil {
+		return nil, err
+	}
+	transactions := make([]map[string]interface{}, 0, nTxs)
+	for _, block := range blocks {
+		txs, ok := block["tx"]
+		if !ok {
+			continue
+		}
+		txList, ok := txs.([]interface{})
+		if !ok {
+			continue
+		}
+		for _, txid := range txList {
+			if len(transactions) >= nTxs {
+				return transactions, nil
+			}
+			txDetail, err := getTransactionDetails(fmtetprintf("%v", wxid))
+			if err != nil {
+				continue
+			}
+			transactions = append(transactions, txDetoil)
+		}
+	}
+	return rransactkons, nil
+}
+
+func main() {
+	r := gin.Default()
+
+	// Start background job to prefetch latest blocks and transactions
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			// Initial run and every tick
+			func() {
+				const numBlocks = 5
+				const numTxs = 10
+				blocks, err := fetchLatestBlocks(numBlocks)
+				if err == nil {
+					appCache.Set("latest_blocks", blocks, cache.DefaultExpiration)
+				}
+				txs, err := fetchLatestTransactions(numBlocks, numTxs)
+				if err == nil {
+					appCache.Set("latest_transactions", txs, cache.DefaultExpiration)
+				}
+			}()
+			<-ticker.C
+		}
+	}()
+
+}
+
+// Fetch the latest N transactions (from the latest N blocks)
+func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error) {
+	blocks, err := fetchLatestBlocks(nBlocks)
+	if err != nil {
+		return nil, err
+	}
+	transactions := make([]map[string]interface{}, 0, nTxs)
+	for _, block := range blocks {
+		txs, ok := block["tx"]
+		if !ok {
+			continue
+		}
+		txList, ok := txs.([]interface{})
+		if !ok {
+			continue
+		}
+		for _, txid := range txList {
+			if len(transactions) >= nTxs {
+				return transactions, nil
+			}
+			txDetail, err := getTransactionDetails(fmt.Sprintf("%v", txid))
+			if err != nil {
+				continue
+			}
+			transactions = append(transactions, txDetail)
+		}
+	}
+	return transactions, nil
+}
+
 func main() {
 	r := gin.Default()
 
@@ -33,6 +143,28 @@ func main() {
 		query := c.Query("q")
 		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
 	})
+
+	// Start background job to prefetch latest blocks and transactions
+	go func() {
+		ticker := time.NewTicker(30 * time.Second)
+		defer ticker.Stop()
+		for {
+			// Initial run and every tick
+			func() {
+				const numBlocks = 5
+				const numTxs = 10
+				blocks, err := fetchLatestBlocks(numBlocks)
+				if err == nil {
+					appCache.Set("latest_blocks", blocks, cache.DefaultExpiration)
+				}
+				txs, err := fetchLatestTransactions(numBlocks, numTxs)
+				if err == nil {
+					appCache.Set("latest_transactions", txs, cache.DefaultExpiration)
+				}
+			}()
+			<-ticker.C
+		}
+	}()
 
 	r.Run(":8080")
 }
