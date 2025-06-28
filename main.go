@@ -219,31 +219,77 @@ func isValidBlockHeight(blockHeight string) bool {
 	return err == nil
 }
 
+func getNetworkStatus() (map[string]interface{}, error) {
+	cacheKey := "network:status"
+	if cached, found := appCache.Get(cacheKey); found {
+		return cached.(map[string]interface{}), nil
+	}
+	// Example: Fetch latest block count; customize as needed
+	params := []interface{}{}
+	resp, err := blockchairRequest("getblockcount", params)
+	if err != nil {
+		return nil, err
+	}
+	var result map[string]interface{}
+	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+		return nil, err
+	}
+	appCache.Set(cacheKey, result, 10*time.Second) // Short TTL for fast-changing data
+	return result, nil
+}
+
 func getAddressDetails(address string) (map[string]interface{}, error) {
+	cacheKey := "address:" + address
+	if cached, found := appCache.Get(cacheKey); found {
+		if data, ok := cached.(map[string]interface{}); ok {
+			return data, nil
+		}
+	}
+
 	response, err := blockchairRequest("getaddressinfo", []interface{}{address})
 	if err != nil {
 		return nil, err
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(response.Body(), &result)
+	if err := json.Unmarshal(response.Body(), &result); err != nil {
+		return nil, err
+	}
 
+	appCache.Set(cacheKey, result, 1*time.Minute) // Cache for 1 minute
 	return result, nil
 }
 
 func getTransactionDetails(txID string) (map[string]interface{}, error) {
+	cacheKey := "tx:" + txID
+	if cached, found := appCache.Get(cacheKey); found {
+		if data, ok := cached.(map[string]interface{}); ok {
+			return data, nil
+		}
+	}
+
 	response, err := blockchairRequest("getrawtransaction", []interface{}{txID, 1})
 	if err != nil {
 		return nil, err
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(response.Body(), &result)
+	if err := json.Unmarshal(response.Body(), &result); err != nil {
+		return nil, err
+	}
 
+	appCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
 	return result, nil
 }
 
 func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
+	cacheKey := "block:" + blockHeight
+	if cached, found := appCache.Get(cacheKey); found {
+		if data, ok := cached.(map[string]interface{}); ok {
+			return data, nil
+		}
+	}
+
 	height, _ := strconv.Atoi(blockHeight)
 	response, err := blockchairRequest("getblockbyheight", []interface{}{height, 1})
 	if err != nil {
@@ -251,8 +297,11 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	}
 
 	var result map[string]interface{}
-	json.Unmarshal(response.Body(), &result)
+	if err := json.Unmarshal(response.Body(), &result); err != nil {
+		return nil, err
+	}
 
+	appCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
 	return result, nil
 }
 
