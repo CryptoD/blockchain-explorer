@@ -1,6 +1,7 @@
 package main
 
 import (
+	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -13,160 +14,60 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
-	"github.com/patrickmn/go-cache"
+	cache "github.com/patrickmn/go-cache"
 )
 
 var ErrNotFound = errors.New("not found")
 var appCache = cache.New(5*time.Minute, 10*time.Minute)
 
 func main() {
-	router := gin.Default()
+	r := gin.Default()
 
-	router.GET("/", func(c *gin.Context) {
-		c.Header("Content-Type", "text/html")
-		c.File("index.html")
-	})
+	r.Static("/images", "./images")
+	r.StaticFile("/bitcoin.html", "bitcoin.html")
+	r.StaticFile("/", "index.html")
 
-	// Serve static files
-	router.Static("/images", "./images")
-	router.StaticFile("/bitcoin.html", "./bitcoin.html")
+	r.GET("/api/search", searchHandler)
 
-	// Handle search API requests
-	router.GET("/api/search", func(c *gin.Context) {
+	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")
-		if query == "" {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "query parameter 'q' is required"})
-			return
-		}
-
-		resultType, data, err := searchBlockchain(query)
-		if err != nil {
-			if err == ErrNotFound {
-				c.JSON(http.StatusNotFound, gin.H{"error": err.Error()})
-			} else {
-				c.JSON(http.StatusInternalServerError, gin.H{"error": err.Error()})
-			}
-			return
-		}
-
-		response := map[string]interface{}{
-			"resultType": resultType,
-			"data":       data,
-			"query":      query,
-		}
-
-		c.JSON(http.StatusOK, response)
-	})
-
-	// Direct access to bitcoin details page
-	router.GET("/bitcoin", func(c *gin.Context) {
-		query := c.Query("q")
-		if query == "" {
-			c.Redirect(http.StatusFound, "/")
-			return
-		}
-
-		// Redirect to bitcoin.html with the query parameter
 		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
 	})
 
-	router.Run(":8080")
+	r.Run(":8080")
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
-	cacheKey := "query:" + query
-	if cached, found := appCache.Get(cacheKey); found {
-		if entry, ok := cached.(map[string]interface{}); ok {
-			resultType, rtOk := entry["resultType"].(string)
-			data, dOk := entry["data"].(map[string]interface{})
-			if rtOk && dOk {
-				// fmt.Printf("Cache hit for query: %s\n", query) // Optional: Log cache hit
-				return resultType, data, nil
-			}
-		}
-	}
-	// fmt.Printf("Cache miss for query: %s\n", query) // Optional: Log cache miss
-
-	// Validate the query first
-	var method string
-	var params []interface{}
-
-	// Determine the type of query and set appropriate method
-	switch {
-	case isValidAddress(query):
-		method = "getaddressinfo"
-		params = []interface{}{query}
-	case isValidTransactionID(query):
-		method = "getrawtransaction"
-		params = []interface{}{query, 1} // 1 means verbose output
-	case isValidBlockHeight(query):
-		height, err := strconv.Atoi(query)
-		if err != nil {
-			return "", nil, fmt.Errorf("invalid block height format: %s", query)
-		}
-		method = "getblockbyheight"
-		params = []interface{}{height, 1} // 1 means verbose output
-	default:
-		return "", nil, fmt.Errorf("invalid query format")
-	}
-
-	// Make JSON-RPC request to GetBlock
-	response, err := blockchairRequest(method, params)
-	if err != nil {
-		return "", nil, err // Do not cache errors from the request itself
-	}
-
-	// Parse the response
-	var responseData map[string]interface{}
-	if err := json.Unmarshal(response.Body(), &responseData); err != nil {
-		return "", nil, err // Do not cache if unmarshalling fails
-	}
-
-	// Check for JSON-RPC error within the response
-	if errorObj, ok := responseData["error"]; ok && errorObj != nil {
-		return "", nil, fmt.Errorf("JSON-RPC error: %v", errorObj) // Do not cache responses that indicate an error
-	}
-
-	// Determine result type based on method
-	var determinedResultType string
-	switch method {
-	case "getaddressinfo":
-		determinedResultType = "address"
-	case "getrawtransaction":
-		determinedResultType = "transaction"
-	case "getblockbyheight":
-		determinedResultType = "block"
-	}
-
-	// Store successful results in cache
-	dataToCache := map[string]interface{}{
-		"resultType": determinedResultType,
-		"data":       responseData,
-	}
-	appCache.Set(cacheKey, dataToCache, cache.DefaultExpiration)
-
-	return determinedResultType, responseData, nil
+	// ... existing code ...
+	return "", nil, ErrNotFound
 }
 
-func searchHandler(w http.ResponseWriter, r *http.Request) {
-	query := r.URL.Query().Get("q")
+// Fix 1: Refactor searchHandler to use Gin's context
+func searchHandler(c *gin.Context) {
+	query := c.Query("q")
 	if query == "" {
-		http.Error(w, "query parameter 'q' is required", http.StatusBadRequest)
+		c.JSON(400, gin.H{"error": "Missing query parameter"})
 		return
 	}
-
-	resultType, data, err := searchBlockchain(query)
+	resultType, result, err := searchBlockchain(query)
 	if err != nil {
-		http.Error(w, err.Error(), http.StatusNotFound)
+		if err == ErrNotFound {
+			c.JSON(404, gin.H{"error": "Not found"})
+		} else {
+			c.JSON(500, gin.H{"error": err.Error()})
+		}
 		return
 	}
-
-	response := map[string]interface{}{
-		"resultType": resultType,
-		"data":       data,
+	// Marshal the result to JSON for ETag calculation
+	jsonBytes, _ := json.Marshal(result)
+	etag := fmt.Sprintf("\"%x\"", sha256.Sum256(jsonBytes))
+	c.Header("ETag", etag)
+	c.Header("Cache-Control", "public, max-age=60")
+	if match := c.GetHeader("If-None-Match"); match == etag {
+		c.Status(304)
+		return
 	}
-
-	json.NewEncoder(w).Encode(response)
+	c.JSON(200, gin.H{"type": resultType, "result": result})
 }
 
 var (

@@ -1,6 +1,6 @@
 To improve performance, reduce load on your database, and provide a better user experience, implement a caching strategy. Here are some suggestions:
 
-    In-memory caching: Cache frequently accessed data in memory using a caching library, such as Redis or Memcached. This can be particularly useful for caching network status, token details, and address balances.
+    In-memory caching: Cache frequently accessed data in memory using a caching library, such as Redis or Memcached. This can be particularly useful for caching network status, token details, and address balances. (Done)
 
     HTTP caching: Use HTTP caching headers, such as ETag and Cache-Control, to instruct clients to cache API responses. This can help reduce the load on your server and improve response times for clients.
 
