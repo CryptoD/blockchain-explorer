@@ -26,4 +26,42 @@ Contributions to this project are not accepted.
 
 ## License
 
-This project is not licensed and is not available for use, copying, or publishing. 
+This project is not licensed and is not available for use, copying, or publishing.
+
+## Project Setup
+
+### Dependencies
+This project uses Go modules. Key dependencies include:
+- Gin web framework for routing.
+- go-cache for in-memory caching.
+
+To install dependencies, run:
+```
+go mod tidy
+go mod download
+```
+
+### Environment Variables
+Set the following variables before running the application:
+- `baseURL`: The base URL for the GetBlock API.
+- `apiKey`: Your API key for accessing the GetBlock API.
+
+You can set them in your environment, e.g., using export commands:
+```
+export baseURL="https://your.api.endpoint"
+export apiKey="your_api_key"
+```
+
+### Run Instructions
+1. Ensure Go is installed (version 1.21 or higher).
+2. Build and run the application using:
+```
+go build -o blockchain-explorer
+./blockchain-explorer
+```
+Or, for development:
+```
+go run main.go
+```
+
+This will start the server and make the blockchain explorer available. 
