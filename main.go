@@ -26,7 +26,11 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	latestHeight, ok := networkStatus["best_block_height"].(float64)
+	result, ok := networkStatus["result"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("could not parse result from network status")
+	}
+	latestHeight, ok := result["best_block_height"].(float64)
 	if !ok {
 		return nil, errors.New("could not parse latest block height")
 	}
@@ -92,7 +96,13 @@ func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error
 	}
 	transactions := make([]map[string]interface{}, 0, nTxs)
 	for _, block := range blocks {
-		txs, ok := block["tx"]
+		// Access the nested structure properly
+		blockData, ok := block["result"].(map[string]interface{})
+		if !ok {
+			continue
+		}
+
+		txs, ok := blockData["tx"]
 		if !ok {
 			continue
 		}
@@ -175,7 +185,11 @@ func searchHandler(c *gin.Context) {
 		return
 	}
 	// Marshal the result to JSON for ETag calculation
-	jsonBytes, _ := json.Marshal(result)
+	jsonBytes, err := json.Marshal(result)
+	if err != nil {
+		c.JSON(500, gin.H{"error": "Failed to marshal response"})
+		return
+	}
 	etag := fmt.Sprintf("\"%x\"", sha256.Sum256(jsonBytes))
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "public, max-age=60")
@@ -239,7 +253,9 @@ func isValidBlockHeight(blockHeight string) bool {
 func getNetworkStatus() (map[string]interface{}, error) {
 	cacheKey := "network:status"
 	if cached, found := appCache.Get(cacheKey); found {
-		return cached.(map[string]interface{}), nil
+		if data, ok := cached.(map[string]interface{}); ok {
+			return data, nil
+		}
 	}
 	// Example: Fetch latest block count; customize as needed
 	params := []interface{}{}
@@ -258,7 +274,12 @@ func getNetworkStatus() (map[string]interface{}, error) {
 func getAddressDetails(address string) (map[string]interface{}, error) {
 	cacheKey := "address:" + address
 	if cached, found := appCache.Get(cacheKey); found {
-		if data, ok := cached.(map[string]interface{}); ok {
+		if dataBytes, ok := cached.([]byte); ok {
+			var data map[string]interface{}
+			if err := json.Unmarshal(dataBytes, &data); err == nil {
+				return data, nil
+			}
+		} else if data, ok := cached.(map[string]interface{}); ok {
 			return data, nil
 		}
 	}
@@ -282,6 +303,8 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 	if cached, found := appCache.Get(cacheKey); found {
 		if data, ok := cached.(map[string]interface{}); ok {
 			return data, nil
+		} else {
+			return nil, fmt.Errorf("invalid cache data type")
 		}
 	}
 
@@ -302,7 +325,7 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	cacheKey := "block:" + blockHeight
 	if cached, found := appCache.Get(cacheKey); found {
-		if data, ok := cached.(map[string]interface{}); ok {
+		if data, ok := cached.(map[string]any); ok {
 			return data, nil
 		}
 	}
