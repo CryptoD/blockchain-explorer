@@ -115,7 +115,46 @@ func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
-	// ... existing code ...
+	query = strings.TrimSpace(query)
+
+	// Check if it's a valid Bitcoin address
+	if isValidAddress(query) {
+		addressDetails, err := getAddressDetails(query)
+		if err != nil {
+			return "", nil, err
+		}
+		return "address", addressDetails, nil
+	}
+
+	// Check if it's a valid transaction ID
+	if isValidTransactionID(query) {
+		transactionDetails, err := getTransactionDetails(query)
+		if err != nil {
+			return "", nil, err
+		}
+		return "transaction", transactionDetails, nil
+	}
+
+	// Check if it's a valid block height
+	if isValidBlockHeight(query) {
+		blockDetails, err := getBlockDetails(query)
+		if err != nil {
+			return "", nil, err
+		}
+		return "block", blockDetails, nil
+	}
+
+	// Check if it might be a block hash (64-char hex, but not a tx ID)
+	if len(query) == 64 {
+		matched, _ := regexp.MatchString("^[0-9a-fA-F]{64}$", query)
+		if matched {
+			blockDetails, err := getBlockDetails(query)
+			if err == nil {
+				return "block", blockDetails, nil
+			}
+		}
+	}
+
 	return "", nil, ErrNotFound
 }
 
