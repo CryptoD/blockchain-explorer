@@ -203,6 +203,10 @@ func searchHandler(c *gin.Context) {
 var (
 	baseURL = getEnvWithDefault("GETBLOCK_BASE_URL", "https://go.getblock.io/eb8cb69423354abb8d5e489adfc54742")
 	apiKey  = getEnvWithDefault("GETBLOCK_ACCESS_TOKEN", "eb8cb69423354abb8d5e489adfc54742")
+	// httpClient is injectable for tests; production code uses a default resty client
+	httpClient = resty.New().
+			SetTimeout(10 * time.Second).
+			SetRetryCount(3)
 )
 
 func getEnvWithDefault(key, defaultValue string) string {
@@ -350,10 +354,6 @@ func blockchairRequest(method string, params []interface{}) (*resty.Response, er
 		return nil, errors.New("missing required environment variables")
 	}
 
-	client := resty.New().
-		SetTimeout(10 * time.Second).
-		SetRetryCount(3)
-
 	// Generate a unique ID for this request
 	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
 
@@ -364,7 +364,7 @@ func blockchairRequest(method string, params []interface{}) (*resty.Response, er
 		"params":  params,
 	}
 
-	response, err := client.R().
+	response, err := httpClient.R().
 		SetHeader("Content-Type", "application/json").
 		SetHeader("x-api-key", apiKey).
 		SetBody(payload).
