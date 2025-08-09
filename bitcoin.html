@@ -4,250 +4,104 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bitcoin Explorer</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUa6mY5Y5gq2s1kM8m3QZbK2Qf6QZ6b6a6j6s6G6j6G6j6G6j6G6j6G6j6G6" crossorigin="anonymous">
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 0;
-            padding: 20px;
-            background-color: #f5f5f5;
-        }
-
-        .header {
-            display: flex;
-            align-items: center;
-            margin-bottom: 30px;
-            padding: 20px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        .header img {
-            margin-right: 20px;
-        }
-
-        table {
-            width: 100%;
-            border-collapse: collapse;
-            margin-bottom: 30px;
-            background: white;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-
-        th, td {
-            padding: 15px;
-            text-align: left;
-            border-bottom: 1px solid #ddd;
-        }
-
-        th {
-            background-color: #f8f9fa;
-        }
-
-        tr:nth-child(even) {
-            background-color: #f8f9fa;
-        }
-
-        tr:hover {
-            background-color: #f2f2f2;
-        }
-
-        .network-status {
-            display: flex;
-            align-items: center;
-            gap: 20px;
-        }
-
-        .loading {
-            text-align: center;
-            padding: 20px;
-            font-size: 18px;
-            color: #666;
-        }
-
-        .error {
-            color: #dc3545;
-            text-align: center;
-            padding: 20px;
-            font-size: 18px;
-        }
-
-        .back-link {
-            display: inline-block;
-            margin-bottom: 20px;
-            color: #0066cc;
-            text-decoration: none;
-        }
-
-        .back-link:hover {
-            text-decoration: underline;
-        }
-
-        @media (max-width: 768px) {
-            .header {
-                flex-direction: column;
-                text-align: center;
-            }
-
-            table {
-                font-size: 14px;
-            }
-
-            th, td {
-                padding: 10px;
-            }
-        }
-    </style>
+    <link rel="stylesheet" href="/dist/styles.css">
 </head>
-<body>
-    <div class="container mt-4">
-        <a href="/" class="back-link">← Back to Search</a>
-        
-        <div class="card mb-4">
-            <div class="card-body d-flex align-items-center">
-                <img src="images/logo.jpg" width="100" alt="Explorer Logo" class="me-3">
-                <h1 class="h4 mb-0">Bitcoin Blockchain Explorer</h1>
-            </div>
+<body class="bg-gray-50 text-slate-900 p-4">
+    <div class="container mx-auto">
+        <a href="/" class="text-blue-600 hover:underline">← Back to Search</a>
+
+        <div class="card-muted mt-4 mb-4 flex items-center gap-4">
+            <img src="/images/logo.jpg" width="80" alt="Explorer Logo">
+            <h1 class="text-xl font-semibold">Bitcoin Blockchain Explorer</h1>
         </div>
 
-        <div id="loading" class="loading">Loading data...</div>
-        <div id="error" class="error" style="display: none;"></div>
+        <div id="loading" class="loading-dot">Loading data...</div>
+        <div id="error" class="text-red-600" style="display: none;"></div>
         <div id="content" style="display: none;">
-            <div class="card mb-4">
-                <div class="card-body">
-                    <h5 class="card-title">Network Status</h5>
-                    <div class="network-status">
-                        <img src="images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
-                        <div>
-                            <p class="mb-0">Blockchain: Bitcoin</p>
-                            <p class="mb-0">Network Status: <span class="text-success">Operating</span></p>
-                        </div>
+            <div class="card-muted mb-4">
+                <h5 class="font-semibold mb-2">Network Status</h5>
+                <div class="flex items-center gap-4">
+                    <img src="/images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
+                    <div>
+                        <p class="mb-0">Blockchain: Bitcoin</p>
+                        <p class="mb-0">Network Status: <span class="text-green-600">Operating</span></p>
                     </div>
                 </div>
             </div>
 
             <!-- Address Details -->
-            <div id="address-details" style="display: none;">
-                <div class="card mb-3">
-                    <div class="card-header">Address Details</div>
-                    <div class="card-body">
-                        <table class="table table-striped">
-                            <tr>
-                                <th>Address</th>
-                                <td id="address"></td>
-                            </tr>
-                            <tr>
-                                <th>Current Balance</th>
-                                <td id="balance"></td>
-                            </tr>
-                            <tr>
-                                <th>Total Received</th>
-                                <td id="received"></td>
-                            </tr>
-                            <tr>
-                                <th>Total Sent</th>
-                                <td id="sent"></td>
-                            </tr>
-                        </table>
+            <div id="address-details" style="display: none;" class="mb-4">
+                <div class="card-muted">
+                    <div class="mb-4">
+                        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <h6 class="font-semibold">Address</h6>
+                                <div id="address"></div>
+                            </div>
+                            <div>
+                                <h6 class="font-semibold">Balance</h6>
+                                <div id="balance"></div>
+                            </div>
+                        </div>
+                    </div>
 
-                        <h6>Recent Transactions</h6>
-                        <table class="table">
-                            <thead>
+                    <h6 class="font-semibold mt-2">Recent Transactions</h6>
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-left mt-2">
+                            <thead class="bg-gray-100">
                                 <tr>
-                                    <th>Transaction Hash</th>
-                                    <th>Amount</th>
-                                    <th>Status</th>
+                                    <th class="p-2">Transaction Hash</th>
+                                    <th class="p-2">Amount</th>
+                                    <th class="p-2">Status</th>
                                 </tr>
                             </thead>
-                            <tbody id="transactions">
-                                <!-- Transactions will be inserted here -->
-                            </tbody>
+                            <tbody id="transactions"></tbody>
                         </table>
                     </div>
                 </div>
             </div>
 
             <!-- Transaction Details -->
-            <div id="transaction-details" style="display: none;">
-                <div class="card mb-3">
-                    <div class="card-header">Transaction Details</div>
-                    <div class="card-body">
-                        <table class="table table-striped">
-                            <tr>
-                                <th>Transaction Hash</th>
-                                <td id="tx-hash"></td>
-                            </tr>
-                            <tr>
-                                <th>Block Height</th>
-                                <td id="tx-block"></td>
-                            </tr>
-                            <tr>
-                                <th>Timestamp</th>
-                                <td id="tx-time"></td>
-                            </tr>
-                            <tr>
-                                <th>Amount</th>
-                                <td id="tx-amount"></td>
-                            </tr>
-                            <tr>
-                                <th>Fee</th>
-                                <td id="tx-fee"></td>
-                            </tr>
-                            <tr>
-                                <th>Confirmations</th>
-                                <td id="tx-confirmations"></td>
-                            </tr>
-                        </table>
+            <div id="transaction-details" style="display: none;" class="mb-4">
+                <div class="card-muted">
+                    <h6 class="font-semibold mb-2">Transaction Details</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <div class="mb-2"><strong>Transaction Hash:</strong> <span id="tx-hash"></span></div>
+                            <div class="mb-2"><strong>Block Height:</strong> <span id="tx-block"></span></div>
+                            <div class="mb-2"><strong>Timestamp:</strong> <span id="tx-time"></span></div>
+                        </div>
+                        <div>
+                            <div class="mb-2"><strong>Amount:</strong> <span id="tx-amount"></span></div>
+                            <div class="mb-2"><strong>Fee:</strong> <span id="tx-fee"></span></div>
+                            <div class="mb-2"><strong>Confirmations:</strong> <span id="tx-confirmations"></span></div>
+                        </div>
+                    </div>
 
-                        <h6>Inputs and Outputs</h6>
-                        <div class="row">
-                            <div class="col-md-6">
-                                <h6>From</h6>
-                                <div id="tx-from"></div>
-                            </div>
-                            <div class="col-md-6">
-                                <h6>To</h6>
-                                <div id="tx-to"></div>
-                            </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mt-4">
+                        <div>
+                            <h6 class="font-semibold">From</h6>
+                            <div id="tx-from"></div>
+                        </div>
+                        <div>
+                            <h6 class="font-semibold">To</h6>
+                            <div id="tx-to"></div>
                         </div>
                     </div>
                 </div>
             </div>
 
             <!-- Block Details -->
-            <div id="block-details" style="display: none;">
-                <div class="card mb-3">
-                    <div class="card-header">Block Details</div>
-                    <div class="card-body">
-                        <table class="table table-striped">
-                            <tr>
-                                <th>Block Height</th>
-                                <td id="block-height"></td>
-                            </tr>
-                            <tr>
-                                <th>Block Hash</th>
-                                <td id="block-hash"></td>
-                            </tr>
-                            <tr>
-                                <th>Timestamp</th>
-                                <td id="block-time"></td>
-                            </tr>
-                            <tr>
-                                <th>Transaction Count</th>
-                                <td id="block-tx-count"></td>
-                            </tr>
-                            <tr>
-                                <th>Size</th>
-                                <td id="block-size"></td>
-                            </tr>
-                            <tr>
-                                <th>Weight</th>
-                                <td id="block-weight"></td>
-                            </tr>
-                        </table>
+            <div id="block-details" style="display: none;" class="mb-4">
+                <div class="card-muted">
+                    <h6 class="font-semibold mb-2">Block Details</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div><strong>Block Height:</strong> <span id="block-height"></span></div>
+                        <div><strong>Block Hash:</strong> <span id="block-hash"></span></div>
+                        <div><strong>Timestamp:</strong> <span id="block-time"></span></div>
+                        <div><strong>Transaction Count:</strong> <span id="block-tx-count"></span></div>
+                        <div><strong>Size:</strong> <span id="block-size"></span></div>
+                        <div><strong>Weight:</strong> <span id="block-weight"></span></div>
                     </div>
                 </div>
             </div>
@@ -259,12 +113,12 @@
             // Get query parameter
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('q');
-            
+
             if (!query) {
                 showError('No search query provided');
                 return;
             }
-            
+
             // Fetch data from API
             fetch(`/api/search?q=${encodeURIComponent(query)}`)
                 .then(response => {
@@ -277,7 +131,7 @@
                     // Hide loading indicator
                     document.getElementById('loading').style.display = 'none';
                     document.getElementById('content').style.display = 'block';
-                    
+
                     // Display data based on result type
                     if (data.resultType === 'address') {
                         displayAddressData(data.data);
@@ -294,68 +148,68 @@
                     showError('Failed to fetch data from the API');
                 });
         });
-        
+
         function showError(message) {
             document.getElementById('loading').style.display = 'none';
             const errorElement = document.getElementById('error');
             errorElement.textContent = message;
             errorElement.style.display = 'block';
         }
-        
+
         function displayAddressData(data) {
             // Show address details section
             document.getElementById('address-details').style.display = 'block';
-            
+
             // Extract data from response
             const addressData = data.result || {};
-            
+
             // Populate address details
             document.getElementById('address').textContent = addressData.address || 'N/A';
             document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
             document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
             document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
-            
+
             // Populate transactions
             const transactionsContainer = document.getElementById('transactions');
             transactionsContainer.innerHTML = '';
-            
+
             if (addressData.transactions && addressData.transactions.length > 0) {
                 addressData.transactions.slice(0, 5).forEach(tx => {
                     const row = document.createElement('tr');
                     row.innerHTML = `
-                        <td><a href="/bitcoin?q=${tx.txid}">${shortenHash(tx.txid)}</a></td>
-                        <td>${formatBTC(tx.value || 0)}</td>
-                        <td>Confirmations: ${tx.confirmations || 0}</td>
+                        <td class="p-2"><a class="text-blue-600 hover:underline" href="/bitcoin?q=${tx.txid}">${shortenHash(tx.txid)}</a></td>
+                        <td class="p-2">${formatBTC(tx.value || 0)}</td>
+                        <td class="p-2">Confirmations: ${tx.confirmations || 0}</td>
                     `;
                     transactionsContainer.appendChild(row);
                 });
             } else {
                 const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="3">No transactions found</td>';
+                row.innerHTML = '<td colspan="3" class="p-2">No transactions found</td>';
                 transactionsContainer.appendChild(row);
             }
         }
-        
+
         function displayTransactionData(data) {
             // Show transaction details section
             document.getElementById('transaction-details').style.display = 'block';
-            
+
             // Extract data from response
             const txData = data.result || {};
-            
+
             // Populate transaction details
             document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
             document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
-            document.getElementById('tx-time').textContent = txData.time ? 
+            document.getElementById('tx-time').textContent = txData.time ?
                 new Date(txData.time * 1000).toLocaleString() : 'Pending';
             document.getElementById('tx-amount').textContent = formatBTC(txData.value || 0);
             document.getElementById('tx-fee').textContent = formatBTC(txData.fee || 0);
             document.getElementById('tx-confirmations').textContent = txData.confirmations || 0;
-            
+
             // Handle inputs and outputs
             let fromAddresses = [];
             let toAddresses = [];
-            
+
             if (txData.vin && txData.vin.length > 0) {
                 txData.vin.forEach(input => {
                     if (input.address) {
@@ -363,7 +217,7 @@
                     }
                 });
             }
-            
+
             if (txData.vout && txData.vout.length > 0) {
                 txData.vout.forEach(output => {
                     if (output.scriptPubKey && output.scriptPubKey.addresses) {
@@ -371,45 +225,42 @@
                     }
                 });
             }
-            
+
             document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ?
-                fromAddresses.map(addr => `<a href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
-            
+                fromAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
+
             document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ?
-                toAddresses.map(addr => `<a href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
+                toAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
         }
-        
+
         function displayBlockData(data) {
             // Show block details section
             document.getElementById('block-details').style.display = 'block';
-            
+
             // Extract data from response
             const blockData = data.result || {};
-            
+
             // Populate block details
             document.getElementById('block-height').textContent = blockData.height || 'N/A';
             document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
-            document.getElementById('block-time').textContent = blockData.time ? 
+            document.getElementById('block-time').textContent = blockData.time ?
                 new Date(blockData.time * 1000).toLocaleString() : 'N/A';
-            document.getElementById('block-tx-count').textContent = 
+            document.getElementById('block-tx-count').textContent =
                 blockData.tx ? blockData.tx.length : 0;
-            document.getElementById('block-size').textContent = 
+            document.getElementById('block-size').textContent =
                 blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
-            document.getElementById('block-weight').textContent = 
+            document.getElementById('block-weight').textContent =
                 blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
         }
-        
+
         function formatBTC(value) {
             return `${parseFloat(value).toFixed(8)} BTC`;
         }
-        
+
         function shortenHash(hash) {
             if (!hash) return 'N/A';
             return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
         }
     </script>
-
-    <!-- Bootstrap JS -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoYz1H6Z6G6j6G6j6G6j6G6j6G6j6G6j6G6j6" crossorigin="anonymous"></script>
 </body>
 </html>

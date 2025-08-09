@@ -1,77 +1,32 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
     <title>Blockchain Explorer</title>
-    <!-- Bootstrap CSS -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="styles.css">
-    <style>
-    /* Inline critical CSS for faster initial rendering */
-    body {
-        font-family: Arial, sans-serif;
-        background-color: #f8f9fa;
-        margin: 0;
-        padding: 0;
-    }
-    .logo {
-        max-width: 350px;
-        margin-bottom: 20px;
-    }
-    .search-bar-custom {
-        font-size: 20px;
-    }
-    #result-container {
-        margin-top: 20px;
-        text-align: left;
-        max-width: 900px;
-        margin-left: auto;
-        margin-right: auto;
-    }
-    .result-item {
-        background-color: #fff;
-        border-radius: 5px;
-        box-shadow: 0 2px 5px rgba(0, 0, 0, 0.1);
-        padding: 15px;
-        margin-bottom: 15px;
-    }
-    .error-message {
-        color: #dc3545;
-        font-weight: bold;
-    }
-    .loading {
-        display: inline-block;
-        font-size: 24px;
-        font-weight: bold;
-        color: #666;
-        animation: loading 1.4s infinite;
-    }
-    @keyframes loading {
-        0%, 20% { content: "⋅"; }
-        40% { content: "⋅⋅"; }
-        60% { content: "⋅⋅⋅"; }
-        80%, 100% { content: ""; }
-    }
-    </style>
+    <link rel="stylesheet" href="/dist/styles.css" />
 </head>
-<body>
-    <div class="container min-vh-100 d-flex flex-column justify-content-center align-items-center">
-        <img src="images/logo.jpg" alt="Blockchain Explorer Logo" class="logo img-fluid">
-
-        <div class="w-100 d-flex justify-content-center">
-            <div class="w-100" style="max-width: 900px;">
-                <div class="input-group input-group-lg">
-                    <input type="text" id="search-input" class="form-control search-bar-custom" placeholder="Search by block height, transaction hash, or address..." aria-label="Search">
-                    <button class="btn btn-primary" id="search-icon" type="button" title="Search">🔍</button>
-                </div>
-                <div id="result-container"></div>
+<body class="min-h-screen bg-gray-50 text-slate-900">
+    <div class="min-h-screen flex flex-col justify-center items-center px-4">
+        <img src="/images/logo.jpg" alt="Blockchain Explorer Logo" class="max-w-xs mb-6" />
+        <div class="w-full max-w-3xl">
+            <div class="flex gap-2">
+                <input
+                    id="search-input"
+                    type="text"
+                    placeholder="Search by block height, transaction hash, or address..."
+                    class="flex-1 p-4 rounded-l-lg border border-slate-300 text-lg"
+                />
+                <button id="search-icon" class="bg-primary text-white px-6 rounded-r-lg">
+                    Search
+                </button>
             </div>
+            <div id="result-container" class="mt-4"></div>
         </div>
     </div>
 
     <script>
-    // Add debounce utility function
+    // Debounce utility
     function debounce(func, wait) {
         let timeout;
         return function(...args) {
@@ -80,10 +35,8 @@
         };
     }
 
-    // Create debounced version of performSearch
     const debouncedSearch = debounce(performSearch, 500);
 
-    // Update event listeners to use debounced search
     document.querySelector('#search-input').addEventListener('keydown', function(e) {
         if (e.key === 'Enter') {
             debouncedSearch(e.target.value);
@@ -96,80 +49,37 @@
     });
 
     function validateSearchQuery(query) {
-        // Remove whitespace
         const cleanQuery = query.trim();
-        
-        // Check if empty
-        if (!cleanQuery) {
-            return {
-                isValid: false,
-                error: "EMPTY_SEARCH"
-            };
-        }
+        if (!cleanQuery) return { isValid: false, error: 'EMPTY_SEARCH' };
+        if (cleanQuery.length < 8) return { isValid: false, error: 'INVALID_SEARCH' };
 
-        // Check minimum length (typical blockchain addresses/hashes are at least 26 chars)
-        if (cleanQuery.length < 8) {
-            return {
-                isValid: false,
-                error: "INVALID_SEARCH"
-            };
-        }
-
-        // Regex for valid blockchain data
         const validPatterns = {
-            // Hex format for transaction hashes and block hashes
             hash: /^[0-9a-fA-F]{64}$/,
-            // Common address formats (BTC, ETH)
             address: /^[13][a-km-zA-HJ-NP-Z1-9]{25,34}$|^0x[0-9a-fA-F]{40}$/,
-            // Block height (numbers only)
             blockHeight: /^\d+$/
         };
 
-        // Check if query matches any valid pattern
-        const isValidFormat = Object.values(validPatterns).some(pattern => 
-            pattern.test(cleanQuery)
-        );
-
-        return {
-            isValid: isValidFormat,
-            error: isValidFormat ? null : "INVALID_SEARCH"
-        };
+        const isValidFormat = Object.values(validPatterns).some(p => p.test(cleanQuery));
+        return { isValid: isValidFormat, error: isValidFormat ? null : 'INVALID_SEARCH' };
     }
 
-    function showLoading() {
+    function displayError(errorType) {
         const resultContainer = document.getElementById('result-container');
-        resultContainer.innerHTML = '<div class="loading">Searching</div>';
+        const messages = {
+            API_FAILURE: 'Blockchain search got the hiccups. Try again later.',
+            UNKNOWN_RESULT: 'Unknown result type',
+            NETWORK_ERROR: 'Network connection issue. Please check your internet.',
+            INVALID_SEARCH: 'Invalid search format',
+            EMPTY_SEARCH: 'Please enter a search term'
+        };
+        resultContainer.innerHTML = `<div class="text-red-600 font-semibold">${messages[errorType]}</div>`;
     }
 
     function performSearch(query) {
         const validation = validateSearchQuery(query);
-        
-        if (!validation.isValid) {
-            displayError(validation.error);
-            return;
-        }
-
-        // Redirect to bitcoin.html with the query parameter
+        if (!validation.isValid) { displayError(validation.error); return; }
         window.location.href = `/bitcoin?q=${encodeURIComponent(query)}`;
     }
-
-    // Error message constants
-    const ERROR_MESSAGES = {
-        API_FAILURE: 'Blockchain search got the hiccups. Try again later.',
-        UNKNOWN_RESULT: 'Unknown result type',
-        NETWORK_ERROR: 'Network connection issue. Please check your internet.',
-        INVALID_SEARCH: 'Invalid search format',
-        EMPTY_SEARCH: 'Please enter a search term'
-    };
-
-    // Update displayError usage
-    function displayError(errorType) {
-        const resultContainer = document.getElementById('result-container');
-        resultContainer.innerHTML = `<div class="error-message">${ERROR_MESSAGES[errorType]}</div>`;
-    }
     </script>
-
-    <!-- Optionally include Bootstrap JS for components (not required for this page but useful if added later) -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
 </body>
 </html>

@@ -72,9 +72,9 @@ func main() {
 
 	// Serve static assets: images plus specific static files
 	r.Static("/images", "./images")
+	// Serve built Tailwind CSS
+	r.Static("/dist", "./dist")
 	r.StaticFile("/bitcoin.html", "bitcoin.html")
-	r.StaticFile("/styles.css", "styles.css")
-	r.StaticFile("/script.js", "script.js")
 	r.StaticFile("/", "index.html")
 
 	r.GET("/api/search", searchHandler)
