@@ -312,10 +312,17 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 func getTransactionDetails(txID string) (map[string]interface{}, error) {
 	cacheKey := "tx:" + txID
 	if cached, found := appCache.Get(cacheKey); found {
-		if data, ok := cached.(map[string]interface{}); ok {
+		// accept cached []byte or map[string]interface{}
+		if dataBytes, ok := cached.([]byte); ok {
+			var data map[string]interface{}
+			if err := json.Unmarshal(dataBytes, &data); err != nil {
+				return nil, fmt.Errorf("invalid cached JSON for transaction %s: %w", txID, err)
+			}
+			return data, nil
+		} else if data, ok := cached.(map[string]interface{}); ok {
 			return data, nil
 		} else {
-			return nil, fmt.Errorf("invalid cache data type")
+			return nil, fmt.Errorf("invalid cache data type for %s", txID)
 		}
 	}
 
