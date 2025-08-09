@@ -209,6 +209,13 @@ var (
 			SetRetryCount(3)
 )
 
+// SetHTTPClient allows tests or other packages to replace the internal HTTP client used for API calls.
+func SetHTTPClient(c *resty.Client) {
+	if c != nil {
+		httpClient = c
+	}
+}
+
 func getEnvWithDefault(key, defaultValue string) string {
 	value := os.Getenv(key)
 	if value == "" {
