@@ -20,6 +20,24 @@ import (
 var ErrNotFound = errors.New("not found")
 var appCache = cache.New(5*time.Minute, 10*time.Minute)
 
+// InvalidCachedJSONError is returned when cached []byte exists but cannot be unmarshaled.
+type InvalidCachedJSONError struct {
+	TxID string
+	Err  error
+}
+
+func (e *InvalidCachedJSONError) Error() string {
+	return fmt.Sprintf("invalid cached JSON for transaction %s: %v", e.TxID, e.Err)
+}
+
+func (e *InvalidCachedJSONError) Unwrap() error { return e.Err }
+
+// IsInvalidCachedJSON returns true if err is (or wraps) InvalidCachedJSONError
+func IsInvalidCachedJSON(err error) bool {
+	var target *InvalidCachedJSONError
+	return errors.As(err, &target)
+}
+
 func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 	// Get the latest block height
 	networkStatus, err := getNetworkStatus()
@@ -52,8 +70,11 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 func main() {
 	r := gin.Default()
 
+	// Serve static assets: images plus specific static files
 	r.Static("/images", "./images")
 	r.StaticFile("/bitcoin.html", "bitcoin.html")
+	r.StaticFile("/styles.css", "styles.css")
+	r.StaticFile("/script.js", "script.js")
 	r.StaticFile("/", "index.html")
 
 	r.GET("/api/search", searchHandler)
@@ -316,7 +337,7 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 		if dataBytes, ok := cached.([]byte); ok {
 			var data map[string]interface{}
 			if err := json.Unmarshal(dataBytes, &data); err != nil {
-				return nil, fmt.Errorf("invalid cached JSON for transaction %s: %w", txID, err)
+				return nil, &InvalidCachedJSONError{TxID: txID, Err: err}
 			}
 			return data, nil
 		} else if data, ok := cached.(map[string]interface{}); ok {

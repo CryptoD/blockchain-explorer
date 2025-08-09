@@ -4,6 +4,8 @@
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Bitcoin Explorer</title>
+    <!-- Bootstrap CSS -->
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-9ndCyUa6mY5Y5gq2s1kM8m3QZbK2Qf6QZ6b6a6j6s6G6j6G6j6G6j6G6j6G6j6G6" crossorigin="anonymous">
     <style>
         body {
             font-family: Arial, sans-serif;
@@ -101,148 +103,154 @@
     </style>
 </head>
 <body>
-    <a href="/" class="back-link">← Back to Search</a>
-    
-    <div class="header">
-        <img src="images/logo.jpg" width="100" alt="Explorer Logo">
-        <h1>Bitcoin Blockchain Explorer</h1>
-    </div>
+    <div class="container mt-4">
+        <a href="/" class="back-link">← Back to Search</a>
+        
+        <div class="card mb-4">
+            <div class="card-body d-flex align-items-center">
+                <img src="images/logo.jpg" width="100" alt="Explorer Logo" class="me-3">
+                <h1 class="h4 mb-0">Bitcoin Blockchain Explorer</h1>
+            </div>
+        </div>
 
-    <div id="loading" class="loading">Loading data...</div>
-    <div id="error" class="error" style="display: none;"></div>
-    <div id="content" style="display: none;">
-        <table>
-            <tr>
-                <th colspan="2">Network Status</th>
-            </tr>
-            <tr>
-                <td class="network-status">
-                    <img src="images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
-                    <div>
-                        <p>Blockchain: Bitcoin</p>
-                        <p>Network Status: <span style="color: green;">Operating</span></p>
+        <div id="loading" class="loading">Loading data...</div>
+        <div id="error" class="error" style="display: none;"></div>
+        <div id="content" style="display: none;">
+            <div class="card mb-4">
+                <div class="card-body">
+                    <h5 class="card-title">Network Status</h5>
+                    <div class="network-status">
+                        <img src="images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
+                        <div>
+                            <p class="mb-0">Blockchain: Bitcoin</p>
+                            <p class="mb-0">Network Status: <span class="text-success">Operating</span></p>
+                        </div>
                     </div>
-                </td>
-            </tr>
-        </table>
+                </div>
+            </div>
 
-        <!-- Address Details -->
-        <div id="address-details" style="display: none;">
-            <table>
-                <tr>
-                    <th colspan="2">Address Details</th>
-                </tr>
-                <tr>
-                    <td>Address:</td>
-                    <td id="address"></td>
-                </tr>
-                <tr>
-                    <td>Current Balance:</td>
-                    <td id="balance"></td>
-                </tr>
-                <tr>
-                    <td>Total Received:</td>
-                    <td id="received"></td>
-                </tr>
-                <tr>
-                    <td>Total Sent:</td>
-                    <td id="sent"></td>
-                </tr>
-            </table>
+            <!-- Address Details -->
+            <div id="address-details" style="display: none;">
+                <div class="card mb-3">
+                    <div class="card-header">Address Details</div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <tr>
+                                <th>Address</th>
+                                <td id="address"></td>
+                            </tr>
+                            <tr>
+                                <th>Current Balance</th>
+                                <td id="balance"></td>
+                            </tr>
+                            <tr>
+                                <th>Total Received</th>
+                                <td id="received"></td>
+                            </tr>
+                            <tr>
+                                <th>Total Sent</th>
+                                <td id="sent"></td>
+                            </tr>
+                        </table>
 
-            <table>
-                <tr>
-                    <th colspan="3">Recent Transactions</th>
-                </tr>
-                <tr>
-                    <th>Transaction Hash</th>
-                    <th>Amount</th>
-                    <th>Status</th>
-                </tr>
-                <tbody id="transactions">
-                    <!-- Transactions will be inserted here -->
-                </tbody>
-            </table>
-        </div>
+                        <h6>Recent Transactions</h6>
+                        <table class="table">
+                            <thead>
+                                <tr>
+                                    <th>Transaction Hash</th>
+                                    <th>Amount</th>
+                                    <th>Status</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions">
+                                <!-- Transactions will be inserted here -->
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Transaction Details -->
-        <div id="transaction-details" style="display: none;">
-            <table>
-                <tr>
-                    <th colspan="2">Transaction Details</th>
-                </tr>
-                <tr>
-                    <td>Transaction Hash:</td>
-                    <td id="tx-hash"></td>
-                </tr>
-                <tr>
-                    <td>Block Height:</td>
-                    <td id="tx-block"></td>
-                </tr>
-                <tr>
-                    <td>Timestamp:</td>
-                    <td id="tx-time"></td>
-                </tr>
-                <tr>
-                    <td>Amount:</td>
-                    <td id="tx-amount"></td>
-                </tr>
-                <tr>
-                    <td>Fee:</td>
-                    <td id="tx-fee"></td>
-                </tr>
-                <tr>
-                    <td>Confirmations:</td>
-                    <td id="tx-confirmations"></td>
-                </tr>
-            </table>
+            <!-- Transaction Details -->
+            <div id="transaction-details" style="display: none;">
+                <div class="card mb-3">
+                    <div class="card-header">Transaction Details</div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <tr>
+                                <th>Transaction Hash</th>
+                                <td id="tx-hash"></td>
+                            </tr>
+                            <tr>
+                                <th>Block Height</th>
+                                <td id="tx-block"></td>
+                            </tr>
+                            <tr>
+                                <th>Timestamp</th>
+                                <td id="tx-time"></td>
+                            </tr>
+                            <tr>
+                                <th>Amount</th>
+                                <td id="tx-amount"></td>
+                            </tr>
+                            <tr>
+                                <th>Fee</th>
+                                <td id="tx-fee"></td>
+                            </tr>
+                            <tr>
+                                <th>Confirmations</th>
+                                <td id="tx-confirmations"></td>
+                            </tr>
+                        </table>
 
-            <table>
-                <tr>
-                    <th colspan="2">Inputs and Outputs</th>
-                </tr>
-                <tr>
-                    <td>From:</td>
-                    <td id="tx-from"></td>
-                </tr>
-                <tr>
-                    <td>To:</td>
-                    <td id="tx-to"></td>
-                </tr>
-            </table>
-        </div>
+                        <h6>Inputs and Outputs</h6>
+                        <div class="row">
+                            <div class="col-md-6">
+                                <h6>From</h6>
+                                <div id="tx-from"></div>
+                            </div>
+                            <div class="col-md-6">
+                                <h6>To</h6>
+                                <div id="tx-to"></div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
 
-        <!-- Block Details -->
-        <div id="block-details" style="display: none;">
-            <table>
-                <tr>
-                    <th colspan="2">Block Details</th>
-                </tr>
-                <tr>
-                    <td>Block Height:</td>
-                    <td id="block-height"></td>
-                </tr>
-                <tr>
-                    <td>Block Hash:</td>
-                    <td id="block-hash"></td>
-                </tr>
-                <tr>
-                    <td>Timestamp:</td>
-                    <td id="block-time"></td>
-                </tr>
-                <tr>
-                    <td>Transaction Count:</td>
-                    <td id="block-tx-count"></td>
-                </tr>
-                <tr>
-                    <td>Size:</td>
-                    <td id="block-size"></td>
-                </tr>
-                <tr>
-                    <td>Weight:</td>
-                    <td id="block-weight"></td>
-                </tr>
-            </table>
+            <!-- Block Details -->
+            <div id="block-details" style="display: none;">
+                <div class="card mb-3">
+                    <div class="card-header">Block Details</div>
+                    <div class="card-body">
+                        <table class="table table-striped">
+                            <tr>
+                                <th>Block Height</th>
+                                <td id="block-height"></td>
+                            </tr>
+                            <tr>
+                                <th>Block Hash</th>
+                                <td id="block-hash"></td>
+                            </tr>
+                            <tr>
+                                <th>Timestamp</th>
+                                <td id="block-time"></td>
+                            </tr>
+                            <tr>
+                                <th>Transaction Count</th>
+                                <td id="block-tx-count"></td>
+                            </tr>
+                            <tr>
+                                <th>Size</th>
+                                <td id="block-size"></td>
+                            </tr>
+                            <tr>
+                                <th>Weight</th>
+                                <td id="block-weight"></td>
+                            </tr>
+                        </table>
+                    </div>
+                </div>
+            </div>
         </div>
     </div>
 
@@ -400,5 +408,8 @@
             return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
         }
     </script>
+
+    <!-- Bootstrap JS -->
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js" integrity="sha384-ENjdO4Dr2bkBIFxQpeoYz1H6Z6G6j6G6j6G6j6G6j6G6j6G6j6G6j6" crossorigin="anonymous"></script>
 </body>
 </html>
