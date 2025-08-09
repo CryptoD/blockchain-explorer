@@ -2,18 +2,26 @@ version: "3.9"
 
 services:
   app:
-    build: .
-    container_name: blockchain-explorer-instance
+    image: golang:1.21
+    container_name: blockchain-explorer-dev
+    working_dir: /app
+    volumes:
+      - ./:/app
     ports:
       - "3000:3000"
     environment:
       - DB_HOST=db
       - DB_PORT=5432
       - DB_USER=postgres
-      - DB_PASSWORD=${DB_PASSWORD}
+      - DB_PASSWORD=${POSTGRES_PASSWORD}
       - DB_NAME=blockchain_explorer
+      - REDIS_HOST=redis
+      - GETBLOCK_BASE_URL=${GETBLOCK_BASE_URL}
+      - GETBLOCK_ACCESS_TOKEN=${GETBLOCK_ACCESS_TOKEN}
     depends_on:
       - db
+      - redis
+    command: sh -c "go run main.go"
 
   db:
     image: postgres:16
@@ -30,5 +38,28 @@ services:
       timeout: 5s
       retries: 5
 
+  redis:
+    image: redis:7
+    container_name: blockchain-explorer-redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  adminer:
+    image: adminer
+    container_name: blockchain-explorer-adminer
+    restart: always
+    ports:
+      - "8080:8080"
+    depends_on:
+      - db
+
 volumes:
   db-data:
+  redis-data:
