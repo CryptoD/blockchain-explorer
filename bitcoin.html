@@ -29,6 +29,17 @@
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
             padding-top: 12px;
+
+            /* animation starting state */
+            opacity: 0;
+            transform: translateY(-8px);
+            transition: opacity 220ms cubic-bezier(.2,.9,.2,1), transform 220ms cubic-bezier(.2,.9,.2,1);
+        }
+
+        /* When the menu container has menu-visible, show the overlay */
+        #mobile-menu.menu-visible .mobile-menu-overlay {
+            opacity: 1;
+            transform: translateY(0);
         }
 
         /* Close button in mobile menu */
@@ -290,10 +301,18 @@
             const mobileMenu = document.getElementById('mobile-menu');
             const mainContent = document.getElementById('main-content');
             const mobileMenuClose = document.getElementById('mobile-menu-close');
+            const mobileOverlay = mobileMenu ? mobileMenu.querySelector('.mobile-menu-overlay') : null;
 
             function openMobileMenu() {
                 if (!mobileMenu) return;
+                // Remove hidden so element becomes part of layout, then add menu-visible to trigger CSS transition
                 mobileMenu.classList.remove('hidden');
+
+                // allow layout to settle, then add visible class
+                // force reflow
+                void mobileMenu.offsetWidth;
+                mobileMenu.classList.add('menu-visible');
+
                 mobileMenuButton.setAttribute('aria-expanded', 'true');
                 mobileMenu.setAttribute('aria-hidden', 'false');
 
@@ -314,13 +333,33 @@
 
             function closeMobileMenu() {
                 if (!mobileMenu) return;
-                mobileMenu.classList.add('hidden');
+
+                // start transition by removing menu-visible
+                mobileMenu.classList.remove('menu-visible');
                 mobileMenuButton.setAttribute('aria-expanded', 'false');
                 mobileMenu.setAttribute('aria-hidden', 'true');
 
                 // restore main content visibility and scrolling
                 if (mainContent) mainContent.setAttribute('aria-hidden', 'false');
                 document.body.style.overflow = '';
+
+                // After transition ends, hide the element completely to remove from accessibility tree
+                if (mobileOverlay && typeof window !== 'undefined') {
+                    const onEnd = function(e) {
+                        // ensure callback runs only for overlay transitions
+                        if (e.target !== mobileOverlay) return;
+                        mobileMenu.classList.add('hidden');
+                        mobileOverlay.removeEventListener('transitionend', onEnd);
+                    };
+                    mobileOverlay.addEventListener('transitionend', onEnd);
+
+                    // Fallback: in case transitionend doesn't fire, ensure hidden after timeout
+                    setTimeout(() => {
+                        if (!mobileMenu.classList.contains('hidden')) mobileMenu.classList.add('hidden');
+                    }, 300);
+                } else {
+                    mobileMenu.classList.add('hidden');
+                }
 
                 mobileMenuButton.focus();
                 document.removeEventListener('click', onDocClick);
