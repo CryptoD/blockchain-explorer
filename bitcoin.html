@@ -154,6 +154,38 @@
         /* Improve contrast for status text */
         .status-operating { color: #065f46; /* dark green */ }
         .status-error { color: #b91c1c; /* dark red */ }
+
+        /* Autocomplete dropdown styles */
+        .autocomplete-suggestions {
+            position: absolute;
+            z-index: 90;
+            background: #ffffff;
+            border: 1px solid #e5e7eb;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+            max-height: 320px;
+            overflow-y: auto;
+            width: 100%;
+            margin-top: 6px;
+            border-radius: 8px;
+        }
+        .autocomplete-item {
+            padding: 8px 12px;
+            cursor: pointer;
+            font-size: 14px;
+            color: #0f172a;
+        }
+        .autocomplete-item[aria-selected="true"], .autocomplete-item:hover {
+            background: #eef2ff; /* subtle primary tint */
+        }
+        .autocomplete-type {
+            display: inline-block;
+            background: #f3f4f6;
+            color: #374151;
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 999px;
+            margin-right: 8px;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-slate-900 p-4">
@@ -193,6 +225,11 @@
                     <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
                 </form>
                 <div id="search-help" class="sr-only">Enter a block height, transaction hash, or address, then press Enter or the Search button.</div>
+
+                <!-- Autocomplete suggestions container (desktop) -->
+                <div id="autocomplete-desktop" class="autocomplete-suggestions" role="listbox" aria-label="Search suggestions" style="display:none;">
+                    <!-- items appended dynamically -->
+                </div>
             </div>
 
             <!-- Mobile nav toggle -->
@@ -223,6 +260,10 @@
                             <button id="search-icon-mobile" type="submit" class="btn-primary px-3 rounded" aria-label="Search">Go</button>
                         </div>
                     </form>
+                    <!-- Autocomplete suggestions container (mobile) -->
+                    <div id="autocomplete-mobile" class="autocomplete-suggestions" role="listbox" aria-label="Search suggestions" style="display:none;">
+                        <!-- items appended dynamically -->
+                    </div>
                 </div>
             </div>
         </div>
@@ -357,6 +398,16 @@
         let currentQuery = null;
         let currentAbortController = null;
 
+        // Autocomplete state
+        let autocompleteController = null;
+        let autocompleteSelectedIndex = -1; // index in current suggestions
+        let currentSuggestions = [];
+
+        // Debounced autocomplete trigger (shorter delay)
+        const debouncedAutocomplete = debounce(function(query, source) {
+            fetchAutocomplete(query, source);
+        }, 250);
+
         document.addEventListener('DOMContentLoaded', function() {
             // Attach search handlers if elements exist
             const searchInput = document.querySelector('#search-input');
@@ -374,7 +425,45 @@
                     const q = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
                     if (q) performSearch(q);
                 });
+
+                // Also attach autocomplete handlers when form exists
+                if (searchInput) {
+                    // handle Enter for search AND navigation for suggestions
+                    searchInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
+                                selectSuggestion(currentSuggestions[autocompleteSelectedIndex], searchInput, 'desktop');
+                                e.preventDefault();
+                                return;
+                            }
+                            debouncedSearch(e.target.value);
+                        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
+                            handleSuggestionKey(e, 'desktop');
+                        }
+                    });
+                    // input event for autocomplete
+                    searchInput.addEventListener('input', function(e) {
+                        const q = e.target.value.trim();
+                        if (!q) {
+                            hideSuggestions('desktop');
+                            return;
+                        }
+                        debouncedAutocomplete(q, 'desktop');
+                    });
+                    searchInput.addEventListener('blur', function(e) {
+                        // small delay to allow clicks
+                        setTimeout(() => hideSuggestions('desktop'), 150);
+                    });
+                }
+
+                if (searchButton) {
+                    searchButton.addEventListener('click', function() {
+                        const query = document.querySelector('#search-input').value;
+                        debouncedSearch(query);
+                    });
+                }
             } else {
+                // If searchForm is not present (legacy layout), still wire basic handlers
                 if (searchInput) {
                     searchInput.addEventListener('keydown', function(e) {
                         if (e.key === 'Enter') debouncedSearch(e.target.value);
@@ -398,6 +487,43 @@
                     if (mobileMenu) mobileMenu.classList.add('hidden');
                     if (q) performSearch(q);
                 });
+
+                // Mobile autocomplete handlers
+                if (mobileSearchInput) {
+                    mobileSearchInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
+                                selectSuggestion(currentSuggestions[autocompleteSelectedIndex], mobileSearchInput, 'mobile');
+                                e.preventDefault();
+                                return;
+                            }
+                            debouncedSearch(e.target.value);
+                        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
+                            handleSuggestionKey(e, 'mobile');
+                        }
+                    });
+                    mobileSearchInput.addEventListener('input', function(e) {
+                        const q = e.target.value.trim();
+                        if (!q) {
+                            hideSuggestions('mobile');
+                            return;
+                        }
+                        debouncedAutocomplete(q, 'mobile');
+                    });
+                    mobileSearchInput.addEventListener('blur', function(e) {
+                        setTimeout(() => hideSuggestions('mobile'), 150);
+                    });
+                }
+
+                if (mobileSearchButton) {
+                    mobileSearchButton.addEventListener('click', function() {
+                        const query = document.querySelector('#search-input-mobile').value;
+                        // close mobile menu for better UX
+                        const mobileMenu = document.getElementById('mobile-menu');
+                        if (mobileMenu) mobileMenu.classList.add('hidden');
+                        debouncedSearch(query);
+                    });
+                }
             } else {
                 if (mobileSearchInput) {
                     mobileSearchInput.addEventListener('keydown', function(e) {
@@ -634,6 +760,124 @@
                 // ignore history errors
             }
             fetchSearch(query);
+        }
+
+        // Fetch autocomplete suggestions from the API
+        function fetchAutocomplete(query, source = 'desktop') {
+            // cancel previous autocomplete request
+            if (autocompleteController) {
+                try { autocompleteController.abort(); } catch (e) {}
+                autocompleteController = null;
+            }
+            autocompleteController = new AbortController();
+            const signal = autocompleteController.signal;
+
+            fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`, { signal })
+                .then(resp => {
+                    if (!resp.ok) return { suggestions: [] };
+                    return resp.json();
+                })
+                .then(data => {
+                    // expected response: { suggestions: [ {type: 'address'|'tx'|'block', value: '...', label: '...'}, ... ] }
+                    const suggestions = (data && data.suggestions) ? data.suggestions : [];
+                    currentSuggestions = suggestions;
+                    autocompleteSelectedIndex = -1;
+                    renderSuggestions(suggestions, source);
+                })
+                .catch(err => {
+                    // ignore abort errors
+                })
+                .finally(() => {
+                    autocompleteController = null;
+                });
+        }
+
+        function renderSuggestions(suggestions, source) {
+            const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
+            if (!container) return;
+            container.innerHTML = '';
+            if (!suggestions || suggestions.length === 0) {
+                container.style.display = 'none';
+                return;
+            }
+            suggestions.forEach((s, idx) => {
+                const item = document.createElement('div');
+                item.className = 'autocomplete-item';
+                item.setAttribute('role', 'option');
+                item.setAttribute('data-idx', idx);
+                item.setAttribute('aria-selected', 'false');
+
+                // Type badge
+                const type = document.createElement('span');
+                type.className = 'autocomplete-type';
+                type.textContent = s.type || '';
+                item.appendChild(type);
+
+                const text = document.createElement('span');
+                text.textContent = s.label || s.value || '';
+                item.appendChild(text);
+
+                item.addEventListener('mousedown', function(e) {
+                    // mousedown so input blur doesn't hide before click
+                    e.preventDefault();
+                    const idx = parseInt(item.getAttribute('data-idx'), 10);
+                    const sel = currentSuggestions[idx];
+                    const input = (source === 'mobile') ? document.getElementById('search-input-mobile') : document.getElementById('search-input');
+                    if (sel) selectSuggestion(sel, input, source);
+                });
+
+                container.appendChild(item);
+            });
+            container.style.display = 'block';
+        }
+
+        function hideSuggestions(source) {
+            const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
+            if (container) container.style.display = 'none';
+            currentSuggestions = [];
+            autocompleteSelectedIndex = -1;
+        }
+
+        function handleSuggestionKey(e, source) {
+            const max = currentSuggestions.length;
+            if (max === 0) return;
+            if (e.key === 'ArrowDown') {
+                e.preventDefault();
+                autocompleteSelectedIndex = (autocompleteSelectedIndex + 1) % max;
+                updateSuggestionHighlight(source);
+            } else if (e.key === 'ArrowUp') {
+                e.preventDefault();
+                autocompleteSelectedIndex = (autocompleteSelectedIndex - 1 + max) % max;
+                updateSuggestionHighlight(source);
+            } else if (e.key === 'Escape') {
+                hideSuggestions(source);
+            }
+        }
+
+        function updateSuggestionHighlight(source) {
+            const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
+            if (!container) return;
+            const items = Array.from(container.querySelectorAll('.autocomplete-item'));
+            items.forEach((it, i) => {
+                const sel = (i === autocompleteSelectedIndex);
+                it.setAttribute('aria-selected', sel ? 'true' : 'false');
+                if (sel) {
+                    // set input value preview (do not perform search yet)
+                    const input = (source === 'mobile') ? document.getElementById('search-input-mobile') : document.getElementById('search-input');
+                    if (input && currentSuggestions[i]) input.value = currentSuggestions[i].value || currentSuggestions[i].label || input.value;
+                    // ensure visible
+                    it.scrollIntoView({ block: 'nearest' });
+                }
+            });
+        }
+
+        function selectSuggestion(suggestion, inputEl, source) {
+            if (!suggestion || !inputEl) return;
+            // Set the input to the selected value (use the value field if provided)
+            inputEl.value = suggestion.value || suggestion.label || inputEl.value;
+            hideSuggestions(source);
+            // Trigger full search for the selected suggestion
+            performSearch(inputEl.value);
         }
 
         // Main fetch logic with timeout and retry support
