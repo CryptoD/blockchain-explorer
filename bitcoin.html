@@ -73,7 +73,15 @@
             <h1 class="text-xl font-semibold">Bitcoin Blockchain Explorer</h1>
         </div>
 
-        <div id="loading" class="loading-dot">Loading data...</div>
+        <!-- Loading indicator with spinner -->
+        <div id="loading" class="flex items-center gap-3 p-3 text-sm text-slate-700" role="status" aria-live="polite" aria-atomic="true" style="display: none;">
+            <svg class="animate-spin -ml-1 mr-2 h-5 w-5 text-primary" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24" aria-hidden="true">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z"></path>
+            </svg>
+            <span id="loading-text">Loading data...</span>
+        </div>
+
         <div id="error" class="text-red-600" style="display: none;"></div>
         <div id="content" style="display: none;">
             <div class="card-muted mb-4">
@@ -167,7 +175,7 @@
     </div>
 
     <script>
-        // Reuse the same search handling as index page to allow searching from this header
+        // Debounce helper
         function debounce(func, wait) {
             let timeout;
             return function(...args) {
@@ -179,6 +187,10 @@
         const debouncedSearch = debounce(function(query) {
             performSearch(query);
         }, 500);
+
+        // Small state for current query/abort controller
+        let currentQuery = null;
+        let currentAbortController = null;
 
         document.addEventListener('DOMContentLoaded', function() {
             // Attach search handlers if elements exist
@@ -261,28 +273,144 @@
                 });
             }
 
-            // Existing bitcoin page logic
             // Get query parameter
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('q');
 
             if (!query) {
-                showError('No search query provided');
+                // No query provided: show helpful message instead of failing silently
+                showError('No search query provided. Use the search in the header to look up a block, tx or address.');
                 return;
             }
 
-            // Fetch data from API
-            fetch(`/api/search?q=${encodeURIComponent(query)}`)
+            // If there is a query in the URL, perform the search
+            fetchSearch(query);
+        });
+
+        // UI helpers: loading and error states
+        function showLoading(message = 'Loading data...') {
+            const loadingEl = document.getElementById('loading');
+            if (!loadingEl) return;
+            const loadingText = document.getElementById('loading-text');
+            if (loadingText) loadingText.textContent = message;
+            loadingEl.style.display = 'flex';
+
+            // hide content & error while loading
+            const content = document.getElementById('content');
+            if (content) content.style.display = 'none';
+            const errorEl = document.getElementById('error');
+            if (errorEl) errorEl.style.display = 'none';
+        }
+
+        function hideLoading() {
+            const loadingEl = document.getElementById('loading');
+            if (!loadingEl) return;
+            loadingEl.style.display = 'none';
+        }
+
+        function clearError() {
+            const errorEl = document.getElementById('error');
+            if (!errorEl) return;
+            errorEl.innerHTML = '';
+            errorEl.style.display = 'none';
+        }
+
+        function showError(message, canRetry = false, retryCallback = null) {
+            hideLoading();
+            // hide content when showing an error
+            const content = document.getElementById('content');
+            if (content) content.style.display = 'none';
+
+            const errorEl = document.getElementById('error');
+            if (!errorEl) return;
+            errorEl.innerHTML = '';
+
+            const p = document.createElement('p');
+            p.textContent = message;
+            errorEl.appendChild(p);
+
+            if (canRetry && typeof retryCallback === 'function') {
+                const btn = document.createElement('button');
+                btn.textContent = 'Retry';
+                btn.className = 'mt-2 btn-primary';
+                btn.addEventListener('click', function() {
+                    // clear error and run retry
+                    clearError();
+                    retryCallback();
+                });
+                errorEl.appendChild(btn);
+            }
+
+            errorEl.style.display = 'block';
+            errorEl.setAttribute('role', 'alert');
+            errorEl.setAttribute('aria-live', 'assertive');
+        }
+
+        // Perform search: update URL and fetch in-place
+        function performSearch(query) {
+            if (!query) return;
+            // update URL without reload
+            try {
+                const newUrl = `${window.location.pathname}?q=${encodeURIComponent(query)}`;
+                window.history.pushState({}, '', newUrl);
+            } catch (e) {
+                // ignore history errors
+            }
+            fetchSearch(query);
+        }
+
+        // Main fetch logic with timeout and retry support
+        function fetchSearch(query) {
+            currentQuery = query;
+            clearError();
+
+            // Abort any previous request
+            if (currentAbortController) {
+                try { currentAbortController.abort(); } catch (e) {}
+                currentAbortController = null;
+            }
+
+            const controller = new AbortController();
+            currentAbortController = controller;
+            const signal = controller.signal;
+
+            const TIMEOUT_MS = 10000; // 10s
+            const timeoutId = setTimeout(() => {
+                if (currentAbortController) currentAbortController.abort();
+            }, TIMEOUT_MS);
+
+            showLoading('Loading data...');
+
+            fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal })
                 .then(response => {
+                    clearTimeout(timeoutId);
                     if (!response.ok) {
-                        throw new Error('API request failed');
+                        // try to parse error message from JSON
+                        return response.text().then(txt => {
+                            let msg = `API request failed (${response.status})`;
+                            try {
+                                const j = JSON.parse(txt);
+                                if (j && j.error) msg = j.error;
+                            } catch (e) {
+                                if (txt) msg = txt;
+                            }
+                            throw new Error(msg);
+                        });
                     }
                     return response.json();
                 })
                 .then(data => {
-                    // Hide loading indicator
-                    document.getElementById('loading').style.display = 'none';
-                    document.getElementById('content').style.display = 'block';
+                    hideLoading();
+                    const content = document.getElementById('content');
+                    if (content) content.style.display = 'block';
+
+                    // Hide all detail sections first
+                    const addrSection = document.getElementById('address-details');
+                    const txSection = document.getElementById('transaction-details');
+                    const blockSection = document.getElementById('block-details');
+                    if (addrSection) addrSection.style.display = 'none';
+                    if (txSection) txSection.style.display = 'none';
+                    if (blockSection) blockSection.style.display = 'none';
 
                     // Display data based on result type
                     if (data.resultType === 'address') {
@@ -292,25 +420,31 @@
                     } else if (data.resultType === 'block') {
                         displayBlockData(data.data);
                     } else {
-                        showError('Unknown result type');
+                        showError('Unknown result type returned by API.');
                     }
                 })
                 .catch(error => {
-                    console.error('Error:', error);
-                    showError('Failed to fetch data from the API');
+                    // differentiate abort/timeouts from other errors
+                    if (error && error.name === 'AbortError') {
+                        showError('Request timed out. Please check your connection and try again.', true, () => fetchSearch(query));
+                    } else {
+                        console.error('Error:', error);
+                        const msg = (error && error.message) ? error.message : 'Failed to fetch data from the API';
+                        showError(msg, true, () => fetchSearch(query));
+                    }
+                })
+                .finally(() => {
+                    currentAbortController = null;
                 });
-        });
-
-        function showError(message) {
-            document.getElementById('loading').style.display = 'none';
-            const errorElement = document.getElementById('error');
-            errorElement.textContent = message;
-            errorElement.style.display = 'block';
         }
 
         function displayAddressData(data) {
+            // Hide other sections
+            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'none';
+            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'none';
+
             // Show address details section
-            document.getElementById('address-details').style.display = 'block';
+            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'block';
 
             // Extract data from response
             const addressData = data.result || {};
@@ -318,8 +452,8 @@
             // Populate address details
             document.getElementById('address').textContent = addressData.address || 'N/A';
             document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
-            document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
-            document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
+            if (document.getElementById('received')) document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
+            if (document.getElementById('sent')) document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
 
             // Populate transactions
             const transactionsContainer = document.getElementById('transactions');
@@ -343,8 +477,12 @@
         }
 
         function displayTransactionData(data) {
+            // Hide other sections
+            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'none';
+            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'none';
+
             // Show transaction details section
-            document.getElementById('transaction-details').style.display = 'block';
+            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'block';
 
             // Extract data from response
             const txData = data.result || {};
@@ -352,8 +490,7 @@
             // Populate transaction details
             document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
             document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
-            document.getElementById('tx-time').textContent = txData.time ?
-                new Date(txData.time * 1000).toLocaleString() : 'Pending';
+            document.getElementById('tx-time').textContent = txData.time ? new Date(txData.time * 1000).toLocaleString() : 'Pending';
             document.getElementById('tx-amount').textContent = formatBTC(txData.value || 0);
             document.getElementById('tx-fee').textContent = formatBTC(txData.fee || 0);
             document.getElementById('tx-confirmations').textContent = txData.confirmations || 0;
@@ -363,31 +500,23 @@
             let toAddresses = [];
 
             if (txData.vin && txData.vin.length > 0) {
-                txData.vin.forEach(input => {
-                    if (input.address) {
-                        fromAddresses.push(input.address);
-                    }
-                });
+                txData.vin.forEach(input => { if (input.address) fromAddresses.push(input.address); });
             }
-
             if (txData.vout && txData.vout.length > 0) {
-                txData.vout.forEach(output => {
-                    if (output.scriptPubKey && output.scriptPubKey.addresses) {
-                        toAddresses = toAddresses.concat(output.scriptPubKey.addresses);
-                    }
-                });
+                txData.vout.forEach(output => { if (output.scriptPubKey && output.scriptPubKey.addresses) toAddresses = toAddresses.concat(output.scriptPubKey.addresses); });
             }
 
-            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ?
-                fromAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
-
-            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ?
-                toAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
+            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ? fromAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
+            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ? toAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
         }
 
         function displayBlockData(data) {
+            // Hide other sections
+            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'none';
+            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'none';
+
             // Show block details section
-            document.getElementById('block-details').style.display = 'block';
+            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'block';
 
             // Extract data from response
             const blockData = data.result || {};
@@ -395,14 +524,10 @@
             // Populate block details
             document.getElementById('block-height').textContent = blockData.height || 'N/A';
             document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
-            document.getElementById('block-time').textContent = blockData.time ?
-                new Date(blockData.time * 1000).toLocaleString() : 'N/A';
-            document.getElementById('block-tx-count').textContent =
-                blockData.tx ? blockData.tx.length : 0;
-            document.getElementById('block-size').textContent =
-                blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
-            document.getElementById('block-weight').textContent =
-                blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+            document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : 'N/A';
+            document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
+            document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
+            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
         }
 
         function formatBTC(value) {
