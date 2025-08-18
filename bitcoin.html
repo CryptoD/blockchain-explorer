@@ -28,6 +28,26 @@
             z-index: 60;
             overflow-y: auto;
             -webkit-overflow-scrolling: touch;
+            padding-top: 12px;
+        }
+
+        /* Close button in mobile menu */
+        .mobile-menu-close {
+            position: absolute;
+            top: 8px;
+            right: 8px;
+            z-index: 80;
+            background: transparent;
+            border: none;
+            font-size: 20px;
+            line-height: 1;
+            padding: 8px;
+            border-radius: 6px;
+            cursor: pointer;
+        }
+        .mobile-menu-close:focus {
+            outline: 2px solid #2563eb; /* focus ring - use primary color */
+            outline-offset: 2px;
         }
 
         /* Ensure horizontal tables scroll nicely on small screens */
@@ -81,6 +101,9 @@
         <!-- Mobile menu (hidden by default) -->
         <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu" aria-label="Mobile main menu" aria-hidden="true">
             <div class="px-4 pt-4 pb-6 space-y-4 mobile-menu-overlay">
+                <!-- Visible close button -->
+                <button id="mobile-menu-close" class="mobile-menu-close" aria-label="Close menu">✕</button>
+
                 <nav class="flex flex-col gap-2" role="navigation" aria-label="Mobile navigation">
                     <a href="/" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Home</a>
                     <a href="/blocks" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Blocks</a>
@@ -266,6 +289,7 @@
             const mobileMenuButton = document.getElementById('mobile-menu-button');
             const mobileMenu = document.getElementById('mobile-menu');
             const mainContent = document.getElementById('main-content');
+            const mobileMenuClose = document.getElementById('mobile-menu-close');
 
             function openMobileMenu() {
                 if (!mobileMenu) return;
@@ -277,8 +301,13 @@
                 if (mainContent) mainContent.setAttribute('aria-hidden', 'true');
                 document.body.style.overflow = 'hidden';
 
-                const firstLink = mobileMenu.querySelector('a');
-                if (firstLink) firstLink.focus();
+                // focus first interactive item; prefer close button for easy dismissal
+                if (mobileMenuClose) mobileMenuClose.focus();
+                else {
+                    const firstLink = mobileMenu.querySelector('a');
+                    if (firstLink) firstLink.focus();
+                }
+
                 document.addEventListener('click', onDocClick);
                 document.addEventListener('keydown', onKeyDown);
             }
@@ -319,6 +348,13 @@
                 mobileMenuButton.addEventListener('click', function(e) {
                     e.stopPropagation();
                     toggleMobileMenu();
+                });
+            }
+
+            if (mobileMenuClose) {
+                mobileMenuClose.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    closeMobileMenu();
                 });
             }
 
@@ -555,8 +591,8 @@
                 txData.vout.forEach(output => { if (output.scriptPubKey && output.scriptPubKey.addresses) toAddresses = toAddresses.concat(output.scriptPubKey.addresses); });
             }
 
-            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ? fromAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
-            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ? toAddresses.map(addr => `<a class="text-blue-600 hover:underline" href="/bitcoin?q=${addr}">${addr}</a>`).join('<br>') : 'N/A';
+            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ? fromAddresses.map(addr => `<a class=\"text-blue-600 hover:underline\" href=\"/bitcoin?q=${addr}\">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
+            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ? toAddresses.map(addr => `<a class=\"text-blue-600 hover:underline\" href=\"/bitcoin?q=${addr}\">${addr}</a>`).join('<br>') : 'N/A';
         }
 
         function displayBlockData(data) {
