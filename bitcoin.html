@@ -176,10 +176,12 @@
             </nav>
 
             <div class="hidden md:block flex-1 max-w-md">
-                <div class="flex shadow-sm rounded-lg overflow-hidden">
+                <!-- Search form: role=search so assistive tech recognizes it -->
+                <form id="search-form" role="search" aria-label="Search the blockchain" class="flex shadow-sm rounded-lg overflow-hidden" action="#" onsubmit="return false;">
                     <label for="search-input" class="sr-only">Search blockchain</label>
                     <input
                         id="search-input"
+                        name="q"
                         type="search"
                         inputmode="search"
                         aria-label="Search by block height, transaction hash, or address"
@@ -188,8 +190,8 @@
                         class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
                     />
-                    <button id="search-icon" class="btn-primary px-4" type="button" aria-label="Search">Search</button>
-                </div>
+                    <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
+                </form>
                 <div id="search-help" class="sr-only">Enter a block height, transaction hash, or address, then press Enter or the Search button.</div>
             </div>
 
@@ -213,16 +215,20 @@
                 </nav>
 
                 <div>
-                    <label for="search-input-mobile" class="sr-only">Search blockchain</label>
-                    <div class="flex gap-2">
-                        <input id="search-input-mobile" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
-                        <button id="search-icon-mobile" type="button" class="btn-primary px-3 rounded" aria-label="Search">Go</button>
-                    </div>
+                    <!-- Mobile search as a form as well -->
+                    <form id="search-form-mobile" role="search" aria-label="Search the blockchain" action="#" onsubmit="return false;">
+                        <label for="search-input-mobile" class="sr-only">Search blockchain</label>
+                        <div class="flex gap-2">
+                            <input id="search-input-mobile" name="q" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
+                            <button id="search-icon-mobile" type="submit" class="btn-primary px-3 rounded" aria-label="Search">Go</button>
+                        </div>
+                    </form>
                 </div>
             </div>
         </div>
     </header>
 
+    <!-- Results region: make it a region so screen readers can jump to it and announce updates -->
     <div class="container mx-auto" id="main-content" role="main" tabindex="-1">
         <a href="/" class="text-blue-600 hover:underline high-contrast-link">← Back to Search</a>
 
@@ -241,7 +247,7 @@
         </div>
 
         <div id="error" class="status-error" style="display: none;"></div>
-        <div id="content" style="display: none;">
+        <div id="content" role="region" aria-live="polite" aria-atomic="false" aria-label="Search results" style="display: none;">
             <div class="card-muted mb-4">
                 <h5 class="font-semibold mb-2">Network Status</h5>
                 <div class="flex items-center gap-4">
@@ -271,12 +277,13 @@
 
                     <h6 class="font-semibold mt-2">Recent Transactions</h6>
                     <div class="overflow-x-auto">
-                        <table class="w-full text-left mt-2">
+                        <table role="table" aria-label="Recent transactions" class="w-full text-left mt-2">
+                            <caption class="sr-only">Recent transactions for this address</caption>
                             <thead class="bg-gray-100">
                                 <tr>
-                                    <th class="p-2">Transaction Hash</th>
-                                    <th class="p-2">Amount</th>
-                                    <th class="p-2">Status</th>
+                                    <th scope="col" class="p-2">Transaction Hash</th>
+                                    <th scope="col" class="p-2">Amount</th>
+                                    <th scope="col" class="p-2">Status</th>
                                 </tr>
                             </thead>
                             <tbody id="transactions"></tbody>
@@ -354,36 +361,60 @@
             // Attach search handlers if elements exist
             const searchInput = document.querySelector('#search-input');
             const searchButton = document.querySelector('#search-icon');
+            const searchForm = document.querySelector('#search-form');
+
             const mobileSearchInput = document.querySelector('#search-input-mobile');
             const mobileSearchButton = document.querySelector('#search-icon-mobile');
+            const mobileSearchForm = document.querySelector('#search-form-mobile');
 
-            if (searchInput) {
-                searchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') debouncedSearch(e.target.value);
+            // Desktop: handle form submit (Enter or button submit)
+            if (searchForm) {
+                searchForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const q = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
+                    if (q) performSearch(q);
                 });
-            }
-            if (searchButton) {
-                searchButton.addEventListener('click', function() {
-                    const query = document.querySelector('#search-input').value;
-                    debouncedSearch(query);
-                });
+            } else {
+                if (searchInput) {
+                    searchInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') debouncedSearch(e.target.value);
+                    });
+                }
+                if (searchButton) {
+                    searchButton.addEventListener('click', function() {
+                        const query = document.querySelector('#search-input').value;
+                        debouncedSearch(query);
+                    });
+                }
             }
 
-            if (mobileSearchInput) {
-                mobileSearchInput.addEventListener('keydown', function(e) {
-                    if (e.key === 'Enter') {
-                        debouncedSearch(e.target.value);
-                    }
-                });
-            }
-            if (mobileSearchButton) {
-                mobileSearchButton.addEventListener('click', function() {
-                    const query = document.querySelector('#search-input-mobile').value;
+            // Mobile: form submit
+            if (mobileSearchForm) {
+                mobileSearchForm.addEventListener('submit', function(e) {
+                    e.preventDefault();
+                    const q = (mobileSearchInput && mobileSearchInput.value) ? mobileSearchInput.value.trim() : '';
                     // close mobile menu for better UX
                     const mobileMenu = document.getElementById('mobile-menu');
                     if (mobileMenu) mobileMenu.classList.add('hidden');
-                    debouncedSearch(query);
+                    if (q) performSearch(q);
                 });
+            } else {
+                if (mobileSearchInput) {
+                    mobileSearchInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Enter') {
+                            debouncedSearch(e.target.value);
+                        }
+                    });
+                }
+                if (mobileSearchButton) {
+                    mobileSearchButton.addEventListener('click', function() {
+                        const query = document.querySelector('#search-input-mobile').value;
+                        // close mobile menu for better UX
+                        const mobileMenu = document.getElementById('mobile-menu');
+                        if (mobileMenu) mobileMenu.classList.add('hidden');
+                        debouncedSearch(query);
+                    });
+                }
             }
 
             // Mobile menu toggling and accessibility
