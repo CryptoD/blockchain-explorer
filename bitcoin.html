@@ -88,7 +88,7 @@
             cursor: pointer;
         }
         .mobile-menu-close:focus {
-            outline: 2px solid #2563eb; /* focus ring - use primary color */
+            outline: 3px solid #2563eb; /* focus ring - use primary color */
             outline-offset: 2px;
         }
 
@@ -100,9 +100,66 @@
             header .max-w-7xl { padding-left: 12px; padding-right: 12px; }
             .card-muted img { max-width: 80px; }
         }
+
+        /* Accessibility improvements: skip link */
+        .skip-link {
+            position: absolute;
+            left: -9999px;
+            top: auto;
+            width: 1px;
+            height: 1px;
+            overflow: hidden;
+        }
+        .skip-link:focus {
+            position: fixed;
+            left: 8px;
+            top: 8px;
+            width: auto;
+            height: auto;
+            padding: 8px 12px;
+            background: #ffffff;
+            color: #1e40af;
+            border: 2px solid #1e40af;
+            z-index: 9999;
+            text-decoration: none;
+        }
+
+        /* High contrast link style for improved readability */
+        .high-contrast-link,
+        a.high-contrast-link {
+            color: #1e40af; /* darker blue with good contrast */
+        }
+
+        /* Primary button style with stronger contrast */
+        .btn-primary,
+        .btn-primary:active {
+            background-color: #1e40af; /* dark blue */
+            color: #ffffff;
+            border: none;
+        }
+        .btn-primary:hover {
+            background-color: #173580;
+        }
+        .btn-primary:focus {
+            outline: 3px solid #93c5fd; /* light blue focus ring */
+            outline-offset: 2px;
+        }
+
+        /* Make focus outlines visible for keyboard users */
+        :focus {
+            outline: 3px solid #93c5fd;
+            outline-offset: 2px;
+        }
+
+        /* Improve contrast for status text */
+        .status-operating { color: #065f46; /* dark green */ }
+        .status-error { color: #b91c1c; /* dark red */ }
     </style>
 </head>
 <body class="bg-gray-50 text-slate-900 p-4">
+    <!-- Skip link for keyboard users -->
+    <a href="#main-content" class="skip-link">Skip to main content</a>
+
     <!-- Header with logo, navigation and search -->
     <header class="w-full bg-white shadow mb-4">
         <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
@@ -112,7 +169,7 @@
             </a>
 
             <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700" role="navigation" aria-label="Main navigation">
-                <a href="/" class="hover:text-primary" aria-current="page">Home</a>
+                <a href="/" class="hover:text-primary">Home</a>
                 <a href="/blocks" class="hover:text-primary">Blocks</a>
                 <a href="/transactions" class="hover:text-primary">Transactions</a>
                 <a href="/addresses" class="hover:text-primary">Addresses</a>
@@ -126,12 +183,14 @@
                         type="search"
                         inputmode="search"
                         aria-label="Search by block height, transaction hash, or address"
+                        aria-describedby="search-help"
                         placeholder="Search by block height, transaction hash, or address..."
                         class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
                     />
-                    <button id="search-icon" class="bg-primary text-white px-4" type="button" aria-label="Search">Search</button>
+                    <button id="search-icon" class="btn-primary px-4" type="button" aria-label="Search">Search</button>
                 </div>
+                <div id="search-help" class="sr-only">Enter a block height, transaction hash, or address, then press Enter or the Search button.</div>
             </div>
 
             <!-- Mobile nav toggle -->
@@ -157,15 +216,15 @@
                     <label for="search-input-mobile" class="sr-only">Search blockchain</label>
                     <div class="flex gap-2">
                         <input id="search-input-mobile" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
-                        <button id="search-icon-mobile" type="button" class="bg-primary text-white px-3 rounded" aria-label="Search">Go</button>
+                        <button id="search-icon-mobile" type="button" class="btn-primary px-3 rounded" aria-label="Search">Go</button>
                     </div>
                 </div>
             </div>
         </div>
     </header>
 
-    <div class="container mx-auto" id="main-content">
-        <a href="/" class="text-blue-600 hover:underline">← Back to Search</a>
+    <div class="container mx-auto" id="main-content" role="main" tabindex="-1">
+        <a href="/" class="text-blue-600 hover:underline high-contrast-link">← Back to Search</a>
 
         <div class="card-muted mt-4 mb-4 flex items-center gap-4">
             <img src="/images/btc-logo.png" width="80" alt="Explorer Logo">
@@ -181,7 +240,7 @@
             <span id="loading-text">Loading data...</span>
         </div>
 
-        <div id="error" class="text-red-600" style="display: none;"></div>
+        <div id="error" class="status-error" style="display: none;"></div>
         <div id="content" style="display: none;">
             <div class="card-muted mb-4">
                 <h5 class="font-semibold mb-2">Network Status</h5>
@@ -189,7 +248,7 @@
                     <img src="/images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
                     <div>
                         <p class="mb-0">Blockchain: Bitcoin</p>
-                        <p class="mb-0">Network Status: <span class="text-green-600">Operating</span></p>
+                        <p class="mb-0">Network Status: <span class="status-operating">Operating</span></p>
                     </div>
                 </div>
             </div>
@@ -408,9 +467,41 @@
                 }
             }
 
+            // Enhanced keydown handler: Escape to close, and trap focus while mobile menu is open
             function onKeyDown(e) {
+                if (!mobileMenu || mobileMenu.classList.contains('hidden')) return;
+
                 if (e.key === 'Escape') {
                     closeMobileMenu();
+                    return;
+                }
+
+                if (e.key === 'Tab') {
+                    // Focus trap inside mobile menu
+                    const focusableSelector = 'a[href], button:not([disabled]), input:not([disabled]), [tabindex]:not([tabindex="-1"])';
+                    const focusable = Array.prototype.slice.call(mobileMenu.querySelectorAll(focusableSelector)).filter(function(el) {
+                        return el.offsetWidth > 0 || el.offsetHeight > 0 || el === document.activeElement;
+                    });
+                    if (focusable.length === 0) {
+                        e.preventDefault();
+                        return;
+                    }
+                    const first = focusable[0];
+                    const last = focusable[focusable.length - 1];
+
+                    if (e.shiftKey) {
+                        // shift + tab
+                        if (document.activeElement === first) {
+                            e.preventDefault();
+                            last.focus();
+                        }
+                    } else {
+                        // tab
+                        if (document.activeElement === last) {
+                            e.preventDefault();
+                            first.focus();
+                        }
+                    }
                 }
             }
 
@@ -617,16 +708,37 @@
             if (addressData.transactions && addressData.transactions.length > 0) {
                 addressData.transactions.slice(0, 5).forEach(tx => {
                     const row = document.createElement('tr');
-                    row.innerHTML = `
-                        <td class="p-2"><a class="text-blue-600 hover:underline" href="/bitcoin?q=${tx.txid}">${shortenHash(tx.txid)}</a></td>
-                        <td class="p-2">${formatBTC(tx.value || 0)}</td>
-                        <td class="p-2">Confirmations: ${tx.confirmations || 0}</td>
-                    `;
+
+                    const tdHash = document.createElement('td');
+                    tdHash.className = 'p-2';
+                    const a = document.createElement('a');
+                    a.href = `/bitcoin?q=${encodeURIComponent(tx.txid)}`;
+                    a.textContent = shortenHash(tx.txid);
+                    a.className = 'high-contrast-link hover:underline';
+                    a.setAttribute('aria-label', `Open transaction ${tx.txid}`);
+                    tdHash.appendChild(a);
+
+                    const tdAmt = document.createElement('td');
+                    tdAmt.className = 'p-2';
+                    tdAmt.textContent = formatBTC(tx.value || 0);
+
+                    const tdStatus = document.createElement('td');
+                    tdStatus.className = 'p-2';
+                    tdStatus.textContent = `Confirmations: ${tx.confirmations || 0}`;
+
+                    row.appendChild(tdHash);
+                    row.appendChild(tdAmt);
+                    row.appendChild(tdStatus);
+
                     transactionsContainer.appendChild(row);
                 });
             } else {
                 const row = document.createElement('tr');
-                row.innerHTML = '<td colspan="3" class="p-2">No transactions found</td>';
+                const td = document.createElement('td');
+                td.setAttribute('colspan', '3');
+                td.className = 'p-2';
+                td.textContent = 'No transactions found';
+                row.appendChild(td);
                 transactionsContainer.appendChild(row);
             }
         }
@@ -661,8 +773,39 @@
                 txData.vout.forEach(output => { if (output.scriptPubKey && output.scriptPubKey.addresses) toAddresses = toAddresses.concat(output.scriptPubKey.addresses); });
             }
 
-            document.getElementById('tx-from').innerHTML = fromAddresses.length > 0 ? fromAddresses.map(addr => `<a class=\"text-blue-600 hover:underline\" href=\"/bitcoin?q=${addr}\">${addr}</a>`).join('<br>') : 'Coinbase (New Coins)';
-            document.getElementById('tx-to').innerHTML = toAddresses.length > 0 ? toAddresses.map(addr => `<a class=\"text-blue-600 hover:underline\" href=\"/bitcoin?q=${addr}\">${addr}</a>`).join('<br>') : 'N/A';
+            // Populate 'From' list with accessible links
+            const fromContainer = document.getElementById('tx-from');
+            fromContainer.innerHTML = '';
+            if (fromAddresses.length > 0) {
+                fromAddresses.forEach((addr, idx) => {
+                    const a = document.createElement('a');
+                    a.href = `/bitcoin?q=${encodeURIComponent(addr)}`;
+                    a.textContent = addr;
+                    a.className = 'high-contrast-link hover:underline';
+                    a.setAttribute('aria-label', `Open address ${addr}`);
+                    fromContainer.appendChild(a);
+                    if (idx < fromAddresses.length - 1) fromContainer.appendChild(document.createElement('br'));
+                });
+            } else {
+                fromContainer.textContent = 'Coinbase (New Coins)';
+            }
+
+            // Populate 'To' list with accessible links
+            const toContainer = document.getElementById('tx-to');
+            toContainer.innerHTML = '';
+            if (toAddresses.length > 0) {
+                toAddresses.forEach((addr, idx) => {
+                    const a = document.createElement('a');
+                    a.href = `/bitcoin?q=${encodeURIComponent(addr)}`;
+                    a.textContent = addr;
+                    a.className = 'high-contrast-link hover:underline';
+                    a.setAttribute('aria-label', `Open address ${addr}`);
+                    toContainer.appendChild(a);
+                    if (idx < toAddresses.length - 1) toContainer.appendChild(document.createElement('br'));
+                });
+            } else {
+                toContainer.textContent = 'N/A';
+            }
         }
 
         function displayBlockData(data) {
