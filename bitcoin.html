@@ -7,11 +7,69 @@
     <link rel="stylesheet" href="/dist/styles.css">
 </head>
 <body class="bg-gray-50 text-slate-900 p-4">
+    <!-- Header with logo, navigation and search -->
+    <header class="w-full bg-white shadow mb-4">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
+                <span class="font-semibold text-lg">Blockchain Explorer</span>
+            </a>
+
+            <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700" role="navigation" aria-label="Main navigation">
+                <a href="/" class="hover:text-primary" aria-current="page">Home</a>
+                <a href="/blocks" class="hover:text-primary">Blocks</a>
+                <a href="/transactions" class="hover:text-primary">Transactions</a>
+                <a href="/addresses" class="hover:text-primary">Addresses</a>
+            </nav>
+
+            <div class="hidden md:block flex-1 max-w-md">
+                <div class="flex shadow-sm rounded-lg overflow-hidden">
+                    <label for="search-input" class="sr-only">Search blockchain</label>
+                    <input
+                        id="search-input"
+                        type="search"
+                        inputmode="search"
+                        aria-label="Search by block height, transaction hash, or address"
+                        placeholder="Search by block height, transaction hash, or address..."
+                        class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
+                        autocomplete="off"
+                    />
+                    <button id="search-icon" class="bg-primary text-white px-4" type="button" aria-label="Search">Search</button>
+                </div>
+            </div>
+
+            <!-- Mobile nav toggle -->
+            <div class="md:hidden">
+                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            </div>
+        </div>
+
+        <!-- Mobile menu (hidden by default) -->
+        <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu" aria-label="Mobile main menu">
+            <div class="px-4 pt-4 pb-6 space-y-4">
+                <nav class="flex flex-col gap-2" role="navigation" aria-label="Mobile navigation">
+                    <a href="/" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Home</a>
+                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Blocks</a>
+                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Transactions</a>
+                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Addresses</a>
+                </nav>
+
+                <div>
+                    <label for="search-input-mobile" class="sr-only">Search blockchain</label>
+                    <div class="flex gap-2">
+                        <input id="search-input-mobile" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
+                        <button id="search-icon-mobile" type="button" class="bg-primary text-white px-3 rounded" aria-label="Search">Go</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </header>
+
     <div class="container mx-auto">
         <a href="/" class="text-blue-600 hover:underline">← Back to Search</a>
 
         <div class="card-muted mt-4 mb-4 flex items-center gap-4">
-            <img src="/images/logo.jpg" width="80" alt="Explorer Logo">
+            <img src="/images/btc-logo.png" width="80" alt="Explorer Logo">
             <h1 class="text-xl font-semibold">Bitcoin Blockchain Explorer</h1>
         </div>
 
@@ -109,7 +167,101 @@
     </div>
 
     <script>
+        // Reuse the same search handling as index page to allow searching from this header
+        function debounce(func, wait) {
+            let timeout;
+            return function(...args) {
+                clearTimeout(timeout);
+                timeout = setTimeout(() => func.apply(this, args), wait);
+            };
+        }
+
+        const debouncedSearch = debounce(function(query) {
+            performSearch(query);
+        }, 500);
+
         document.addEventListener('DOMContentLoaded', function() {
+            // Attach search handlers if elements exist
+            const searchInput = document.querySelector('#search-input');
+            const searchButton = document.querySelector('#search-icon');
+            const mobileSearchInput = document.querySelector('#search-input-mobile');
+            const mobileSearchButton = document.querySelector('#search-icon-mobile');
+
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') debouncedSearch(e.target.value);
+                });
+            }
+            if (searchButton) {
+                searchButton.addEventListener('click', function() {
+                    const query = document.querySelector('#search-input').value;
+                    debouncedSearch(query);
+                });
+            }
+
+            if (mobileSearchInput) {
+                mobileSearchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        debouncedSearch(e.target.value);
+                    }
+                });
+            }
+            if (mobileSearchButton) {
+                mobileSearchButton.addEventListener('click', function() {
+                    const query = document.querySelector('#search-input-mobile').value;
+                    // close mobile menu for better UX
+                    const mobileMenu = document.getElementById('mobile-menu');
+                    if (mobileMenu) mobileMenu.classList.add('hidden');
+                    debouncedSearch(query);
+                });
+            }
+
+            // Mobile menu toggling and accessibility
+            const mobileMenuButton = document.getElementById('mobile-menu-button');
+            const mobileMenu = document.getElementById('mobile-menu');
+
+            function openMobileMenu() {
+                mobileMenu.classList.remove('hidden');
+                mobileMenuButton.setAttribute('aria-expanded', 'true');
+                const firstLink = mobileMenu.querySelector('a');
+                if (firstLink) firstLink.focus();
+                document.addEventListener('click', onDocClick);
+                document.addEventListener('keydown', onKeyDown);
+            }
+
+            function closeMobileMenu() {
+                mobileMenu.classList.add('hidden');
+                mobileMenuButton.setAttribute('aria-expanded', 'false');
+                mobileMenuButton.focus();
+                document.removeEventListener('click', onDocClick);
+                document.removeEventListener('keydown', onKeyDown);
+            }
+
+            function toggleMobileMenu() {
+                const isHidden = mobileMenu.classList.contains('hidden');
+                if (isHidden) openMobileMenu(); else closeMobileMenu();
+            }
+
+            function onDocClick(e) {
+                if (!mobileMenu.contains(e.target) && e.target !== mobileMenuButton) {
+                    closeMobileMenu();
+                }
+            }
+
+            function onKeyDown(e) {
+                if (e.key === 'Escape') {
+                    closeMobileMenu();
+                }
+            }
+
+            if (mobileMenuButton) {
+                mobileMenuButton.addEventListener('click', function(e) {
+                    e.stopPropagation();
+                    toggleMobileMenu();
+                });
+            }
+
+            // Existing bitcoin page logic
             // Get query parameter
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('q');
