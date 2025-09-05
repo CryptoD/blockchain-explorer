@@ -330,6 +330,11 @@
                             <tbody id="transactions"></tbody>
                         </table>
                     </div>
+                    <div id="pagination" class="mt-4 flex justify-center gap-2" style="display: none;">
+                        <button id="prev-page" class="btn-primary px-3 py-1 text-sm" disabled>Previous</button>
+                        <span id="page-info" class="px-3 py-1 text-sm"></span>
+                        <button id="next-page" class="btn-primary px-3 py-1 text-sm" disabled>Next</button>
+                    </div>
                 </div>
             </div>
 
@@ -402,6 +407,11 @@
         let autocompleteController = null;
         let autocompleteSelectedIndex = -1; // index in current suggestions
         let currentSuggestions = [];
+
+        // Pagination state for address transactions
+        let currentAddressData = null;
+        let currentPage = 1;
+        const ITEMS_PER_PAGE = 10;
 
         // Debounced autocomplete trigger (shorter delay)
         const debouncedAutocomplete = debounce(function(query, source) {
@@ -959,7 +969,7 @@
                 });
         }
 
-        function displayAddressData(data) {
+        function displayAddressData(data, page = 1) {
             // Hide other sections
             const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'none';
             const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'none';
@@ -969,6 +979,8 @@
 
             // Extract data from response
             const addressData = data.result || {};
+            currentAddressData = addressData;
+            currentPage = page;
 
             // Populate address details
             document.getElementById('address').textContent = addressData.address || 'N/A';
@@ -980,8 +992,14 @@
             const transactionsContainer = document.getElementById('transactions');
             transactionsContainer.innerHTML = '';
 
-            if (addressData.transactions && addressData.transactions.length > 0) {
-                addressData.transactions.slice(0, 5).forEach(tx => {
+            const transactions = addressData.transactions || [];
+            const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
+            const start = (page - 1) * ITEMS_PER_PAGE;
+            const end = start + ITEMS_PER_PAGE;
+            const pageTransactions = transactions.slice(start, end);
+
+            if (pageTransactions.length > 0) {
+                pageTransactions.forEach(tx => {
                     const row = document.createElement('tr');
 
                     const tdHash = document.createElement('td');
@@ -1015,6 +1033,17 @@
                 td.textContent = 'No transactions found';
                 row.appendChild(td);
                 transactionsContainer.appendChild(row);
+            }
+
+            // Handle pagination
+            const paginationEl = document.getElementById('pagination');
+            if (totalPages > 1) {
+                paginationEl.style.display = 'flex';
+                document.getElementById('page-info').textContent = `Page ${page} of ${totalPages}`;
+                document.getElementById('prev-page').disabled = page === 1;
+                document.getElementById('next-page').disabled = page === totalPages;
+            } else {
+                paginationEl.style.display = 'none';
             }
         }
 
@@ -1111,6 +1140,21 @@
             if (!hash) return 'N/A';
             return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
         }
+
+        // Pagination event listeners
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                displayAddressData({result: currentAddressData}, currentPage - 1);
+            }
+        });
+
+        document.getElementById('next-page').addEventListener('click', () => {
+            const transactions = currentAddressData.transactions || [];
+            const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
+            if (currentPage < totalPages) {
+                displayAddressData({result: currentAddressData}, currentPage + 1);
+            }
+        });
     </script>
 </body>
 </html>
