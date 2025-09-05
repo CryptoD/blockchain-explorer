@@ -13,7 +13,6 @@ require (
 	// Utilities
 	github.com/go-resty/resty/v2 v2.7.0
 	github.com/goccy/go-json v0.10.2 // indirect
-	github.com/patrickmn/go-cache v2.1.0+incompatible
 )
 
 require (
@@ -39,7 +38,11 @@ require (
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
 
+require github.com/redis/go-redis/v9 v9.13.0
+
 require (
+	github.com/cespare/xxhash/v2 v2.3.0 // indirect
+	github.com/dgryski/go-rendezvous v0.0.0-20200823014737-9f7001d12a5f // indirect
 	github.com/google/go-cmp v0.5.9 // indirect
 	github.com/stretchr/testify v1.8.4 // indirect
 )

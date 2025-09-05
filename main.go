@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"crypto/sha256"
 	"encoding/json"
 	"errors"
@@ -14,11 +15,16 @@ import (
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
-	cache "github.com/patrickmn/go-cache"
+	"github.com/redis/go-redis/v9"
 )
 
+// global Redis client and context
 var ErrNotFound = errors.New("not found")
-var appCache = cache.New(5*time.Minute, 10*time.Minute)
+var ctx = context.Background()
+var rdb = redis.NewClient(&redis.Options{
+	Addr: "localhost:6379", // Adjust as needed
+	DB:   0,                // use default DB
+})
 
 // InvalidCachedJSONError is returned when cached []byte exists but cannot be unmarshaled.
 type InvalidCachedJSONError struct {
@@ -67,8 +73,15 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 
 // Fetch the latest N transactions (from the latest N blocks)
 
+// updated main function background job to use rdb client
 func main() {
 	r := gin.Default()
+
+	// Initialize Redis client
+	redisHost := getEnvWithDefault("REDIS_HOST", "localhost")
+	rdb = redis.NewClient(&redis.Options{
+		Addr: redisHost + ":6379",
+	})
 
 	// Serve static assets: images plus specific static files
 	r.Static("/images", "./images")
@@ -95,11 +108,13 @@ func main() {
 				const numTxs = 10
 				blocks, err := fetchLatestBlocks(numBlocks)
 				if err == nil {
-					appCache.Set("latest_blocks", blocks, cache.DefaultExpiration)
+					blocksJSON, _ := json.Marshal(blocks)
+					rdb.Set(context.Background(), "latest_blocks", blocksJSON, 5*time.Minute)
 				}
 				txs, err := fetchLatestTransactions(numBlocks, numTxs)
 				if err == nil {
-					appCache.Set("latest_transactions", txs, cache.DefaultExpiration)
+					txsJSON, _ := json.Marshal(txs)
+					rdb.Set(context.Background(), "latest_transactions", txsJSON, 5*time.Minute)
 				}
 			}()
 			<-ticker.C
@@ -282,10 +297,13 @@ func isValidBlockHeight(blockHeight string) bool {
 	return err == nil
 }
 
+// updated to use rdb Redis client
 func getNetworkStatus() (map[string]interface{}, error) {
 	cacheKey := "network:status"
-	if cached, found := appCache.Get(cacheKey); found {
-		if data, ok := cached.(map[string]interface{}); ok {
+	cached, err := rdb.Get(context.Background(), cacheKey).Result()
+	if err == nil {
+		var data map[string]interface{}
+		if json.Unmarshal([]byte(cached), &data) == nil {
 			return data, nil
 		}
 	}
@@ -299,19 +317,18 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err := json.Unmarshal(resp.Body(), &result); err != nil {
 		return nil, err
 	}
-	appCache.Set(cacheKey, result, 10*time.Second) // Short TTL for fast-changing data
+	resultJSON, _ := json.Marshal(result)
+	rdb.Set(context.Background(), cacheKey, resultJSON, 10*time.Second) // Short TTL for fast-changing data
 	return result, nil
 }
 
+// updated to use rdb Redis client
 func getAddressDetails(address string) (map[string]interface{}, error) {
 	cacheKey := "address:" + address
-	if cached, found := appCache.Get(cacheKey); found {
-		if dataBytes, ok := cached.([]byte); ok {
-			var data map[string]interface{}
-			if err := json.Unmarshal(dataBytes, &data); err == nil {
-				return data, nil
-			}
-		} else if data, ok := cached.(map[string]interface{}); ok {
+	cached, err := rdb.Get(context.Background(), cacheKey).Result()
+	if err == nil {
+		var data map[string]interface{}
+		if json.Unmarshal([]byte(cached), &data) == nil {
 			return data, nil
 		}
 	}
@@ -326,24 +343,21 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	appCache.Set(cacheKey, result, 1*time.Minute) // Cache for 1 minute
+	resultJSON, _ := json.Marshal(result)
+	rdb.Set(context.Background(), cacheKey, resultJSON, 1*time.Minute) // Cache for 1 minute
 	return result, nil
 }
 
+// updated to use rdb Redis client
 func getTransactionDetails(txID string) (map[string]interface{}, error) {
 	cacheKey := "tx:" + txID
-	if cached, found := appCache.Get(cacheKey); found {
-		// accept cached []byte or map[string]interface{}
-		if dataBytes, ok := cached.([]byte); ok {
-			var data map[string]interface{}
-			if err := json.Unmarshal(dataBytes, &data); err != nil {
-				return nil, &InvalidCachedJSONError{TxID: txID, Err: err}
-			}
-			return data, nil
-		} else if data, ok := cached.(map[string]interface{}); ok {
+	cached, err := rdb.Get(context.Background(), cacheKey).Result()
+	if err == nil {
+		var data map[string]interface{}
+		if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
 			return data, nil
 		} else {
-			return nil, fmt.Errorf("invalid cache data type for %s", txID)
+			return nil, &InvalidCachedJSONError{TxID: txID, Err: unmarshalErr}
 		}
 	}
 
@@ -357,14 +371,18 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	appCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
+	resultJSON, _ := json.Marshal(result)
+	rdb.Set(context.Background(), cacheKey, resultJSON, 5*time.Minute) // Cache for 5 minutes
 	return result, nil
 }
 
+// updated to use rdb Redis client
 func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	cacheKey := "block:" + blockHeight
-	if cached, found := appCache.Get(cacheKey); found {
-		if data, ok := cached.(map[string]any); ok {
+	cached, err := rdb.Get(context.Background(), cacheKey).Result()
+	if err == nil {
+		var data map[string]interface{}
+		if json.Unmarshal([]byte(cached), &data) == nil {
 			return data, nil
 		}
 	}
@@ -380,7 +398,8 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	appCache.Set(cacheKey, result, 5*time.Minute) // Cache for 5 minutes
+	resultJSON, _ := json.Marshal(result)
+	rdb.Set(context.Background(), cacheKey, resultJSON, 5*time.Minute) // Cache for 5 minutes
 	return result, nil
 }
 
