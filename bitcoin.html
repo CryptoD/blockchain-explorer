@@ -313,6 +313,10 @@
                                 <h6 class="font-semibold">Balance</h6>
                                 <div id="balance"></div>
                             </div>
+                            <div>
+                                <h6 class="font-semibold">Transaction Count</h6>
+                                <div id="tx-count"></div>
+                            </div>
                         </div>
                     </div>
 
@@ -379,7 +383,11 @@
                         <div><strong>Transaction Count:</strong> <span id="block-tx-count"></span></div>
                         <div><strong>Size:</strong> <span id="block-size"></span></div>
                         <div><strong>Weight:</strong> <span id="block-weight"></span></div>
+                        <div><strong>Miner:</strong> <span id="block-miner"></span></div>
                     </div>
+
+                    <h6 class="font-semibold mt-4">Transactions</h6>
+                    <div id="block-transactions" class="mt-2"></div>
                 </div>
             </div>
         </div>
@@ -987,6 +995,7 @@
             document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
             if (document.getElementById('received')) document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
             if (document.getElementById('sent')) document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
+            document.getElementById('tx-count').textContent = addressData.transactions ? addressData.transactions.length : 0;
 
             // Populate transactions
             const transactionsContainer = document.getElementById('transactions');
@@ -1130,6 +1139,24 @@
             document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
             document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
             document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+            // Added miner display
+            document.getElementById('block-miner').textContent = blockData.miner || 'N/A';
+
+            // Populate transactions list
+            const txContainer = document.getElementById('block-transactions');
+            txContainer.innerHTML = '';
+            if (blockData.tx && blockData.tx.length > 0) {
+                blockData.tx.forEach(txid => {
+                    const a = document.createElement('a');
+                    a.href = `/bitcoin?q=${encodeURIComponent(txid)}`;
+                    a.textContent = shortenHash(txid);
+                    a.className = 'high-contrast-link hover:underline block';
+                    a.setAttribute('aria-label', `Open transaction ${txid}`);
+                    txContainer.appendChild(a);
+                });
+            } else {
+                txContainer.textContent = 'No transactions';
+            }
         }
 
         function formatBTC(value) {
