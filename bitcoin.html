@@ -186,6 +186,19 @@
             border-radius: 999px;
             margin-right: 8px;
         }
+
+        .copy-btn {
+            background: #e5e7eb;
+            border: none;
+            padding: 4px 8px;
+            border-radius: 4px;
+            cursor: pointer;
+            font-size: 12px;
+            margin-left: 8px;
+        }
+        .copy-btn:hover {
+            background: #d1d5db;
+        }
     </style>
 </head>
 <body class="bg-gray-50 text-slate-900 p-4">
@@ -307,7 +320,7 @@
                         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <h6 class="font-semibold">Address</h6>
-                                <div id="address"></div>
+                                <div><span id="address"></span><button class="copy-btn" onclick="copyToClipboard(document.getElementById('address').textContent)">Copy</button></div>
                             </div>
                             <div>
                                 <h6 class="font-semibold">Balance</h6>
@@ -348,7 +361,7 @@
                     <h6 class="font-semibold mb-2">Transaction Details</h6>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
-                            <div class="mb-2"><strong>Transaction Hash:</strong> <span id="tx-hash"></span></div>
+                            <div class="mb-2"><strong>Transaction Hash:</strong> <span id="tx-hash"></span><button class="copy-btn" onclick="copyToClipboard(document.getElementById('tx-hash').textContent)">Copy</button></div>
                             <div class="mb-2"><strong>Block Height:</strong> <span id="tx-block"></span></div>
                             <div class="mb-2"><strong>Timestamp:</strong> <span id="tx-time"></span></div>
                         </div>
@@ -378,7 +391,7 @@
                     <h6 class="font-semibold mb-2">Block Details</h6>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div><strong>Block Height:</strong> <span id="block-height"></span></div>
-                        <div><strong>Block Hash:</strong> <span id="block-hash"></span></div>
+                        <div><strong>Block Hash:</strong> <span id="block-hash"></span><button class="copy-btn" onclick="copyToClipboard(document.getElementById('block-hash').textContent)">Copy</button></div>
                         <div><strong>Timestamp:</strong> <span id="block-time"></span></div>
                         <div><strong>Transaction Count:</strong> <span id="block-tx-count"></span></div>
                         <div><strong>Size:</strong> <span id="block-size"></span></div>
@@ -1019,6 +1032,11 @@
                     a.className = 'high-contrast-link hover:underline';
                     a.setAttribute('aria-label', `Open transaction ${tx.txid}`);
                     tdHash.appendChild(a);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.onclick = () => copyToClipboard(tx.txid);
+                    tdHash.appendChild(copyBtn);
 
                     const tdAmt = document.createElement('td');
                     tdAmt.className = 'p-2';
@@ -1097,6 +1115,11 @@
                     a.className = 'high-contrast-link hover:underline';
                     a.setAttribute('aria-label', `Open address ${addr}`);
                     fromContainer.appendChild(a);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.onclick = () => copyToClipboard(addr);
+                    fromContainer.appendChild(copyBtn);
                     if (idx < fromAddresses.length - 1) fromContainer.appendChild(document.createElement('br'));
                 });
             } else {
@@ -1114,6 +1137,11 @@
                     a.className = 'high-contrast-link hover:underline';
                     a.setAttribute('aria-label', `Open address ${addr}`);
                     toContainer.appendChild(a);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.onclick = () => copyToClipboard(addr);
+                    toContainer.appendChild(copyBtn);
                     if (idx < toAddresses.length - 1) toContainer.appendChild(document.createElement('br'));
                 });
             } else {
@@ -1153,6 +1181,11 @@
                     a.className = 'high-contrast-link hover:underline block';
                     a.setAttribute('aria-label', `Open transaction ${txid}`);
                     txContainer.appendChild(a);
+                    const copyBtn = document.createElement('button');
+                    copyBtn.className = 'copy-btn';
+                    copyBtn.textContent = 'Copy';
+                    copyBtn.onclick = () => copyToClipboard(txid);
+                    txContainer.appendChild(copyBtn);
                 });
             } else {
                 txContainer.textContent = 'No transactions';
@@ -1166,6 +1199,14 @@
         function shortenHash(hash) {
             if (!hash) return 'N/A';
             return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
+        }
+
+        function copyToClipboard(text) {
+            navigator.clipboard.writeText(text).then(() => {
+                console.log('Copied to clipboard');
+            }).catch(err => {
+                console.error('Failed to copy: ', err);
+            });
         }
 
         // Pagination event listeners
