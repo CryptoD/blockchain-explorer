@@ -83,6 +83,10 @@ func main() {
 		Addr: redisHost + ":6379",
 	})
 
+	// Configure Redis for LRU eviction
+	rdb.ConfigSet(ctx, "maxmemory", "100mb")
+	rdb.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru")
+
 	// Serve static assets: images plus specific static files
 	r.Static("/images", "./images")
 	// Serve built Tailwind CSS
