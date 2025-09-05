@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"net/http"
 	"os"
 	"regexp"
@@ -108,18 +109,44 @@ func main() {
 		for {
 			// Initial run and every tick
 			func() {
+				// Get current latest height
+				networkStatus, err := getNetworkStatus()
+				if err != nil {
+					return
+				}
+				result, ok := networkStatus["result"].(map[string]interface{})
+				if !ok {
+					return
+				}
+				currentHeight := int(result["best_block_height"].(float64))
+
+				// Get last cached height
+				lastHeightStr, err := rdb.Get(ctx, "last_block_height").Result()
+				lastHeight := 0
+				if err == nil {
+					lastHeight, _ = strconv.Atoi(lastHeightStr)
+				}
+
+				// If no change, skip
+				if currentHeight == lastHeight {
+					return
+				}
+
 				const numBlocks = 5
 				const numTxs = 10
 				blocks, err := fetchLatestBlocks(numBlocks)
 				if err == nil {
 					blocksJSON, _ := json.Marshal(blocks)
-					rdb.Set(context.Background(), "latest_blocks", blocksJSON, 5*time.Minute)
+					rdb.Set(ctx, "latest_blocks", blocksJSON, 5*time.Minute)
 				}
 				txs, err := fetchLatestTransactions(numBlocks, numTxs)
 				if err == nil {
 					txsJSON, _ := json.Marshal(txs)
-					rdb.Set(context.Background(), "latest_transactions", txsJSON, 5*time.Minute)
+					rdb.Set(ctx, "latest_transactions", txsJSON, 5*time.Minute)
 				}
+
+				// Update last height
+				rdb.Set(ctx, "last_block_height", strconv.Itoa(currentHeight), 0)
 			}()
 			<-ticker.C
 		}
@@ -208,8 +235,8 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 	return "", nil, ErrNotFound
 }
 
-// Fix 1: Refactor searchHandler to use Gin's context
 func searchHandler(c *gin.Context) {
+	start := time.Now()
 	query := c.Query("q")
 	if query == "" {
 		c.JSON(400, gin.H{"error": "Missing query parameter"})
@@ -234,9 +261,11 @@ func searchHandler(c *gin.Context) {
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "public, max-age=60")
 	if match := c.GetHeader("If-None-Match"); match == etag {
+		log.Printf("Search for query %s took %v (304 Not Modified)", query, time.Since(start))
 		c.Status(304)
 		return
 	}
+	log.Printf("Search for query %s took %v", query, time.Since(start))
 	c.JSON(200, gin.H{"type": resultType, "result": result})
 }
 
@@ -333,8 +362,13 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
+			log.Printf("Cache hit for address %s", address)
 			return data, nil
+		} else {
+			log.Printf("Cache miss for address %s (invalid JSON)", address)
 		}
+	} else {
+		log.Printf("Cache miss for address %s", address)
 	}
 
 	response, err := blockchairRequest("getaddressinfo", []interface{}{address})
@@ -359,10 +393,14 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
+			log.Printf("Cache hit for transaction %s", txID)
 			return data, nil
 		} else {
+			log.Printf("Cache miss for transaction %s (invalid JSON)", txID)
 			return nil, &InvalidCachedJSONError{TxID: txID, Err: unmarshalErr}
 		}
+	} else {
+		log.Printf("Cache miss for transaction %s", txID)
 	}
 
 	response, err := blockchairRequest("getrawtransaction", []interface{}{txID, 1})
@@ -387,8 +425,13 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
+			log.Printf("Cache hit for block %s", blockHeight)
 			return data, nil
+		} else {
+			log.Printf("Cache miss for block %s (invalid JSON)", blockHeight)
 		}
+	} else {
+		log.Printf("Cache miss for block %s", blockHeight)
 	}
 
 	height, _ := strconv.Atoi(blockHeight)
