@@ -14,6 +14,8 @@ import (
 	"sync"
 	"time"
 
+	"github.com/getsentry/sentry-go"
+	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/redis/go-redis/v9"
@@ -114,8 +116,26 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
 
+	// Initialize Sentry
+	sentryDSN := getEnvWithDefault("SENTRY_DSN", "")
+	if sentryDSN != "" {
+		err := sentry.Init(sentry.ClientOptions{
+			Dsn: sentryDSN,
+			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
+			TracesSampleRate: 1.0,
+		})
+		if err != nil {
+			log.WithError(err).Error("Failed to initialize Sentry")
+		} else {
+			log.Info("Sentry initialized successfully")
+		}
+	} else {
+		log.Warn("SENTRY_DSN not set, Sentry not initialized")
+	}
+
 	r := gin.Default()
 
+	r.Use(sentrygin.New(sentrygin.Options{}))
 	r.Use(rateLimitMiddleware)
 
 	log.Info("Starting Bitcoin Explorer server")
@@ -173,6 +193,8 @@ func main() {
 			<-ticker.C
 		}
 	}()
+
+	defer sentry.Flush(2 * time.Second)
 
 	r.Run(":8080")
 }
@@ -337,8 +359,9 @@ func getEnvWithDefault(key, defaultValue string) string {
 	return value
 }
 
-// handleError standardizes error responses
+ // handleError standardizes error responses
 func handleError(c *gin.Context, err error, status int) {
+	sentry.CaptureException(err)
 	c.JSON(status, gin.H{"error": err.Error()})
 }
 
