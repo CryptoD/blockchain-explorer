@@ -235,6 +235,7 @@
                         title="Enter a block height, transaction hash, or Bitcoin address to search the blockchain."
                         class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
+                        maxlength="100"
                     />
                     <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
                 </form>
@@ -270,6 +271,14 @@
                     <form id="search-form-mobile" role="search" aria-label="Search the blockchain" action="#" onsubmit="return false;">
                         <label for="search-input-mobile" class="sr-only">Search blockchain</label>
                         <div class="flex gap-2">
+                            <script>
+                                (function() {
+                                    var el = document.getElementById('search-input-mobile');
+                                    if (el && !el.getAttribute('maxlength')) {
+                                        el.setAttribute('maxlength', '100');
+                                    }
+                                })();
+                            </script>
                             <input id="search-input-mobile" name="q" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" title="Enter a block height, transaction hash, or Bitcoin address to search the blockchain." class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
                             <button id="search-icon-mobile" type="submit" class="btn-primary px-3 rounded" aria-label="Search">Go</button>
                         </div>

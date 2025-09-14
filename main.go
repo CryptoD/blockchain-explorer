@@ -11,11 +11,13 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
 	"github.com/redis/go-redis/v9"
+	log "github.com/sirupsen/logrus"
 )
 
 // global Redis client and context
@@ -25,6 +27,36 @@ var rdb = redis.NewClient(&redis.Options{
 	Addr: "localhost:6379", // Adjust as needed
 	DB:   0,                // use default DB
 })
+
+// Rate limiting variables
+var rateLimitCount = make(map[string]int)
+var rateLimitReset = make(map[string]time.Time)
+var rateLimitMutex sync.Mutex
+
+// rateLimitMiddleware limits requests to 10 per minute per IP
+func rateLimitMiddleware(c *gin.Context) {
+	ip := c.ClientIP()
+	rateLimitMutex.Lock()
+	defer rateLimitMutex.Unlock()
+
+	now := time.Now()
+	if reset, ok := rateLimitReset[ip]; ok && now.After(reset) {
+		rateLimitCount[ip] = 0
+		rateLimitReset[ip] = now.Add(time.Minute)
+	}
+	if _, ok := rateLimitCount[ip]; !ok {
+		rateLimitCount[ip] = 0
+		rateLimitReset[ip] = now.Add(time.Minute)
+	}
+	rateLimitCount[ip]++
+	if rateLimitCount[ip] > 10 {
+		log.WithField("ip", ip).Warn("Rate limit exceeded")
+		c.JSON(429, gin.H{"error": "Too many requests"})
+		c.Abort()
+		return
+	}
+	c.Next()
+}
 
 // InvalidCachedJSONError is returned when cached []byte exists but cannot be unmarshaled.
 type InvalidCachedJSONError struct {
@@ -45,6 +77,10 @@ func IsInvalidCachedJSON(err error) bool {
 }
 
 func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
+	// Initialize Gin router and apply rate limiting middleware
+	r := gin.Default()
+	r.Use(rateLimitMiddleware)
+
 	// Get the latest block height
 	networkStatus, err := getNetworkStatus()
 	if err != nil {
@@ -75,7 +111,14 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 
 // updated main function background job to use rdb client
 func main() {
+	log.SetFormatter(&log.JSONFormatter{})
+	log.SetLevel(log.InfoLevel)
+
 	r := gin.Default()
+
+	r.Use(rateLimitMiddleware)
+
+	log.Info("Starting Bitcoin Explorer server")
 
 	// Initialize Redis client
 	redisHost := getEnvWithDefault("REDIS_HOST", "localhost")
@@ -103,6 +146,7 @@ func main() {
 
 	// Start background job to prefetch latest blocks and transactions
 	go func() {
+		log.Info("Starting background prefetch job")
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -114,12 +158,17 @@ func main() {
 				if err == nil {
 					blocksJSON, _ := json.Marshal(blocks)
 					rdb.Set(context.Background(), "latest_blocks", blocksJSON, 5*time.Minute)
+				} else {
+					log.WithError(err).Error("Failed to prefetch latest blocks")
 				}
 				txs, err := fetchLatestTransactions(numBlocks, numTxs)
 				if err == nil {
 					txsJSON, _ := json.Marshal(txs)
 					rdb.Set(context.Background(), "latest_transactions", txsJSON, 5*time.Minute)
+				} else {
+					log.WithError(err).Error("Failed to prefetch latest transactions")
 				}
+				log.Info("Prefetched latest blocks and transactions")
 			}()
 			<-ticker.C
 		}
@@ -210,13 +259,21 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 
 // Fix 1: Refactor searchHandler to use Gin's context
 func searchHandler(c *gin.Context) {
-	query := c.Query("q")
+	query := strings.TrimSpace(c.Query("q"))
+	log.WithField("query", query).Info("Search request received")
 	if query == "" {
+		log.Warn("Search request with empty query")
 		c.JSON(400, gin.H{"error": "Missing query parameter"})
+		return
+	}
+	if len(query) > 100 {
+		log.WithField("query", query).Warn("Search request query too long")
+		c.JSON(400, gin.H{"error": "Query too long"})
 		return
 	}
 	resultType, result, err := searchBlockchain(query)
 	if err != nil {
+		log.WithFields(log.Fields{"query": query, "error": err}).Error("Search failed")
 		if err == ErrNotFound {
 			c.JSON(404, gin.H{"error": "Not found"})
 		} else {
@@ -227,6 +284,7 @@ func searchHandler(c *gin.Context) {
 	// Marshal the result to JSON for ETag calculation
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
+		log.WithError(err).Error("Failed to marshal search response")
 		c.JSON(500, gin.H{"error": "Failed to marshal response"})
 		return
 	}
@@ -234,10 +292,25 @@ func searchHandler(c *gin.Context) {
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "public, max-age=60")
 	if match := c.GetHeader("If-None-Match"); match == etag {
+		log.WithField("query", query).Info("Search cache hit")
 		c.Status(304)
 		return
 	}
+	log.WithFields(log.Fields{"query": query, "type": resultType}).Info("Search successful")
 	c.JSON(200, gin.H{"type": resultType, "result": result})
+}
+
+func autocompleteHandler(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	log.WithField("query", query).Info("Autocomplete request received")
+	if query == "" || len(query) > 100 {
+		log.WithField("query", query).Warn("Autocomplete request invalid")
+		c.JSON(200, gin.H{"suggestions": []string{}})
+		return
+	}
+	// For now, return empty suggestions
+	log.WithField("query", query).Info("Autocomplete response sent")
+	c.JSON(200, gin.H{"suggestions": []string{}})
 }
 
 var (
