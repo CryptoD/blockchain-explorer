@@ -39,6 +39,9 @@
 
     <!-- Chart.js for graphs -->
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+    <!-- i18next for internationalization -->
+    <script src="https://cdn.jsdelivr.net/npm/i18next@23.7.6/dist/umd/i18next.min.js"></script>
     <style>
         /* Ensure images and tables scale on small screens */
         img { max-width: 100%; height: auto; display: block; }
@@ -215,11 +218,20 @@
             </a>
 
             <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700" role="navigation" aria-label="Main navigation">
-                <a href="/" class="hover:text-primary">Home</a>
-                <a href="/blocks" class="hover:text-primary">Blocks</a>
-                <a href="/transactions" class="hover:text-primary">Transactions</a>
-                <a href="/addresses" class="hover:text-primary">Addresses</a>
+                <a href="/" class="hover:text-primary" data-i18n="home">Home</a>
+                <a href="/blocks" class="hover:text-primary" data-i18n="blocks">Blocks</a>
+                <a href="/transactions" class="hover:text-primary" data-i18n="transactions">Transactions</a>
+                <a href="/addresses" class="hover:text-primary" data-i18n="addresses">Addresses</a>
             </nav>
+
+            <!-- Language switcher -->
+            <div class="hidden md:flex items-center gap-2">
+                <label for="language-select" class="text-sm text-slate-700" data-i18n="language">Language:</label>
+                <select id="language-select" class="text-sm border rounded px-2 py-1">
+                    <option value="en" data-i18n="english">English</option>
+                    <option value="es" data-i18n="spanish">Spanish</option>
+                </select>
+            </div>
 
             <div class="hidden md:block flex-1 max-w-md">
                 <!-- Search form: role=search so assistive tech recognizes it -->
@@ -233,6 +245,13 @@
                         aria-label="Search by block height, transaction hash, or address"
                         aria-describedby="search-help"
                         placeholder="Search by block height, transaction hash, or address..."
+                        data-i18n="[placeholder]searchPlaceholder;[title]searchTitle;[aria-label]searchAriaLabel"
+                        title="Enter a block height, transaction hash, or Bitcoin address to search the blockchain."
+                        class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
+                        autocomplete="off"
+                        maxlength="100"
+                    />
+                    <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
                         title="Enter a block height, transaction hash, or Bitcoin address to search the blockchain."
                         class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
@@ -274,6 +293,19 @@
                         <div class="flex gap-2">
                             <script>
                                 (function() {
+                                    // Add data-i18n attributes to mobile search input if not present
+                                    var mobileInput = document.getElementById('search-input-mobile');
+                                    if (mobileInput) {
+                                        if (!mobileInput.hasAttribute('data-i18n-placeholder')) {
+                                            mobileInput.setAttribute('data-i18n-placeholder', 'search.placeholder.mobile');
+                                        }
+                                        if (!mobileInput.hasAttribute('data-i18n-title')) {
+                                            mobileInput.setAttribute('data-i18n-title', 'search.title.mobile');
+                                        }
+                                        if (!mobileInput.hasAttribute('data-i18n-aria-label')) {
+                                            mobileInput.setAttribute('data-i18n-aria-label', 'search.aria.mobile');
+                                        }
+                                    }
                                     var el = document.getElementById('search-input-mobile');
                                     if (el && !el.getAttribute('maxlength')) {
                                         el.setAttribute('maxlength', '100');
@@ -512,9 +544,29 @@
                         <div><strong title="The size of the block in bytes.">Size:</strong> <span id="block-size"></span></div>
                         <div><strong title="The weight of the block, used for block size limits in Bitcoin.">Weight:</strong> <span id="block-weight"></span></div>
                         <div><strong title="The entity that mined this block.">Miner:</strong> <span id="block-miner"></span></div>
+                        <div><strong title="A unique identifier for a Bitcoin block.">Block Hash:</strong> <span id="block-hash"></span><button class="copy-btn" onclick="copyToClipboard(document.getElementById('block-hash').textContent)">Copy</button></div>
+                        <div><strong title="The time when the block was mined.">Timestamp:</strong> <span id="block-time"></span></div>
+                        <div><strong title="The number of transactions included in this block.">Transaction Count:</strong> <span id="block-tx-count"></span></div>
+                        <div><strong title="The size of the block in bytes.">Size:</strong> <span id="block-size"></span></div>
+                        <div><strong title="The weight of the block, used for block size limits in Bitcoin.">Weight:</strong> <span id="block-weight"></span></div>
+                        <div><strong title="The entity that mined this block.">Miner:</strong> <span id="block-miner"></span></div>
                     </div>
 
                     <h6 class="font-semibold mt-4">Transactions</h6>
+                    <script>
+                        // Add Spanish navigation translations to the client-side i18n resources.
+                        // This merges into window.i18n.es if it already exists.
+                        window.i18n = window.i18n || {};
+                        window.i18n.es = Object.assign(window.i18n.es || {}, {
+                            "loading": "Cargando...",
+                            "error": "Error",
+                            "noResults": "No se encontraron resultados",
+                            "home": "Inicio",
+                            "blocks": "Bloques",
+                            "transactions": "Transacciones",
+                            "addresses": "Direcciones"
+                        });
+                    </script>
                     <div id="block-transactions" class="mt-2"></div>
                 </div>
             </div>
@@ -522,14 +574,59 @@
     </div>
 
     <script>
-        // Debounce helper
-        function debounce(func, wait) {
-            let timeout;
-            return function(...args) {
-                clearTimeout(timeout);
-                timeout = setTimeout(() => func.apply(this, args), wait);
-            };
-        }
+        // Initialize i18next
+        i18next.init({
+            lng: 'en',
+            fallbackLng: 'en',
+            resources: {
+                en: {
+                    translation: {
+                        "searchPlaceholder": "Search blocks, txs, addresses",
+                        "searchTitle": "Enter a block height, transaction hash, or Bitcoin address to search the blockchain.",
+                        "searchAriaLabel": "Search the blockchain",
+                        "mobileSearchAriaLabel": "Mobile search",
+                        "goButton": "Go",
+                        "loading": "Loading...",
+                        "error": "Error",
+                        "noResults": "No results found"
+                    }
+                },
+                es: {
+                    translation: {
+                        "searchPlaceholder": "Buscar bloques, txs, direcciones",
+                        "searchTitle": "Ingrese una altura de bloque, hash de transacción o dirección de Bitcoin para buscar en la blockchain.",
+                        "searchAriaLabel": "Buscar en la blockchain",
+                        "mobileSearchAriaLabel": "Búsqueda móvil",
+                        "goButton": "Ir",
+                        "loading": "Cargando...",
+                        "error": "Error",
+                        "noResults": "No se encontraron resultados"
+                    }
+                },
+                __postInit__: (function() {
+                    // Register a handler to run after i18next initializes
+                    // This ensures i18next is ready before we attempt to change language or update the UI.
+                    i18next.on('initialized', function() {
+                        const savedLang = localStorage.getItem('language') || 'en';
+                        i18next.changeLanguage(savedLang, () => {
+                            updateUI();
+                            const sel = document.getElementById('language-select');
+                            if (sel) sel.value = savedLang;
+                        });
+                    });
+
+                    // Attach language-select change handler as soon as the element exists.
+                    function attachLanguageChangeHandler() {
+                        const sel = document.getElementById('language-select');
+                        if (!sel) return;
+                        if (sel.__i18n_attached) return;
+                        sel.addEventListener('change', function(e) {
+                            changeLanguage(e.target.value);
+                        // Handle language change
+                        document.getElementById('language-select').addEventListener('change', function(e) {
+                            changeLanguage(e.target.value);
+                        });
+        });
 
         const debouncedSearch = debounce(function(query) {
             performSearch(query);
@@ -537,6 +634,7 @@
 
         // Small state for current query/abort controller
         let currentQuery = null;
+
         let currentAbortController = null;
         let autocompleteController = null;
         let autocompleteSelectedIndex = -1; // index in current suggestions
@@ -1479,7 +1577,7 @@
     }
 
         function renderBlockTimeChart(data) {
-        if (!data || !document.getElementById('blockTimeChart')) return;
+            if (!data || !document.getElementById('blockTimeChart')) { return; }
         const ctx = document.getElementById('blockTimeChart').getContext('2d');
         const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
         const values = data.map(d => parseFloat(d.value));
@@ -1532,11 +1630,9 @@
                         beginAtZero: true
                     }
                 }
+            }
         });
     }
-
-    });
 </script>
-</html>
 </body>
 </html>

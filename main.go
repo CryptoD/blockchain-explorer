@@ -25,20 +25,56 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+// Simple i18n support
+var translations = map[string]map[string]string{
+	"en": {
+		"login_required":      "Login required",
+		"invalid_credentials": "Invalid credentials",
+		"logout_successful":   "Logout successful",
+		"cache_cleared":       "Cache cleared successfully",
+		"cache_stats":         "Cache statistics retrieved",
+		"admin_only":          "Admin access required",
+	},
+	"es": {
+		"login_required":      "Inicio de sesión requerido",
+		"invalid_credentials": "Credenciales inválidas",
+		"logout_successful":   "Cierre de sesión exitoso",
+		"cache_cleared":       "Caché limpiado exitosamente",
+		"cache_stats":         "Estadísticas de caché recuperadas",
+		"admin_only":          "Acceso de administrador requerido",
+	},
+}
+
+func T(lang, key string) string {
+	if langMap, exists := translations[lang]; exists {
+		if translation, exists := langMap[key]; exists {
+			return translation
+		}
+	}
+	// Fallback to English
+	if langMap, exists := translations["en"]; exists {
+		if translation, exists := langMap[key]; exists {
+			return translation
+		}
+	}
+	return key // Return key if no translation found
+}
+
 // global Redis client and context
 var ErrNotFound = errors.New("not found")
 var ctx = context.Background()
+
 var rdb = redis.NewClient(&redis.Options{
 	Addr: "localhost:6379", // Adjust as needed
 	DB:   0,                // use default DB
 })
 
-// Rate limiting variables
+ // Rate limiting variables
 var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
 
-// User authentication variables
+ // User authentication variables
 var (
 	adminUser = User{
 		Username: getEnvWithDefault("ADMIN_USERNAME", "admin"),
