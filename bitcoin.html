@@ -330,6 +330,58 @@
                         <canvas id="mempoolChart" width="400" height="200"></canvas>
                     </div>
                     <div>
+                        <h6 class="font-semibold mb-2">Block Time</h6>
+                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Transaction Volume</h6>
+                        <canvas id="txVolumeChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recently Viewed History -->
+            <div id="history-section" class="card-muted mb-4" style="display: none;">
+                <h5 class="font-semibold mb-4">Recently Viewed</h5>
+                <ul id="history-list" class="space-y-2">
+                    <!-- History items will be added here -->
+                </ul>
+            </div>
+
+            <!-- Network Status Section -->
+                <h5 class="font-semibold mb-4">Network Metrics</h5>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <h6 class="font-semibold mb-2">Mempool Size</h6>
+                        <canvas id="mempoolChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Block Time</h6>
+                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Transaction Volume</h6>
+                        <canvas id="txVolumeChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Recently Viewed History -->
+            <div id="history-section" class="card-muted mb-4" style="display: none;">
+                <h5 class="font-semibold mb-4">Recently Viewed</h5>
+                <ul id="history-list" class="space-y-2">
+                    <!-- History items will be added here -->
+                </ul>
+            </div>
+
+            <!-- Network Status Section -->
+                <h5 class="font-semibold mb-4">Network Metrics</h5>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <h6 class="font-semibold mb-2">Mempool Size</h6>
+                        <canvas id="mempoolChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
                         <h6 class="font-semibold mb-2">Transactions Per Second</h6>
                         <canvas id="tpsChart" width="400" height="200"></canvas>
                     </div>
@@ -486,16 +538,78 @@
         // Small state for current query/abort controller
         let currentQuery = null;
         let currentAbortController = null;
-
-        // Autocomplete state
         let autocompleteController = null;
         let autocompleteSelectedIndex = -1; // index in current suggestions
         let currentSuggestions = [];
-
-        // Pagination state for address transactions
         let currentAddressData = null;
         let currentPage = 1;
-        const ITEMS_PER_PAGE = 10;
+
+        // History state
+        let history = [];
+
+        // Load history from localStorage
+        function loadHistory() {
+            const stored = localStorage.getItem('bitcoinExplorerHistory');
+            if (stored) {
+                try {
+                    history = JSON.parse(stored);
+                } catch (e) {
+                    console.error('Failed to parse history from localStorage', e);
+                    history = [];
+                }
+            }
+        }
+
+        // Save history to localStorage
+        function saveHistory() {
+            try {
+                localStorage.setItem('bitcoinExplorerHistory', JSON.stringify(history));
+            } catch (e) {
+                console.error('Failed to save history to localStorage', e);
+            }
+        }
+
+        // Add item to history
+        function addToHistory(type, id, label) {
+            // Remove if already exists
+            history = history.filter(item => !(item.type === type && item.id === id));
+            // Add to beginning
+            history.unshift({ type, id, label, time: Date.now() });
+            // Limit to 10
+            if (history.length > 10) {
+                history = history.slice(0, 10);
+            }
+            saveHistory();
+            renderHistory();
+        }
+
+        // Render history list
+        function renderHistory() {
+            const list = document.getElementById('history-list');
+            if (!list) return;
+            list.innerHTML = '';
+            if (history.length === 0) {
+                list.innerHTML = '<li class="text-gray-500">No recent views</li>';
+                const section = document.getElementById('history-section');
+                if (section) section.style.display = 'none';
+                return;
+            }
+            history.forEach(item => {
+                const li = document.createElement('li');
+                const a = document.createElement('a');
+                a.href = `/bitcoin?q=${encodeURIComponent(item.id)}`;
+                a.textContent = `${item.type}: ${item.label}`;
+                a.className = 'high-contrast-link hover:underline block';
+                a.setAttribute('aria-label', `View ${item.type} ${item.id}`);
+                li.appendChild(a);
+                list.appendChild(li);
+            });
+            const section = document.getElementById('history-section');
+            if (section) section.style.display = 'block';
+        }
+
+        // Pagination state for address transactions
+        const ITEMS_PER_PAGE = 10
 
         // Debounced autocomplete trigger (shorter delay)
         const debouncedAutocomplete = debounce(function(query, source) {
@@ -1066,6 +1180,9 @@
             currentAddressData = addressData;
             currentPage = page;
 
+            // Add to history
+            addToHistory('address', addressData.address, shortenHash(addressData.address));
+
             // Populate address details
             document.getElementById('address').textContent = addressData.address || 'N/A';
             document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
@@ -1148,6 +1265,9 @@
             // Extract data from response
             const txData = data.result || {};
 
+            // Add to history
+            addToHistory('transaction', txData.txid, shortenHash(txData.txid));
+
             // Populate transaction details
             document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
             document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
@@ -1223,8 +1343,17 @@
             // Extract data from response
             const blockData = data.result || {};
 
+            // Add to history
+            addToHistory('block', blockData.hash, `Block ${blockData.height}`);
+
             // Populate block details
             document.getElementById('block-height').textContent = blockData.height || 'N/A';
+            document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
+            document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : 'N/A';
+            document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
+            document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
+            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+            // Added miner display
             document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
             document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : 'N/A';
             document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
@@ -1303,7 +1432,9 @@
         });
 
         // Load and render charts
-    loadCharts();
+        loadCharts();
+        loadHistory();
+        renderHistory();
 
     function loadCharts() {
         fetch('/api/metrics')
