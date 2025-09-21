@@ -224,12 +224,21 @@
                 <a href="/addresses" class="hover:text-primary" data-i18n="addresses">Addresses</a>
             </nav>
 
-            <!-- Language switcher -->
-            <div class="hidden md:flex items-center gap-2">
+            <!-- Language and currency switcher -->
+            <div class="hidden md:flex items-center gap-4">
                 <label for="language-select" class="text-sm text-slate-700" data-i18n="language">Language:</label>
                 <select id="language-select" class="text-sm border rounded px-2 py-1">
                     <option value="en" data-i18n="english">English</option>
                     <option value="es" data-i18n="spanish">Spanish</option>
+                </select>
+
+                <label for="currency-select" class="text-sm text-slate-700" data-i18n="currency">Currency:</label>
+                <select id="currency-select" class="text-sm border rounded px-2 py-1" aria-label="Select currency">
+                    <option value="btc">BTC</option>
+                    <option value="usd">USD</option>
+                    <option value="eur">EUR</option>
+                    <option value="gbp">GBP</option>
+                    <option value="jpy">JPY</option>
                 </select>
             </div>
 
@@ -625,25 +634,30 @@
                         // Handle language change
                         document.getElementById('language-select').addEventListener('change', function(e) {
                             changeLanguage(e.target.value);
-                        });
-        });
-
+        // Debounced search helper (single definition)
         const debouncedSearch = debounce(function(query) {
             performSearch(query);
         }, 500);
 
-        // Small state for current query/abort controller
+        // Small state for current query / abort controller
         let currentQuery = null;
-
         let currentAbortController = null;
+
+        // Autocomplete state
         let autocompleteController = null;
         let autocompleteSelectedIndex = -1; // index in current suggestions
         let currentSuggestions = [];
+
+        // Current fetched address / page
         let currentAddressData = null;
         let currentPage = 1;
 
         // History state
         let history = [];
+
+        // Currency state
+        let currentCurrency = 'btc';
+        let exchangeRates = null;
 
         // Load history from localStorage
         function loadHistory() {
@@ -656,6 +670,33 @@
                     history = [];
                 }
             }
+        }
+
+        // Currency state declarations removed (duplicate)
+
+        // Load exchange rates
+        function loadExchangeRates() {
+            fetch('/api/rates')
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error(`Network response was not ok: ${response.statusText}`);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    // Expecting data to have a 'bitcoin' field with rates
+                    if (data && data.bitcoin) {
+                        exchangeRates = data.bitcoin;
+                    } else {
+                        console.warn('Unexpected exchange rates format:', data);
+                        exchangeRates = null;
+                    }
+                })
+                .catch(err => {
+                    console.error('Failed to load exchange rates:', err);
+                    exchangeRates = null;
+                });
+        }
         }
 
         // Save history to localStorage
@@ -982,6 +1023,34 @@
                 });
             }
 
+            // Currency selector
+            const currencySelect = document.getElementById('currency-select');
+            if (currencySelect) {
+                // Load saved currency
+                const savedCurrency = localStorage.getItem('currency') || 'btc';
+                currentCurrency = savedCurrency;
+                currencySelect.value = savedCurrency;
+
+                currencySelect.addEventListener('change', function(e) {
+                    currentCurrency = e.target.value;
+                    localStorage.setItem('currency', currentCurrency);
+                    // Re-render current data if any
+                    if (currentAddressData) {
+                        renderAddressDetails(currentAddressData);
+                    }
+                    // Re-render transaction details if visible
+                    const txSection = document.getElementById('transaction-details');
+                    if (txSection && txSection.style.display !== 'none') {
+                        // Need to re-fetch or re-render tx data
+                        // For simplicity, just update visible amounts
+                        updateVisibleAmounts();
+                    }
+                });
+            }
+
+            // Load exchange rates
+            loadExchangeRates();
+
             // Get query parameter
             const urlParams = new URLSearchParams(window.location.search);
             const query = urlParams.get('q');
@@ -1283,9 +1352,24 @@
 
             // Populate address details
             document.getElementById('address').textContent = addressData.address || 'N/A';
-            document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
-            if (document.getElementById('received')) document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
-            if (document.getElementById('sent')) document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
+            const balanceEl = document.getElementById('balance');
+            const balanceValue = addressData.balance || 0;
+            balanceEl.textContent = formatBTC(balanceValue);
+            balanceEl.setAttribute('data-original-value', balanceValue);
+
+            const receivedEl = document.getElementById('received');
+            if (receivedEl) {
+                const receivedValue = addressData.total_received || 0;
+                receivedEl.textContent = formatBTC(receivedValue);
+                receivedEl.setAttribute('data-original-value', receivedValue);
+            }
+
+            const sentEl = document.getElementById('sent');
+            if (sentEl) {
+                const sentValue = addressData.total_sent || 0;
+                sentEl.textContent = formatBTC(sentValue);
+                sentEl.setAttribute('data-original-value', sentValue);
+            }
             document.getElementById('tx-count').textContent = addressData.transactions ? addressData.transactions.length : 0;
 
             // Populate transactions
@@ -1317,8 +1401,10 @@
                     tdHash.appendChild(copyBtn);
 
                     const tdAmt = document.createElement('td');
-                    tdAmt.className = 'p-2';
-                    tdAmt.textContent = formatBTC(tx.value || 0);
+                    tdAmt.className = 'p-2 tx-amount';
+                    const amtValue = tx.value || 0;
+                    tdAmt.textContent = formatBTC(amtValue);
+                    tdAmt.setAttribute('data-original-value', amtValue);
 
                     const tdStatus = document.createElement('td');
                     tdStatus.className = 'p-2';
@@ -1370,8 +1456,15 @@
             document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
             document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
             document.getElementById('tx-time').textContent = txData.time ? new Date(txData.time * 1000).toLocaleString() : 'Pending';
-            document.getElementById('tx-amount').textContent = formatBTC(txData.value || 0);
-            document.getElementById('tx-fee').textContent = formatBTC(txData.fee || 0);
+            const txAmountEl = document.getElementById('tx-amount');
+            const txAmountValue = txData.value || 0;
+            txAmountEl.textContent = formatBTC(txAmountValue);
+            txAmountEl.setAttribute('data-original-value', txAmountValue);
+
+            const txFeeEl = document.getElementById('tx-fee');
+            const txFeeValue = txData.fee || 0;
+            txFeeEl.textContent = formatBTC(txFeeValue);
+            txFeeEl.setAttribute('data-original-value', txFeeValue);
             document.getElementById('tx-confirmations').textContent = txData.confirmations || 0;
 
             // Handle inputs and outputs
@@ -1489,6 +1582,68 @@
                     document.getElementById('network-block-height').textContent = data.block_height || 'N/A';
                     document.getElementById('network-difficulty').textContent = data.difficulty ? data.difficulty.toFixed(2) : 'N/A';
                     document.getElementById('network-hash-rate').textContent = data.hash_rate ? (data.hash_rate / 1e18).toFixed(2) : 'N/A'; // Convert to EH/s
+
+                    // Expose a helper to get currency symbol (attached to window so it's available globally)
+                    window.getCurrencySymbol = function(currency) {
+                        const symbols = {
+                            usd: '$',
+                            eur: '€',
+                            gbp: '£',
+                            jpy: '¥'
+                        };
+                        return symbols[currency] || currency.toUpperCase();
+                    };
+
+                    // Update all visible BTC amounts when currency or formatting changes.
+                    // This function assumes formatBTC and currentAddressData/currentTxData are available in the global scope.
+                    window.updateVisibleAmounts = function() {
+                        // Update balance if visible (prefer data-original-value if present)
+                        const balanceEl = document.getElementById('balance');
+                        if (balanceEl) {
+                            const original = balanceEl.getAttribute('data-original-value');
+                            if (original !== null) {
+                                // stored as BTC (or satoshi as per app convention) — formatBTC should handle numeric/string input
+                                balanceEl.textContent = formatBTC(original);
+                            } else if (typeof currentAddressData !== 'undefined') {
+                                balanceEl.textContent = formatBTC(currentAddressData.balance || 0);
+                            }
+                        }
+
+                        // Update received if visible (prefer data-original-value if present)
+                        const receivedEl = document.getElementById('received');
+                        if (receivedEl) {
+                            const original = receivedEl.getAttribute('data-original-value');
+                            if (original !== null) {
+                                receivedEl.textContent = formatBTC(original);
+                            } else if (typeof currentAddressData !== 'undefined') {
+                                receivedEl.textContent = formatBTC(currentAddressData.total_received || 0);
+                            }
+                        }
+
+                        // Update sent if visible (prefer data-original-value if present)
+                        const sentEl = document.getElementById('sent');
+                        if (sentEl) {
+                            const original = sentEl.getAttribute('data-original-value');
+                            if (original !== null) {
+                                sentEl.textContent = formatBTC(original);
+                            } else if (typeof currentAddressData !== 'undefined') {
+                                sentEl.textContent = formatBTC(currentAddressData.total_sent || 0);
+                            }
+                        }
+                        // Update transaction amount if a current transaction is shown
+                        const txAmountEl = document.getElementById('tx-amount');
+                        if (txAmountEl && typeof currentTxData !== 'undefined') {
+                            txAmountEl.textContent = formatBTC(currentTxData.amount || 0);
+                        }
+                        // Update table amounts (elements should store original BTC value in data-original-value attribute)
+                        document.querySelectorAll('.tx-amount').forEach(el => {
+                            const originalValue = el.getAttribute('data-original-value');
+                            if (originalValue) {
+                                // Ensure numeric conversion before formatting
+                                el.textContent = formatBTC(Number(originalValue));
+                            }
+                        });
+                    };
                     const networkSection = document.getElementById('network-status-section');
                     if (networkSection) networkSection.style.display = 'block';
                 })
@@ -1497,8 +1652,27 @@
                 });
         }
 
-        function formatBTC(value) {
-            return `${parseFloat(value).toFixed(8)} BTC`;
+        function formatBTC(value, currency = currentCurrency) {
+            const btcValue = parseFloat(value);
+            if (currency === 'btc') {
+                return `${btcValue.toFixed(8)} BTC`;
+            }
+            if (exchangeRates && exchangeRates[currency]) {
+                const fiatValue = btcValue * exchangeRates[currency];
+                const symbol = getCurrencySymbol(currency);
+                return `${symbol}${fiatValue.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
+            }
+            return `${btcValue.toFixed(8)} BTC`; // fallback
+        }
+
+        function getCurrencySymbol(currency) {
+            const symbols = {
+                usd: '$',
+                eur: '€',
+                gbp: '£',
+                jpy: '¥'
+            };
+            return symbols[currency] || currency.toUpperCase();
         }
 
         function shortenHash(hash) {

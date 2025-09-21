@@ -69,12 +69,12 @@ var rdb = redis.NewClient(&redis.Options{
 	DB:   0,                // use default DB
 })
 
- // Rate limiting variables
+// Rate limiting variables
 var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
 
- // User authentication variables
+// User authentication variables
 var (
 	adminUser = User{
 		Username: getEnvWithDefault("ADMIN_USERNAME", "admin"),
@@ -295,6 +295,7 @@ func main() {
 	r.GET("/api/autocomplete", autocompleteHandler)
 	r.GET("/api/metrics", metricsHandler)
 	r.GET("/api/network-status", networkStatusHandler)
+	r.GET("/api/rates", ratesHandler)
 
 	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")
@@ -651,6 +652,48 @@ func networkStatusHandler(c *gin.Context) {
 		return
 	}
 	c.JSON(http.StatusOK, data)
+}
+
+func ratesHandler(c *gin.Context) {
+	cacheKey := "btc:rates"
+	ctx := context.Background()
+
+	// Try cache first
+	if rdb != nil {
+		cached, err := rdb.Get(ctx, cacheKey).Result()
+		if err == nil && cached != "" {
+			var data map[string]interface{}
+			if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
+				c.JSON(http.StatusOK, data)
+				return
+			}
+			// If unmarshalling fails, fall through to fetch fresh data
+		}
+	}
+
+	// Fetch from CoinGecko API
+	resp, err := httpClient.R().
+		SetHeader("Accept", "application/json").
+		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur,gbp,jpy")
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	var rates map[string]interface{}
+	if err := json.Unmarshal(resp.Body(), &rates); err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	// Cache for 5 minutes if Redis is available
+	if rdb != nil {
+		if ratesJSON, err := json.Marshal(rates); err == nil {
+			_ = rdb.Set(ctx, cacheKey, ratesJSON, 5*time.Minute).Err()
+		}
+	}
+
+	c.JSON(http.StatusOK, rates)
 }
 
 var (
