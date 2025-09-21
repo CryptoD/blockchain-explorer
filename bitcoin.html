@@ -1449,9 +1449,6 @@
             .catch(err => {
                 console.error('Failed to load charts:', err);
             });
-    }
-});
-
         function renderMempoolChart(data) {
         if (!data || !document.getElementById('mempoolChart')) return;
         const ctx = document.getElementById('mempoolChart').getContext('2d');
@@ -1535,10 +1532,11 @@
                         beginAtZero: true
                     }
                 }
-            }
         });
     }
 
-    </script>
+    });
+</script>
+</html>
 </body>
 </html>
