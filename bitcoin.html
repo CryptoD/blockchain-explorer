@@ -37,7 +37,8 @@
 
     <link rel="stylesheet" href="/dist/styles.css">
 
-    <!-- Small responsive & accessibility improvements specific to the explorer page -->
+    <!-- Chart.js for graphs -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
     <style>
         /* Ensure images and tables scale on small screens */
         img { max-width: 100%; height: auto; display: block; }
@@ -312,13 +313,29 @@
 
         <div id="error" class="status-error" style="display: none;"></div>
         <div id="content" role="region" aria-live="polite" aria-atomic="false" aria-label="Search results" style="display: none;">
-            <div class="card-muted mb-4">
-                <h5 class="font-semibold mb-2">Network Status</h5>
-                <div class="flex items-center gap-4">
-                    <img src="/images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
+            <div class="card-muted mb-4 flex items-center gap-4">
+                <img src="/images/btc-logo.png" height="50" alt="Bitcoin Network Logo">
+                <div>
+                    <p class="mb-0">Blockchain: Bitcoin</p>
+                    <p class="mb-0">Network Status: <span class="status-operating">Operating</span></p>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+            <div id="charts-section" class="card-muted mb-4" style="display: none;">
+                <h5 class="font-semibold mb-4">Network Metrics</h5>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
                     <div>
-                        <p class="mb-0">Blockchain: Bitcoin</p>
-                        <p class="mb-0">Network Status: <span class="status-operating">Operating</span></p>
+                        <h6 class="font-semibold mb-2">Mempool Size</h6>
+                        <canvas id="mempoolChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Block Times (seconds)</h6>
+                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Transaction Volume</h6>
+                        <canvas id="txVolumeChart" width="400" height="200"></canvas>
                     </div>
                 </div>
             </div>
@@ -1220,6 +1237,131 @@
         }
 
         // Pagination event listeners
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                displayAddressData({result: currentAddressData}, currentPage - 1);
+            }
+        });
+
+        document.getElementById('next-page').addEventListener('click', () => {
+            const transactions = currentAddressData.transactions || [];
+            const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
+            if (currentPage < totalPages) {
+                displayAddressData({result: currentAddressData}, currentPage + 1);
+            }
+        });
+
+        // Load and render charts
+        loadCharts();
+    });
+
+    function loadCharts() {
+        fetch('/api/metrics')
+            .then(response => response.json())
+            .then(data => {
+                renderMempoolChart(data.mempool_size);
+                renderBlockTimeChart(data.block_times);
+                renderTxVolumeChart(data.tx_volume);
+                const chartsSection = document.getElementById('charts-section');
+                if (chartsSection) chartsSection.style.display = 'block';
+            })
+            .catch(err => {
+                console.error('Failed to load charts:', err);
+            });
+    }
+
+    function renderMempoolChart(data) {
+        if (!data || !document.getElementById('mempoolChart')) return;
+        const ctx = document.getElementById('mempoolChart').getContext('2d');
+        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
+        const values = data.map(d => parseFloat(d.value));
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Mempool Size',
+                    data: values,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function renderBlockTimeChart(data) {
+        if (!data || !document.getElementById('blockTimeChart')) return;
+        const ctx = document.getElementById('blockTimeChart').getContext('2d');
+        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
+        const values = data.map(d => parseFloat(d.value));
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Block Time (s)',
+                    data: values,
+                    borderColor: 'rgb(255, 99, 132)',
+                    backgroundColor: 'rgba(255, 99, 132, 0.08)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+    function renderTxVolumeChart(data) {
+        if (!data || !document.getElementById('txVolumeChart')) return;
+        const ctx = document.getElementById('txVolumeChart').getContext('2d');
+        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
+        const values = data.map(d => parseFloat(d.value));
+        new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: labels,
+                datasets: [{
+                    label: 'Transaction Volume',
+                    data: values,
+                    borderColor: 'rgb(54, 162, 235)',
+                    backgroundColor: 'rgba(54, 162, 235, 0.08)',
+                    fill: true,
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                scales: {
+                    y: {
+                        beginAtZero: true
+                    }
+                }
+            }
+        });
+    }
+
+        document.getElementById('prev-page').addEventListener('click', () => {
+            if (currentPage > 1) {
+                displayAddressData({result: currentAddressData}, currentPage - 1);
+            }
+        });
         document.getElementById('prev-page').addEventListener('click', () => {
             if (currentPage > 1) {
                 displayAddressData({result: currentAddressData}, currentPage - 1);

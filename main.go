@@ -2,7 +2,10 @@ package main
 
 import (
 	"context"
+	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
+	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -35,6 +38,98 @@ var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
 
+// User authentication variables
+var (
+	adminUser = User{
+		Username: getEnvWithDefault("ADMIN_USERNAME", "admin"),
+		Password: getEnvWithDefault("ADMIN_PASSWORD", "admin123"), // In production, use hashed passwords
+	}
+	// In-memory session store as a fallback
+	sessionStore = make(map[string]string)
+	sessionMutex = sync.RWMutex{}
+)
+
+// generateSessionID creates a random session ID
+func generateSessionID() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return base64.URLEncoding.EncodeToString(bytes), nil
+}
+
+// createSession creates a new session for the user
+func createSession(username string) (string, error) {
+	sessionID, err := generateSessionID()
+	if err != nil {
+		return "", err
+	}
+
+	sessionMutex.Lock()
+	sessionStore[sessionID] = username
+	sessionMutex.Unlock()
+
+	// Store session in Redis with 24 hour expiration if Redis is configured
+	if rdb != nil {
+		_ = rdb.Set(ctx, "session:"+sessionID, username, 24*time.Hour).Err()
+	}
+
+	return sessionID, nil
+}
+
+// validateSession checks if a session is valid
+func validateSession(sessionID string) (string, bool) {
+	// Check Redis first
+	if rdb != nil {
+		if username, err := rdb.Get(ctx, "session:"+sessionID).Result(); err == nil && username != "" {
+			return username, true
+		}
+	}
+
+	// Fallback to in-memory store
+	sessionMutex.RLock()
+	username, exists := sessionStore[sessionID]
+	sessionMutex.RUnlock()
+
+	return username, exists
+}
+
+// destroySession removes a session
+func destroySession(sessionID string) {
+	sessionMutex.Lock()
+	delete(sessionStore, sessionID)
+	sessionMutex.Unlock()
+
+	if rdb != nil {
+		_ = rdb.Del(ctx, "session:"+sessionID).Err()
+	}
+}
+
+// authMiddleware checks for valid authentication
+func authMiddleware(c *gin.Context) {
+	sessionID, err := c.Cookie("session_id")
+	if err != nil {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		c.Abort()
+		return
+	}
+
+	username, valid := validateSession(sessionID)
+	if !valid {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		c.Abort()
+		return
+	}
+
+	c.Set("username", username)
+	c.Next()
+}
+
+type User struct {
+	Username string `json:"username"`
+	Password string `json:"password"` // In production, this should be hashed
+}
+
 // rateLimitMiddleware limits requests to 10 per minute per IP
 func rateLimitMiddleware(c *gin.Context) {
 	ip := c.ClientIP()
@@ -59,6 +154,8 @@ func rateLimitMiddleware(c *gin.Context) {
 	}
 	c.Next()
 }
+
+/* Duplicate authentication handlers removed. The remaining/primary handlers are defined elsewhere in the file. */
 
 // InvalidCachedJSONError is returned when cached []byte exists but cannot be unmarshaled.
 type InvalidCachedJSONError struct {
@@ -159,6 +256,9 @@ func main() {
 
 	r.GET("/api/search", searchHandler)
 
+	r.GET("/api/autocomplete", autocompleteHandler)
+	r.GET("/api/metrics", metricsHandler)
+
 	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")
 		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
@@ -190,6 +290,18 @@ func main() {
 				}
 				log.Info("Prefetched latest blocks and transactions")
 			}()
+			<-ticker.C
+		}
+	}()
+
+	// Start background job to collect metrics for charts
+	go func() {
+		log.Info("Starting background metrics collection job")
+		ticker := time.NewTicker(5 * time.Minute)
+		defer ticker.Stop()
+		for {
+			collectMetrics()
+			log.Info("Collected metrics for charts")
 			<-ticker.C
 		}
 	}()
@@ -233,6 +345,108 @@ func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error
 		}
 	}
 	return transactions, nil
+}
+
+// loginHandler handles user authentication
+func loginHandler(c *gin.Context) {
+	var loginReq struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&loginReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	// Simple authentication (in production, use proper password hashing)
+	if subtle.ConstantTimeCompare([]byte(loginReq.Username), []byte(adminUser.Username)) == 1 &&
+		subtle.ConstantTimeCompare([]byte(loginReq.Password), []byte(adminUser.Password)) == 1 {
+
+		sessionID, err := createSession(loginReq.Username)
+		if err != nil {
+			log.WithError(err).Error("Failed to create session")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+			return
+		}
+
+		c.SetCookie("session_id", sessionID, 86400, "/", "", false, true) // 24 hours
+		c.JSON(http.StatusOK, gin.H{"message": "Login successful", "username": loginReq.Username})
+		log.WithField("username", loginReq.Username).Info("User logged in successfully")
+	} else {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		log.WithField("username", loginReq.Username).Warn("Failed login attempt")
+	}
+}
+
+// logoutHandler handles user logout
+func logoutHandler(c *gin.Context) {
+	sessionID, err := c.Cookie("session_id")
+	if err == nil {
+		destroySession(sessionID)
+	}
+
+	c.SetCookie("session_id", "", -1, "/", "", false, true)
+	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
+}
+
+// adminStatusHandler provides system status for admin
+func adminStatusHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	// Get Redis info
+	info := rdb.Info(ctx, "memory").Val()
+
+	// Get rate limiting stats
+	rateLimitMutex.Lock()
+	activeLimits := len(rateLimitCount)
+	rateLimitMutex.Unlock()
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":             "ok",
+		"user":               username,
+		"redis_memory":       info,
+		"active_rate_limits": activeLimits,
+		"timestamp":          time.Now().Unix(),
+	})
+}
+
+// adminCacheHandler provides cache management for admin
+func adminCacheHandler(c *gin.Context) {
+	action := c.Query("action")
+	username, _ := c.Get("username")
+
+	switch action {
+	case "clear":
+		// Clear all cache keys
+		keys, err := rdb.Keys(ctx, "*").Result()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cache keys"})
+			return
+		}
+
+		if len(keys) > 0 {
+			rdb.Del(ctx, keys...)
+		}
+
+		log.WithField("username", username).Info("Cache cleared by admin")
+		c.JSON(http.StatusOK, gin.H{"message": "Cache cleared successfully", "keys_removed": len(keys)})
+
+	case "stats":
+		keys, err := rdb.Keys(ctx, "*").Result()
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cache stats"})
+			return
+		}
+
+		c.JSON(http.StatusOK, gin.H{
+			"total_keys": len(keys),
+			"keys":       keys,
+		})
+
+	default:
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'clear' or 'stats'"})
+	}
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
@@ -323,16 +537,74 @@ func searchHandler(c *gin.Context) {
 }
 
 func autocompleteHandler(c *gin.Context) {
-	query := strings.TrimSpace(c.Query("q"))
-	log.WithField("query", query).Info("Autocomplete request received")
-	if query == "" || len(query) > 100 {
-		log.WithField("query", query).Warn("Autocomplete request invalid")
-		c.JSON(200, gin.H{"suggestions": []string{}})
+	query := c.Query("q")
+	if query == "" {
+		c.JSON(http.StatusOK, gin.H{"suggestions": []map[string]string{}})
 		return
 	}
-	// For now, return empty suggestions
-	log.WithField("query", query).Info("Autocomplete response sent")
-	c.JSON(200, gin.H{"suggestions": []string{}})
+
+	suggestions := []map[string]string{}
+
+	// Check if query looks like an address
+	if isValidAddress(query) {
+		suggestions = append(suggestions, map[string]string{"type": "address", "value": query, "label": query})
+	}
+
+	// Check if query looks like a transaction ID
+	if isValidTransactionID(query) {
+		suggestions = append(suggestions, map[string]string{"type": "tx", "value": query, "label": query})
+	}
+
+	// Check if query looks like a block height
+	if isValidBlockHeight(query) {
+		suggestions = append(suggestions, map[string]string{"type": "block", "value": query, "label": "Block " + query})
+	}
+
+	c.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+}
+
+func metricsHandler(c *gin.Context) {
+	// Get last 100 points for each metric
+	mempoolData, _ := rdb.ZRangeWithScores(ctx, "mempool_size", -100, -1).Result()
+	blockTimeData, _ := rdb.ZRangeWithScores(ctx, "block_times", -100, -1).Result()
+	txVolumeData, _ := rdb.ZRangeWithScores(ctx, "tx_volume", -100, -1).Result()
+
+	// Convert to chart-friendly format
+	mempool := []map[string]interface{}{}
+	for _, z := range mempoolData {
+		timestamp := int64(z.Score)
+		value := z.Member.(string)
+		mempool = append(mempool, map[string]interface{}{
+			"time":  timestamp,
+			"value": value,
+		})
+	}
+
+	blockTimes := []map[string]interface{}{}
+	for _, z := range blockTimeData {
+		timestamp := int64(z.Score)
+		value := z.Member.(string)
+		blockTimes = append(blockTimes, map[string]interface{}{
+			"time":  timestamp,
+			"value": value,
+		})
+	}
+
+	txVolumes := []map[string]interface{}{}
+	for _, z := range txVolumeData {
+		timestamp := int64(z.Score)
+		value := z.Member.(string)
+		txVolumes = append(txVolumes, map[string]interface{}{
+			"time":  timestamp,
+			"value": value,
+		})
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"mempool_size": mempool,
+		"block_times":  blockTimes,
+		"tx_volume":    txVolumes,
+	})
 }
 
 var (
@@ -359,7 +631,7 @@ func getEnvWithDefault(key, defaultValue string) string {
 	return value
 }
 
- // handleError standardizes error responses
+// handleError standardizes error responses
 func handleError(c *gin.Context, err error, status int) {
 	sentry.CaptureException(err)
 	c.JSON(status, gin.H{"error": err.Error()})
@@ -533,4 +805,83 @@ func blockchairRequest(method string, params []interface{}) (*resty.Response, er
 	}
 
 	return response, nil
+}
+
+// collectMetrics collects historical metrics for charts
+func collectMetrics() {
+	// Use a float64 timestamp for Redis scores
+	now := float64(time.Now().Unix())
+
+	// Get mempool size
+	mempoolResp, err := blockchairRequest("getmempoolinfo", []interface{}{})
+	if err == nil {
+		var mempoolData map[string]interface{}
+		_ = json.Unmarshal(mempoolResp.Body(), &mempoolData)
+		if result, ok := mempoolData["result"].(map[string]interface{}); ok {
+			if size, ok := result["size"].(float64); ok {
+				rdb.ZAdd(context.Background(), "mempool_size", redis.Z{Score: now, Member: size})
+			}
+		}
+	}
+
+	// Get latest blocks for block times and tx volume
+	blocksResp, err := blockchairRequest("getblockchaininfo", []interface{}{})
+	if err == nil {
+		var chainData map[string]interface{}
+		_ = json.Unmarshal(blocksResp.Body(), &chainData)
+		if result, ok := chainData["result"].(map[string]interface{}); ok {
+			if heightF, ok := result["blocks"].(float64); ok {
+				height := int(heightF)
+				// Get last 10 blocks
+				blockTimes := []int64{}
+				txCounts := []float64{}
+				for i := 0; i < 10; i++ {
+					h := height - i
+					if h < 0 {
+						break
+					}
+					blockResp, err := blockchairRequest("getblockhash", []interface{}{h})
+					if err != nil {
+						continue
+					}
+					var hashData map[string]interface{}
+					_ = json.Unmarshal(blockResp.Body(), &hashData)
+					if hash, ok := hashData["result"].(string); ok {
+						blockDetailResp, err := blockchairRequest("getblock", []interface{}{hash})
+						if err != nil {
+							continue
+						}
+						var blockData map[string]interface{}
+						_ = json.Unmarshal(blockDetailResp.Body(), &blockData)
+						if result, ok := blockData["result"].(map[string]interface{}); ok {
+							if t, ok := result["time"].(float64); ok {
+								blockTimes = append(blockTimes, int64(t))
+							}
+							if txs, ok := result["tx"].([]interface{}); ok {
+								txCounts = append(txCounts, float64(len(txs)))
+							}
+						}
+					}
+				}
+				// Calculate average block time
+				if len(blockTimes) > 1 {
+					var totalTime int64 = 0
+					for i := 1; i < len(blockTimes); i++ {
+						// previous minus current
+						totalTime += blockTimes[i-1] - blockTimes[i]
+					}
+					avgBlockTime := float64(totalTime) / float64(len(blockTimes)-1)
+					rdb.ZAdd(context.Background(), "block_times", redis.Z{Score: now, Member: avgBlockTime})
+				}
+				// Sum tx volume
+				if len(txCounts) > 0 {
+					totalTx := float64(0)
+					for _, c := range txCounts {
+						totalTx += c
+					}
+					rdb.ZAdd(context.Background(), "tx_volume", redis.Z{Score: now, Member: totalTx})
+				}
+			}
+		}
+	}
 }
