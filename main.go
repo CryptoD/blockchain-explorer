@@ -258,6 +258,7 @@ func main() {
 
 	r.GET("/api/autocomplete", autocompleteHandler)
 	r.GET("/api/metrics", metricsHandler)
+	r.GET("/api/network-status", networkStatusHandler)
 
 	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")
@@ -607,6 +608,15 @@ func metricsHandler(c *gin.Context) {
 	})
 }
 
+func networkStatusHandler(c *gin.Context) {
+	data, err := getNetworkStatus()
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+	c.JSON(http.StatusOK, data)
+}
+
 var (
 	baseURL = getEnvWithDefault("GETBLOCK_BASE_URL", "https://go.getblock.io/eb8cb69423354abb8d5e489adfc54742")
 	apiKey  = getEnvWithDefault("GETBLOCK_ACCESS_TOKEN", "eb8cb69423354abb8d5e489adfc54742")
@@ -679,15 +689,40 @@ func getNetworkStatus() (map[string]interface{}, error) {
 			return data, nil
 		}
 	}
-	// Example: Fetch latest block count; customize as needed
-	params := []interface{}{}
-	resp, err := blockchairRequest("getblockcount", params)
+	// Fetch block height
+	blockCountResp, err := blockchairRequest("getblockcount", []interface{}{})
 	if err != nil {
 		return nil, err
 	}
-	var result map[string]interface{}
-	if err := json.Unmarshal(resp.Body(), &result); err != nil {
+	var blockHeight float64
+	if err := json.Unmarshal(blockCountResp.Body(), &blockHeight); err != nil {
 		return nil, err
+	}
+
+	// Fetch difficulty
+	difficultyResp, err := blockchairRequest("getdifficulty", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+	var difficulty float64
+	if err := json.Unmarshal(difficultyResp.Body(), &difficulty); err != nil {
+		return nil, err
+	}
+
+	// Fetch network hash rate
+	hashRateResp, err := blockchairRequest("getnetworkhashps", []interface{}{})
+	if err != nil {
+		return nil, err
+	}
+	var hashRate float64
+	if err := json.Unmarshal(hashRateResp.Body(), &hashRate); err != nil {
+		return nil, err
+	}
+
+	result := map[string]interface{}{
+		"block_height": blockHeight,
+		"difficulty":   difficulty,
+		"hash_rate":    hashRate,
 	}
 	resultJSON, _ := json.Marshal(result)
 	rdb.Set(context.Background(), cacheKey, resultJSON, 10*time.Second) // Short TTL for fast-changing data

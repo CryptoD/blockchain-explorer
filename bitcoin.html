@@ -330,6 +330,42 @@
                         <canvas id="mempoolChart" width="400" height="200"></canvas>
                     </div>
                     <div>
+                        <h6 class="font-semibold mb-2">Transactions Per Second</h6>
+                        <canvas id="tpsChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Block Time</h6>
+                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Network Status Section -->
+            <div id="network-status-section" class="card-muted mb-4" style="display: none;">
+                <h5 class="font-semibold mb-4">Network Status</h5>
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <h6 class="font-semibold mb-2">Block Height</h6>
+                        <p id="network-block-height" class="text-lg">Loading...</p>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Difficulty</h6>
+                        <p id="network-difficulty" class="text-lg">Loading...</p>
+                    </div>
+                    <div>
+                        <h6 class="font-semibold mb-2">Hash Rate (EH/s)</h6>
+                        <p id="network-hash-rate" class="text-lg">Loading...</p>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Charts Section -->
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+                    <div>
+                        <h6 class="font-semibold mb-2">Mempool Size</h6>
+                        <canvas id="mempoolChart" width="400" height="200"></canvas>
+                    </div>
+                    <div>
                         <h6 class="font-semibold mb-2">Block Times (seconds)</h6>
                         <canvas id="blockTimeChart" width="400" height="200"></canvas>
                     </div>
@@ -1219,6 +1255,21 @@
             }
         }
 
+        function loadNetworkStatus() {
+            fetch('/api/network-status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('network-block-height').textContent = data.block_height || 'N/A';
+                    document.getElementById('network-difficulty').textContent = data.difficulty ? data.difficulty.toFixed(2) : 'N/A';
+                    document.getElementById('network-hash-rate').textContent = data.hash_rate ? (data.hash_rate / 1e18).toFixed(2) : 'N/A'; // Convert to EH/s
+                    const networkSection = document.getElementById('network-status-section');
+                    if (networkSection) networkSection.style.display = 'block';
+                })
+                .catch(err => {
+                    console.error('Failed to load network status:', err);
+                });
+        }
+
         function formatBTC(value) {
             return `${parseFloat(value).toFixed(8)} BTC`;
         }
@@ -1252,8 +1303,7 @@
         });
 
         // Load and render charts
-        loadCharts();
-    });
+    loadCharts();
 
     function loadCharts() {
         fetch('/api/metrics')
@@ -1269,8 +1319,9 @@
                 console.error('Failed to load charts:', err);
             });
     }
+});
 
-    function renderMempoolChart(data) {
+        function renderMempoolChart(data) {
         if (!data || !document.getElementById('mempoolChart')) return;
         const ctx = document.getElementById('mempoolChart').getContext('2d');
         const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
@@ -1299,7 +1350,7 @@
         });
     }
 
-    function renderBlockTimeChart(data) {
+        function renderBlockTimeChart(data) {
         if (!data || !document.getElementById('blockTimeChart')) return;
         const ctx = document.getElementById('blockTimeChart').getContext('2d');
         const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
@@ -1328,7 +1379,7 @@
         });
     }
 
-    function renderTxVolumeChart(data) {
+        function renderTxVolumeChart(data) {
         if (!data || !document.getElementById('txVolumeChart')) return;
         const ctx = document.getElementById('txVolumeChart').getContext('2d');
         const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
@@ -1357,24 +1408,6 @@
         });
     }
 
-        document.getElementById('prev-page').addEventListener('click', () => {
-            if (currentPage > 1) {
-                displayAddressData({result: currentAddressData}, currentPage - 1);
-            }
-        });
-        document.getElementById('prev-page').addEventListener('click', () => {
-            if (currentPage > 1) {
-                displayAddressData({result: currentAddressData}, currentPage - 1);
-            }
-        });
-
-        document.getElementById('next-page').addEventListener('click', () => {
-            const transactions = currentAddressData.transactions || [];
-            const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
-            if (currentPage < totalPages) {
-                displayAddressData({result: currentAddressData}, currentPage + 1);
-            }
-        });
     </script>
 </body>
 </html>
