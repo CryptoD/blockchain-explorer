@@ -65,7 +65,7 @@ var ErrNotFound = errors.New("not found")
 var ctx = context.Background()
 
 var rdb = redis.NewClient(&redis.Options{
-	Addr: "localhost:6379", // Adjust as needed
+	Addr: "172.17.0.2:6379", // Adjust as needed
 	DB:   0,                // use default DB
 })
 
@@ -182,7 +182,7 @@ func rateLimitMiddleware(c *gin.Context) {
 		rateLimitReset[ip] = now.Add(time.Minute)
 	}
 	rateLimitCount[ip]++
-	if rateLimitCount[ip] > 10 {
+	if rateLimitCount[ip] > 1000 {
 		log.WithField("ip", ip).Warn("Rate limit exceeded")
 		c.JSON(429, gin.H{"error": "Too many requests"})
 		c.Abort()
@@ -249,10 +249,24 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
 
+	pong, err := rdb.Ping(context.Background()).Result()
+	if err != nil {
+		log.WithField("redis", "ping").Warnf("Redis ping failed: %v", err)
+	}
+
 	// Initialize Sentry
+	_ = pong
 	sentryDSN := getEnvWithDefault("SENTRY_DSN", "")
 	if sentryDSN != "" {
-		err := sentry.Init(sentry.ClientOptions{
+		if initErr := sentry.Init(sentry.ClientOptions{
+			Dsn:              sentryDSN,
+			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
+			TracesSampleRate: 1.0,
+		}); initErr != nil {
+			log.WithError(initErr).Fatal("sentry.Init failed")
+		}
+		defer sentry.Flush(2 * time.Second)
+		err := sentry.Init(sentry.ClientOptions({
 			Dsn: sentryDSN,
 			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
 			TracesSampleRate: 1.0,
@@ -805,7 +819,11 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err := json.Unmarshal(hashRateResp.Body(), &hashRateData); err != nil {
 		return nil, err
 	}
-	hashRate, ok := hashRateData["result"].(float64)
+	raw, exists := hashRateData["result"]
+	if !exists {
+		return nil, errors.New("missing hash rate in response")
+	}
+	hashRate, ok := raw.(float64)
 	if !ok {
 		return nil, errors.New("invalid hash rate response")
 	}
@@ -816,7 +834,11 @@ func getNetworkStatus() (map[string]interface{}, error) {
 		"hash_rate":    hashRate,
 	}
 	resultJSON, _ := json.Marshal(result)
-	rdb.Set(context.Background(), cacheKey, resultJSON, 10*time.Second) // Short TTL for fast-changing data
+	fmt.Println("Setting cache for", cacheKey)
+	err = rdb.Set(context.Background(), cacheKey, resultJSON, 1*time.Minute).Err()
+	if err != nil {
+		fmt.Println("Redis set error:", err)
+	}
 	return result, nil
 }
 
