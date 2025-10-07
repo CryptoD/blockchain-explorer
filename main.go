@@ -773,9 +773,13 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	var blockHeight float64
-	if err := json.Unmarshal(blockCountResp.Body(), &blockHeight); err != nil {
+	var blockCountData map[string]interface{}
+	if err := json.Unmarshal(blockCountResp.Body(), &blockCountData); err != nil {
 		return nil, err
+	}
+	blockHeight, ok := blockCountData["result"].(float64)
+	if !ok {
+		return nil, errors.New("invalid block height response")
 	}
 
 	// Fetch difficulty
@@ -783,9 +787,13 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	var difficulty float64
-	if err := json.Unmarshal(difficultyResp.Body(), &difficulty); err != nil {
+	var difficultyData map[string]interface{}
+	if err := json.Unmarshal(difficultyResp.Body(), &difficultyData); err != nil {
 		return nil, err
+	}
+	difficulty, ok := difficultyData["result"].(float64)
+	if !ok {
+		return nil, errors.New("invalid difficulty response")
 	}
 
 	// Fetch network hash rate
@@ -793,9 +801,13 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err != nil {
 		return nil, err
 	}
-	var hashRate float64
-	if err := json.Unmarshal(hashRateResp.Body(), &hashRate); err != nil {
+	var hashRateData map[string]interface{}
+	if err := json.Unmarshal(hashRateResp.Body(), &hashRateData); err != nil {
 		return nil, err
+	}
+	hashRate, ok := hashRateData["result"].(float64)
+	if !ok {
+		return nil, errors.New("invalid hash rate response")
 	}
 
 	result := map[string]interface{}{
@@ -809,6 +821,7 @@ func getNetworkStatus() (map[string]interface{}, error) {
 }
 
 // updated to use rdb Redis client
+ // updated to use rdb Redis client
 func getAddressDetails(address string) (map[string]interface{}, error) {
 	cacheKey := "address:" + address
 	cached, err := rdb.Get(context.Background(), cacheKey).Result()
@@ -824,9 +837,13 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(response.Body(), &result); err != nil {
+	var responseData map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &responseData); err != nil {
 		return nil, err
+	}
+	result, ok := responseData["result"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid address details response")
 	}
 
 	resultJSON, _ := json.Marshal(result)
@@ -852,9 +869,13 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(response.Body(), &result); err != nil {
+	var responseData map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &responseData); err != nil {
 		return nil, err
+	}
+	result, ok := responseData["result"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid transaction details response")
 	}
 
 	resultJSON, _ := json.Marshal(result)
@@ -879,9 +900,13 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 		return nil, err
 	}
 
-	var result map[string]interface{}
-	if err := json.Unmarshal(response.Body(), &result); err != nil {
+	var responseData map[string]interface{}
+	if err := json.Unmarshal(response.Body(), &responseData); err != nil {
 		return nil, err
+	}
+	result, ok := responseData["result"].(map[string]interface{})
+	if !ok {
+		return nil, errors.New("invalid block details response")
 	}
 
 	resultJSON, _ := json.Marshal(result)
