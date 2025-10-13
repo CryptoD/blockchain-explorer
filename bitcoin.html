@@ -261,12 +261,6 @@
                         maxlength="100"
                     />
                     <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
-                        title="Enter a block height, transaction hash, or Bitcoin address to search the blockchain."
-                        class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
-                        autocomplete="off"
-                        maxlength="100"
-                    />
-                    <button id="search-icon" class="btn-primary px-4" type="submit" aria-label="Search">Search</button>
                 </form>
                 <div id="search-help" class="sr-only">Enter a block height, transaction hash, or address, then press Enter or the Search button.</div>
 
@@ -416,24 +410,6 @@
             </div>
 
             <!-- Network Status Section -->
-                <h5 class="font-semibold mb-4">Network Metrics</h5>
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <h6 class="font-semibold mb-2">Mempool Size</h6>
-                        <canvas id="mempoolChart" width="400" height="200"></canvas>
-                    </div>
-                    <div>
-                        <h6 class="font-semibold mb-2">Transactions Per Second</h6>
-                        <canvas id="tpsChart" width="400" height="200"></canvas>
-                    </div>
-                    <div>
-                        <h6 class="font-semibold mb-2">Block Time</h6>
-                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Network Status Section -->
             <div id="network-status-section" class="card-muted mb-4" style="display: none;">
                 <h5 class="font-semibold mb-4">Network Status</h5>
                 <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
@@ -448,23 +424,6 @@
                     <div>
                         <h6 class="font-semibold mb-2">Hash Rate (EH/s)</h6>
                         <p id="network-hash-rate" class="text-lg">Loading...</p>
-                    </div>
-                </div>
-            </div>
-
-            <!-- Charts Section -->
-                <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                        <h6 class="font-semibold mb-2">Mempool Size</h6>
-                        <canvas id="mempoolChart" width="400" height="200"></canvas>
-                    </div>
-                    <div>
-                        <h6 class="font-semibold mb-2">Block Times (seconds)</h6>
-                        <canvas id="blockTimeChart" width="400" height="200"></canvas>
-                    </div>
-                    <div>
-                        <h6 class="font-semibold mb-2">Transaction Volume</h6>
-                        <canvas id="txVolumeChart" width="400" height="200"></canvas>
                     </div>
                 </div>
             </div>
@@ -553,12 +512,6 @@
                         <div><strong title="The size of the block in bytes.">Size:</strong> <span id="block-size"></span></div>
                         <div><strong title="The weight of the block, used for block size limits in Bitcoin.">Weight:</strong> <span id="block-weight"></span></div>
                         <div><strong title="The entity that mined this block.">Miner:</strong> <span id="block-miner"></span></div>
-                        <div><strong title="A unique identifier for a Bitcoin block.">Block Hash:</strong> <span id="block-hash"></span><button class="copy-btn" onclick="copyToClipboard(document.getElementById('block-hash').textContent)">Copy</button></div>
-                        <div><strong title="The time when the block was mined.">Timestamp:</strong> <span id="block-time"></span></div>
-                        <div><strong title="The number of transactions included in this block.">Transaction Count:</strong> <span id="block-tx-count"></span></div>
-                        <div><strong title="The size of the block in bytes.">Size:</strong> <span id="block-size"></span></div>
-                        <div><strong title="The weight of the block, used for block size limits in Bitcoin.">Weight:</strong> <span id="block-weight"></span></div>
-                        <div><strong title="The entity that mined this block.">Miner:</strong> <span id="block-miner"></span></div>
                     </div>
 
                     <h6 class="font-semibold mt-4">Transactions</h6>
@@ -631,17 +584,16 @@
                         if (sel.__i18n_attached) return;
                         sel.addEventListener('change', function(e) {
                             changeLanguage(e.target.value);
-                        // Handle language change
-                        document.getElementById('language-select').addEventListener('change', function(e) {
-                            changeLanguage(e.target.value);
-        // Debounced search helper (single definition)
-        const debouncedSearch = debounce(function(query) {
-            performSearch(query);
-        }, 500);
+                        });
+                        sel.__i18n_attached = true;
+                    }
 
-        // Small state for current query / abort controller
-        let currentQuery = null;
-        let currentAbortController = null;
+                    // Try to attach immediately, and also on DOMContentLoaded
+                    attachLanguageChangeHandler();
+                    document.addEventListener('DOMContentLoaded', attachLanguageChangeHandler);
+                })
+            }
+        });
 
         // Autocomplete state
         let autocompleteController = null;
@@ -696,7 +648,6 @@
                     console.error('Failed to load exchange rates:', err);
                     exchangeRates = null;
                 });
-        }
         }
 
         // Save history to localStorage

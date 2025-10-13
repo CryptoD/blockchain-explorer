@@ -65,8 +65,8 @@ var ErrNotFound = errors.New("not found")
 var ctx = context.Background()
 
 var rdb = redis.NewClient(&redis.Options{
-	Addr: "172.17.0.2:6379", // Adjust as needed
-	DB:   0,                // use default DB
+	Addr: getEnvWithDefault("REDIS_HOST", "localhost") + ":6379",
+	DB:   0, // use default DB
 })
 
 // Rate limiting variables
@@ -182,7 +182,7 @@ func rateLimitMiddleware(c *gin.Context) {
 		rateLimitReset[ip] = now.Add(time.Minute)
 	}
 	rateLimitCount[ip]++
-	if rateLimitCount[ip] > 1000 {
+	if rateLimitCount[ip] > 10 {
 		log.WithField("ip", ip).Warn("Rate limit exceeded")
 		c.JSON(429, gin.H{"error": "Too many requests"})
 		c.Abort()
@@ -212,12 +212,11 @@ func IsInvalidCachedJSON(err error) bool {
 }
 
 func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
-	// Initialize Gin router and apply rate limiting middleware
-	r := gin.Default()
-	r.Use(rateLimitMiddleware)
-
 	// Get the latest block height
 	networkStatus, err := getNetworkStatus()
+	if err != nil {
+		return nil, err
+	}
 	if err != nil {
 		return nil, err
 	}
@@ -266,16 +265,7 @@ func main() {
 			log.WithError(initErr).Fatal("sentry.Init failed")
 		}
 		defer sentry.Flush(2 * time.Second)
-		err := sentry.Init(sentry.ClientOptions({
-			Dsn: sentryDSN,
-			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
-			TracesSampleRate: 1.0,
-		})
-		if err != nil {
-			log.WithError(err).Error("Failed to initialize Sentry")
-		} else {
-			log.Info("Sentry initialized successfully")
-		}
+		log.Info("Sentry initialized successfully")
 	} else {
 		log.Warn("SENTRY_DSN not set, Sentry not initialized")
 	}
@@ -741,8 +731,8 @@ func handleError(c *gin.Context, err error, status int) {
 }
 
 func isValidAddress(address string) bool {
-	// Bitcoin addresses are usually 26-35 characters long and start with specific characters
-	if len(address) < 26 || len(address) > 35 {
+	// Bitcoin addresses are usually 26-90 characters long and start with specific characters
+	if len(address) < 26 || len(address) > 90 {
 		return false
 	}
 
@@ -842,7 +832,6 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	return result, nil
 }
 
-// updated to use rdb Redis client
  // updated to use rdb Redis client
 func getAddressDetails(address string) (map[string]interface{}, error) {
 	cacheKey := "address:" + address
