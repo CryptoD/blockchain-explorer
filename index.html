@@ -6,16 +6,16 @@
     <title>Blockchain Explorer</title>
     <link rel="stylesheet" href="/dist/styles.css" />
 </head>
-<body class="min-h-screen bg-gray-50 text-slate-900">
+<body class="min-h-screen bg-gray-50 text-slate-900 dark:bg-gray-900 dark:text-slate-100">
     <!-- Header with logo, navigation and search -->
-    <header class="w-full bg-white shadow">
+    <header class="w-full bg-white shadow dark:bg-gray-800">
         <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
             <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
                 <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
                 <span class="font-semibold text-lg">Blockchain Explorer</span>
             </a>
 
-            <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700" role="navigation" aria-label="Main navigation">
+            <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700 dark:text-slate-300" role="navigation" aria-label="Main navigation">
                 <a href="/" class="hover:text-primary" aria-current="page">Home</a>
                 <a href="/blocks" class="hover:text-primary">Blocks</a>
                 <a href="/transactions" class="hover:text-primary">Transactions</a>
@@ -23,7 +23,7 @@
             </nav>
 
             <div class="hidden md:block flex-1 max-w-lg">
-                <div class="flex shadow-sm rounded-lg overflow-hidden">
+                <div class="flex shadow-sm rounded-lg overflow-hidden dark:bg-gray-800">
                     <label for="search-input" class="sr-only">Search blockchain</label>
                     <input
                         id="search-input"
@@ -31,7 +31,7 @@
                         inputmode="search"
                         aria-label="Search by block height, transaction hash, or address"
                         placeholder="Search by block height, transaction hash, or address..."
-                        class="flex-1 p-3 border-none text-base focus:outline-none focus:ring-2 focus:ring-primary"
+                        class="flex-1 p-3 border-none text-base dark:text-white focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
                     />
                     <button id="search-icon" class="bg-primary text-white px-4" type="button" aria-label="Search">Search</button>
@@ -40,7 +40,7 @@
 
             <!-- Mobile nav toggle -->
             <div class="md:hidden">
-                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 rounded-md hover:bg-gray-100 focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
             </div>
         </div>
 
@@ -48,16 +48,16 @@
         <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu" aria-label="Mobile main menu">
             <div class="px-4 pt-4 pb-6 space-y-4">
                 <nav class="flex flex-col gap-2" role="navigation" aria-label="Mobile navigation">
-                    <a href="/" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Home</a>
-                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Blocks</a>
-                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Transactions</a>
-                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-gray-100" role="menuitem">Addresses</a>
+                    <a href="/" class="px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Home</a>
+                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Blocks</a>
+                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Transactions</a>
+                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-gray-100 dark:hover:bg-gray-700" role="menuitem">Addresses</a>
                 </nav>
 
                 <div>
                     <label for="search-input-mobile" class="sr-only">Search blockchain</label>
                     <div class="flex gap-2">
-                        <input id="search-input-mobile" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
+                        <input id="search-input-mobile" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded dark:bg-gray-700 dark:text-white dark:border-gray-600 focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
                         <button id="search-icon-mobile" type="button" class="bg-primary text-white px-3 rounded" aria-label="Search">Go</button>
                     </div>
                 </div>
@@ -70,14 +70,53 @@
         <div class="w-full max-w-3xl">
             <div class="text-center mb-6">
                 <h1 class="text-2xl font-bold">Explore the Bitcoin Blockchain</h1>
-                <p class="text-slate-600 mt-2">Search blocks, transactions, and addresses</p>
+                <p class="text-slate-600 dark:text-slate-400 mt-2">Search blocks, transactions, and addresses</p>
             </div>
 
             <div id="result-container" class="mt-4"></div>
         </div>
     </main>
 
+    <!-- Charts section -->
+    <section id="charts-section" class="hidden px-4 py-8 bg-gray-50 dark:bg-gray-900">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-6">Blockchain Metrics</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Mempool Size</h3>
+                    <canvas id="mempoolChart" width="400" height="200"></canvas>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Block Time</h3>
+                    <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Transaction Volume</h3>
+                    <canvas id="txVolumeChart" width="400" height="200"></canvas>
+                </div>
+            </div>
+        </div>
+    </section>
+
     <script>
+    // Dark mode auto-switching
+    function updateTheme() {
+        const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+        if (isDark) {
+            document.documentElement.classList.add('dark');
+        } else {
+            document.documentElement.classList.remove('dark');
+        }
+    }
+
+    // Initial check
+    updateTheme();
+
+    // Listen for changes
+    if (window.matchMedia) {
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
+    }
+
     // Debounce utility
     function debounce(func, wait) {
         let timeout;
@@ -183,6 +222,20 @@
         };
 
         const isValidFormat = Object.values(validPatterns).some(p => p.test(cleanQuery));
+
+        // Insert Chart.js CDN before existing script.js if not already present
+        (function insertChartJsBeforeApp() {
+            // If Chart.js is already present, do nothing
+            if (document.querySelector('script[src="https://cdn.jsdelivr.net/npm/chart.js"]')) return;
+            // Find the existing app script (script.js) to insert before it
+            const appScript = Array.from(document.getElementsByTagName('script'))
+                .find(s => s.src && s.src.endsWith('script.js'));
+            if (!appScript) return;
+            const chartScript = document.createElement('script');
+            chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
+            chartScript.async = false; // preserve execution order before script.js
+            appScript.parentNode.insertBefore(chartScript, appScript);
+        })();
         return { isValid: isValidFormat, error: isValidFormat ? null : 'INVALID_SEARCH' };
     }
 
