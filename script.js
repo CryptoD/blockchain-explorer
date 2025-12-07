@@ -1,4 +1,24 @@
         // Debounce helper
+        // Animation helpers for search results
+        function animateIn(element) {
+            if (!element) return;
+            element.style.display = 'block';
+            element.classList.remove('fade-out');
+            element.classList.add('fade-in');
+            // Force reflow
+            element.offsetHeight;
+        }
+
+        function animateOut(element) {
+            if (!element) return;
+            element.classList.remove('fade-in');
+            element.classList.add('fade-out');
+            // Hide after animation completes
+            setTimeout(() => {
+                element.style.display = 'none';
+                element.classList.remove('fade-out');
+            }, 200);
+        }
         function debounce(func, wait) {
             let timeout;
             return function(...args) {
@@ -644,12 +664,25 @@
         }
 
         function displayAddressData(data, page = 1) {
-            // Hide other sections
-            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'none';
-            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'none';
+            // Hide other sections with animation
+            const txEl = document.getElementById('transaction-details');
+            const blockEl = document.getElementById('block-details');
 
-            // Show address details section
-            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'block';
+            if (txEl && txEl.style.display !== 'none') {
+                animateOut(txEl);
+            }
+            if (blockEl && blockEl.style.display !== 'none') {
+                animateOut(blockEl);
+            }
+
+            // Show address details section with animation
+            const addrEl = document.getElementById('address-details');
+            if (addrEl) {
+                // Wait for other animations to complete, then animate in
+                setTimeout(() => {
+                    animateIn(addrEl);
+                }, txEl && txEl.style.display !== 'none' || blockEl && blockEl.style.display !== 'none' ? 200 : 0);
+            }
 
             // Extract data from response
             const addressData = data.result || {};
@@ -731,12 +764,25 @@
         }
 
         function displayTransactionData(data) {
-            // Hide other sections
-            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'none';
-            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'none';
+            // Hide other sections with animation
+            const addrEl = document.getElementById('address-details');
+            const blockEl = document.getElementById('block-details');
 
-            // Show transaction details section
-            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'block';
+            if (addrEl && addrEl.style.display !== 'none') {
+                animateOut(addrEl);
+            }
+            if (blockEl && blockEl.style.display !== 'none') {
+                animateOut(blockEl);
+            }
+
+            // Show transaction details section with animation
+            const txEl = document.getElementById('transaction-details');
+            if (txEl) {
+                // Wait for other animations to complete, then animate in
+                setTimeout(() => {
+                    animateIn(txEl);
+                }, addrEl && addrEl.style.display !== 'none' || blockEl && blockEl.style.display !== 'none' ? 200 : 0);
+            }
 
             // Extract data from response
             const txData = data.result || {};
@@ -809,12 +855,25 @@
         }
 
         function displayBlockData(data) {
-            // Hide other sections
-            const addrEl = document.getElementById('address-details'); if (addrEl) addrEl.style.display = 'none';
-            const txEl = document.getElementById('transaction-details'); if (txEl) txEl.style.display = 'none';
+            // Hide other sections with animation
+            const addrEl = document.getElementById('address-details');
+            const txEl = document.getElementById('transaction-details');
 
-            // Show block details section
-            const blockEl = document.getElementById('block-details'); if (blockEl) blockEl.style.display = 'block';
+            if (addrEl && addrEl.style.display !== 'none') {
+                animateOut(addrEl);
+            }
+            if (txEl && txEl.style.display !== 'none') {
+                animateOut(txEl);
+            }
+
+            // Show block details section with animation
+            const blockEl = document.getElementById('block-details');
+            if (blockEl) {
+                // Wait for other animations to complete, then animate in
+                setTimeout(() => {
+                    animateIn(blockEl);
+                }, addrEl && addrEl.style.display !== 'none' || txEl && txEl.style.display !== 'none' ? 200 : 0);
+            }
 
             // Extract data from response
             const blockData = data.result || {};
@@ -830,10 +889,7 @@
             document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
             document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
             // Added miner display
-            document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
-            document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : 'N/A';
-            document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
-            document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
+            document.getElementById('block-miner').textContent = blockData.miner || 'N/A';
             document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
             // Added miner display
             document.getElementById('block-miner').textContent = blockData.miner || 'N/A';
