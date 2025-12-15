@@ -293,6 +293,7 @@ func main() {
 	r.Static("/dist", "./dist")
 	r.StaticFile("/bitcoin.html", "bitcoin.html")
 	r.StaticFile("/", "index.html")
+	r.StaticFile("/admin", "admin.html")
 
 	r.GET("/api/search", searchHandler)
 
@@ -300,6 +301,16 @@ func main() {
 	r.GET("/api/metrics", metricsHandler)
 	r.GET("/api/network-status", networkStatusHandler)
 	r.GET("/api/rates", ratesHandler)
+
+	// Admin routes
+	r.POST("/api/login", loginHandler)
+	r.POST("/api/logout", logoutHandler)
+	admin := r.Group("/api/admin")
+	admin.Use(authMiddleware)
+	{
+		admin.GET("/status", adminStatusHandler)
+		admin.GET("/cache", adminCacheHandler)
+	}
 
 	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")

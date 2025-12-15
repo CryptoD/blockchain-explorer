@@ -1092,3 +1092,180 @@
             }
         });
     }
+
+    // Admin Dashboard Functionality
+    function initAdminDashboard() {
+        const loginForm = document.getElementById('login-form');
+        const logoutBtn = document.getElementById('logout-btn');
+        const refreshStatusBtn = document.getElementById('refresh-status');
+        const viewCacheStatsBtn = document.getElementById('view-cache-stats');
+        const clearCacheBtn = document.getElementById('clear-cache');
+
+        if (loginForm) {
+            loginForm.addEventListener('submit', handleLogin);
+        }
+
+        if (logoutBtn) {
+            logoutBtn.addEventListener('click', handleLogout);
+        }
+
+        if (refreshStatusBtn) {
+            refreshStatusBtn.addEventListener('click', loadSystemStatus);
+        }
+
+        if (viewCacheStatsBtn) {
+            viewCacheStatsBtn.addEventListener('click', loadCacheStats);
+        }
+
+        if (clearCacheBtn) {
+            clearCacheBtn.addEventListener('click', clearCache);
+        }
+
+        // Check if already logged in
+        checkAuthStatus();
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+
+        const username = document.getElementById('username-input').value;
+        const password = document.getElementById('password-input').value;
+        const errorDiv = document.getElementById('login-error');
+
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('dashboard-section').classList.remove('hidden');
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('username').textContent = username;
+                errorDiv.classList.add('hidden');
+                loadSystemStatus();
+            } else {
+                errorDiv.textContent = data.error || 'Login failed';
+                errorDiv.classList.remove('hidden');
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error occurred';
+            errorDiv.classList.remove('hidden');
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+
+        document.getElementById('login-section').classList.remove('hidden');
+        document.getElementById('dashboard-section').classList.add('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+        document.getElementById('username-input').value = '';
+        document.getElementById('password-input').value = '';
+        document.getElementById('login-error').classList.add('hidden');
+    }
+
+    async function checkAuthStatus() {
+        try {
+            const response = await fetch('/api/admin/status');
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('login-section').classList.add('hidden');
+                document.getElementById('dashboard-section').classList.remove('hidden');
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('username').textContent = data.user;
+                loadSystemStatus();
+            }
+        } catch (error) {
+            // Not authenticated, show login form
+        }
+    }
+
+    async function loadSystemStatus() {
+        try {
+            const response = await fetch('/api/admin/status');
+            const data = await response.json();
+
+            const statusDiv = document.getElementById('system-status');
+            statusDiv.innerHTML = `
+                <div class="bg-green-50 dark:bg-green-900 p-4 rounded">
+                    <h3 class="font-semibold text-green-800 dark:text-green-200">Status</h3>
+                    <p class="text-green-600 dark:text-green-400">${data.status}</p>
+                </div>
+                <div class="bg-blue-50 dark:bg-blue-900 p-4 rounded">
+                    <h3 class="font-semibold text-blue-800 dark:text-blue-200">Redis Memory</h3>
+                    <p class="text-blue-600 dark:text-blue-400">${data.redis_memory || 'N/A'}</p>
+                </div>
+                <div class="bg-purple-50 dark:bg-purple-900 p-4 rounded">
+                    <h3 class="font-semibold text-purple-800 dark:text-purple-200">Active Rate Limits</h3>
+                    <p class="text-purple-600 dark:text-purple-400">${data.active_rate_limits}</p>
+                </div>
+            `;
+        } catch (error) {
+            console.error('Failed to load system status:', error);
+        }
+    }
+
+    async function loadCacheStats() {
+        try {
+            const response = await fetch('/api/admin/cache?action=stats');
+            const data = await response.json();
+
+            const statsDiv = document.getElementById('cache-stats');
+            if (data.total_keys > 0) {
+                statsDiv.innerHTML = `
+                    <p class="text-lg font-semibold">Total Keys: ${data.total_keys}</p>
+                    <div class="mt-3">
+                        <p class="font-medium mb-2">Cache Keys:</p>
+                        <div class="max-h-40 overflow-y-auto bg-gray-100 dark:bg-gray-600 p-2 rounded text-sm">
+                            ${data.keys.map(key => `<div>${key}</div>`).join('')}
+                        </div>
+                    </div>
+                `;
+            } else {
+                statsDiv.innerHTML = '<p class="text-gray-600 dark:text-gray-400">No cached data found</p>';
+            }
+        } catch (error) {
+            document.getElementById('cache-stats').innerHTML = '<p class="text-red-600">Failed to load cache stats</p>';
+        }
+    }
+
+    async function clearCache() {
+        if (!confirm('Are you sure you want to clear all cache? This action cannot be undone.')) {
+            return;
+        }
+
+        try {
+            const response = await fetch('/api/admin/cache?action=clear', { method: 'GET' });
+            const data = await response.json();
+
+            const resultDiv = document.getElementById('cache-result');
+            if (response.ok) {
+                resultDiv.innerHTML = `<p class="text-green-600">Cache cleared successfully! ${data.keys_removed} keys removed.</p>`;
+                resultDiv.classList.remove('hidden');
+                // Refresh cache stats
+                loadCacheStats();
+            } else {
+                resultDiv.innerHTML = `<p class="text-red-600">Failed to clear cache: ${data.error}</p>`;
+                resultDiv.classList.remove('hidden');
+            }
+        } catch (error) {
+            document.getElementById('cache-result').innerHTML = '<p class="text-red-600">Network error occurred</p>';
+            document.getElementById('cache-result').classList.remove('hidden');
+        }
+    }
+
+    // Initialize admin dashboard if on admin page
+    if (window.location.pathname === '/admin') {
+        initAdminDashboard();
+    }
