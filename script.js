@@ -955,6 +955,13 @@
             });
         }
 
+        function shareResult() {
+            const url = window.location.href;
+            copyToClipboard(url);
+            // Optionally, show a toast or alert
+            alert('URL copied to clipboard!');
+        }
+
         // Pagination event listeners
         document.getElementById('prev-page').addEventListener('click', () => {
             if (currentPage > 1) {
@@ -966,6 +973,17 @@
             const transactions = currentAddressData.transactions || [];
             const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
             if (currentPage < totalPages) {
+                displayAddressData({result: currentAddressData}, currentPage + 1);
+            }
+        });
+
+        // Share button event listeners
+        document.getElementById('share-address').addEventListener('click', shareResult);
+        document.getElementById('share-tx').addEventListener('click', shareResult);
+        document.getElementById('share-block').addEventListener('click', shareResult);
+
+        // Load and render charts
+        loadCharts();
                 displayAddressData({result: currentAddressData}, currentPage + 1);
             }
         });
