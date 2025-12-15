@@ -699,6 +699,13 @@
             if (document.getElementById('sent')) document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
             document.getElementById('tx-count').textContent = addressData.transactions ? addressData.transactions.length : 0;
 
+            // Generate QR code
+            const qrCodeElement = document.getElementById('qr-code');
+            qrCodeElement.innerHTML = '<canvas id="qr-canvas"></canvas>';
+            QRCode.toCanvas(document.getElementById('qr-canvas'), addressData.address, function (error) {
+                if (error) console.error('QR Code generation failed:', error);
+            });
+
             // Populate transactions
             const transactionsContainer = document.getElementById('transactions');
             transactionsContainer.innerHTML = '';

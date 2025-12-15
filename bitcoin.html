@@ -3,72 +3,202 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Bitcoin Information</title>
-    <style>
-        body {
-            font-family: Arial, sans-serif;
-            margin: 20px;
-            background-color: #f5f5f5;
-        }
-        .container {
-            max-width: 800px;
-            margin: 0 auto;
-            background-color: white;
-            padding: 20px;
-            border-radius: 8px;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
-        }
-        h1 {
-            color: #f7931a;
-            text-align: center;
-        }
-        .info-section {
-            margin: 20px 0;
-            padding: 15px;
-            border-left: 4px solid #f7931a;
-            background-color: #fef9f8;
-        }
-        .price {
-            font-size: 24px;
-            font-weight: bold;
-            color: #2e7d32;
-        }
-        .supply {
-            font-size: 18px;
-            color: #1565c0;
-        }
-    </style>
+    <title>Bitcoin Blockchain Explorer</title>
+    <link rel="stylesheet" href="/dist/styles.css" />
 </head>
-<body>
-    <div class="container">
-        <h1>Bitcoin (BTC)</h1>
-        
-        <div class="info-section">
-            <h2>What is Bitcoin?</h2>
-            <p>Bitcoin is a decentralized digital currency, without a central bank or single administrator, that can be sent from user to user on the peer-to-peer bitcoin network without the need for intermediaries.</p>
+<body class="min-h-screen bg-gray-50 text-slate-900 dark:bg-gray-900 dark:text-slate-100">
+    <!-- Header -->
+    <header class="w-full bg-white shadow dark:bg-gray-800">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
+                <span class="font-semibold text-lg">Blockchain Explorer</span>
+            </a>
+            <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700 dark:text-slate-300" role="navigation" aria-label="Main navigation">
+                <a href="/" class="hover:text-primary">Home</a>
+                <a href="/blocks" class="hover:text-primary">Blocks</a>
+                <a href="/transactions" class="hover:text-primary">Transactions</a>
+                <a href="/addresses" class="hover:text-primary">Addresses</a>
+            </nav>
         </div>
-        
-        <div class="info-section">
-            <h2>Current Price</h2>
-            <p class="price">Price: $45,230.50</p>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 px-4 py-8">
+        <div class="max-w-4xl mx-auto">
+            <!-- Loading -->
+            <div id="loading" class="hidden flex items-center justify-center py-8">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                    <p id="loading-text" class="mt-4 text-slate-600 dark:text-slate-400">Loading data...</p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6" role="alert"></div>
+
+            <!-- Content -->
+            <div id="content" class="hidden">
+                <!-- Address Details -->
+                <section id="address-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-4">Address Details</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Address</label>
+                            <p id="address" class="text-lg font-mono break-all"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Balance</label>
+                            <p id="balance" class="text-lg font-semibold text-green-600"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Total Received</label>
+                            <p id="received" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Total Sent</label>
+                            <p id="sent" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Transaction Count</label>
+                            <p id="tx-count" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">QR Code</label>
+                            <div id="qr-code" class="mt-2"></div>
+                        </div>
+                    </div>
+                    <h3 class="text-xl font-semibold mb-2">Transactions</h3>
+                    <div class="overflow-x-auto">
+                        <table class="w-full table-auto">
+                            <thead>
+                                <tr class="border-b">
+                                    <th class="text-left p-2">Transaction Hash</th>
+                                    <th class="text-left p-2">Value</th>
+                                    <th class="text-left p-2">Confirmations</th>
+                                </tr>
+                            </thead>
+                            <tbody id="transactions"></tbody>
+                        </table>
+                    </div>
+                    <div id="pagination" class="hidden flex justify-between items-center mt-4">
+                        <button id="prev-page" class="btn-primary disabled:opacity-50" disabled>Previous</button>
+                        <span id="page-info"></span>
+                        <button id="next-page" class="btn-primary disabled:opacity-50" disabled>Next</button>
+                    </div>
+                </section>
+
+                <!-- Transaction Details -->
+                <section id="transaction-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-4">Transaction Details</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Transaction Hash</label>
+                            <p id="tx-hash" class="text-lg font-mono break-all"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Block Hash</label>
+                            <p id="tx-block" class="text-lg font-mono break-all"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Time</label>
+                            <p id="tx-time" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Amount</label>
+                            <p id="tx-amount" class="text-lg font-semibold"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Fee</label>
+                            <p id="tx-fee" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Confirmations</label>
+                            <p id="tx-confirmations" class="text-lg"></p>
+                        </div>
+                    </div>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">From</h3>
+                            <div id="tx-from"></div>
+                        </div>
+                        <div>
+                            <h3 class="text-lg font-semibold mb-2">To</h3>
+                            <div id="tx-to"></div>
+                        </div>
+                    </div>
+                </section>
+
+                <!-- Block Details -->
+                <section id="block-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+                    <h2 class="text-2xl font-bold mb-4">Block Details</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Block Height</label>
+                            <p id="block-height" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Block Hash</label>
+                            <p id="block-hash" class="text-lg font-mono break-all"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Time</label>
+                            <p id="block-time" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Transaction Count</label>
+                            <p id="block-tx-count" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Size</label>
+                            <p id="block-size" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Weight</label>
+                            <p id="block-weight" class="text-lg"></p>
+                        </div>
+                        <div>
+                            <label class="block text-sm font-medium text-slate-700 dark:text-slate-300">Miner</label>
+                            <p id="block-miner" class="text-lg"></p>
+                        </div>
+                    </div>
+                    <h3 class="text-lg font-semibold mb-2">Transactions</h3>
+                    <div id="block-transactions" class="space-y-1"></div>
+                </section>
+            </div>
         </div>
-        
-        <div class="info-section">
-            <h2>Supply Information</h2>
-            <p class="supply">Total Supply: 21,000,000 BTC</p>
-            <p class="supply">Circulating Supply: 19,250,000 BTC</p>
+    </main>
+
+    <!-- History Section -->
+    <section id="history-section" class="hidden px-4 py-8 bg-gray-50 dark:bg-gray-900">
+        <div class="max-w-4xl mx-auto">
+            <h2 class="text-xl font-bold mb-4">Recent Views</h2>
+            <ul id="history-list" class="space-y-2"></ul>
         </div>
-        
-        <div class="info-section">
-            <h2>Key Features</h2>
-            <ul>
-                <li>Decentralized</li>
-                <li>Fixed supply cap of 21 million coins</li>
-                <li>Blockchain technology</li>
-                <li>Pseudonymous transactions</li>
-                <li>Global accessibility</li>
-            </ul>
+    </section>
+
+    <!-- Charts Section -->
+    <section id="charts-section" class="hidden px-4 py-8 bg-gray-50 dark:bg-gray-900">
+        <div class="max-w-7xl mx-auto">
+            <h2 class="text-2xl font-bold text-center mb-6">Blockchain Metrics</h2>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Mempool Size</h3>
+                    <canvas id="mempoolChart" width="400" height="200"></canvas>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Block Time</h3>
+                    <canvas id="blockTimeChart" width="400" height="200"></canvas>
+                </div>
+                <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
+                    <h3 class="text-lg font-semibold mb-2">Transaction Volume</h3>
+                    <canvas id="txVolumeChart" width="400" height="200"></canvas>
+                </div>
+            </div>
         </div>
-    </div>
+    </section>
+
+    <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
+    <script src="script.js"></script>
 </body>
 </html>
