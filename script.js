@@ -1,3 +1,46 @@
+        // Theme management
+        function setTheme(theme) {
+            document.documentElement.setAttribute('data-theme', theme);
+            localStorage.setItem('blockchain-explorer-theme', theme);
+        }
+
+        function getSavedTheme() {
+            return localStorage.getItem('blockchain-explorer-theme') || 'blue';
+        }
+
+        function initializeTheme() {
+            const savedTheme = getSavedTheme();
+            setTheme(savedTheme);
+            const themeSelect = document.getElementById('theme-select');
+            if (themeSelect) {
+                themeSelect.value = savedTheme;
+                themeSelect.addEventListener('change', function(e) {
+                    setTheme(e.target.value);
+                });
+            }
+        }
+
+        // Dark mode auto-switching (kept for backward compatibility)
+        function updateTheme() {
+            const isDark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            if (isDark) {
+                document.documentElement.classList.add('dark');
+            } else {
+                document.documentElement.classList.remove('dark');
+            }
+        }
+
+        // Initialize theme on page load
+        document.addEventListener('DOMContentLoaded', function() {
+            initializeTheme();
+            updateTheme();
+        });
+
+        // Listen for changes
+        if (window.matchMedia) {
+            window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', updateTheme);
+        }
+
         // Debounce helper
         // Animation helpers for search results
         function animateIn(element) {
