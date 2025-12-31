@@ -3,12 +3,64 @@
 :root {
   --grid-gap: 20px;
   --container-max-width: 1200px;
+
+  /* Default (Blue) Theme */
+  --primary: #3b82f6;
+  --accent: #1d4ed8;
+  --bg: #ffffff;
+  --text: #111827;
+  --bg-secondary: #f9fafb;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --hover: #f3f4f6;
 }
 
-/* Root Variables */
-:root {
-  --grid-gap: 20px;
-  --container-max-width: 1200px;
+/* Blue Theme (default) */
+[data-theme="blue"] {
+  --primary: #3b82f6;
+  --accent: #1d4ed8;
+  --bg: #ffffff;
+  --text: #111827;
+  --bg-secondary: #f9fafb;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --hover: #f3f4f6;
+}
+
+/* Green Theme */
+[data-theme="green"] {
+  --primary: #10b981;
+  --accent: #059669;
+  --bg: #ffffff;
+  --text: #111827;
+  --bg-secondary: #f0fdf4;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --hover: #f0fdf4;
+}
+
+/* Purple Theme */
+[data-theme="purple"] {
+  --primary: #8b5cf6;
+  --accent: #7c3aed;
+  --bg: #ffffff;
+  --text: #111827;
+  --bg-secondary: #faf5ff;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --hover: #faf5ff;
+}
+
+/* Orange Theme */
+[data-theme="orange"] {
+  --primary: #f97316;
+  --accent: #ea580c;
+  --bg: #ffffff;
+  --text: #111827;
+  --bg-secondary: #fff7ed;
+  --text-secondary: #6b7280;
+  --border: #d1d5db;
+  --hover: #fff7ed;
 }
 
 /* Global Styles */
