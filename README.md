@@ -36,6 +36,7 @@ A comprehensive web-based application for exploring the Bitcoin blockchain with 
 - **Internationalization**: Multi-language support
 - **Dark/Light Theme**: Comfortable viewing in different environments
 - **Keyboard Navigation**: Full keyboard accessibility support
+- **Feedback Form**: Users can submit feedback directly from the homepage
 
 ## Architecture
 

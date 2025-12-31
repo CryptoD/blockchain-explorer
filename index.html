@@ -90,6 +90,38 @@
         </div>
     </main>
 
+    <!-- Footer with Feedback Form -->
+    <footer class="bg-bg-secondary py-8 px-4">
+        <div class="max-w-7xl mx-auto">
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">About Blockchain Explorer</h3>
+                    <p class="text-text-secondary">Explore the Bitcoin blockchain with real-time data on blocks, transactions, and addresses.</p>
+                </div>
+                <div>
+                    <h3 class="text-lg font-semibold mb-4">Feedback</h3>
+                    <p class="text-text-secondary mb-4">Help us improve! Share your thoughts and suggestions.</p>
+                    <form id="feedback-form" class="space-y-4">
+                        <div>
+                            <label for="feedback-name" class="block text-sm font-medium text-text">Name (optional)</label>
+                            <input type="text" id="feedback-name" name="name" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Your name">
+                        </div>
+                        <div>
+                            <label for="feedback-email" class="block text-sm font-medium text-text">Email (optional)</label>
+                            <input type="email" id="feedback-email" name="email" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="your@email.com">
+                        </div>
+                        <div>
+                            <label for="feedback-message" class="block text-sm font-medium text-text">Message</label>
+                            <textarea id="feedback-message" name="message" rows="3" required class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Your feedback..."></textarea>
+                        </div>
+                        <button type="submit" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary">Submit Feedback</button>
+                    </form>
+                    <div id="feedback-result" class="mt-4 hidden"></div>
+                </div>
+            </div>
+        </div>
+    </footer>
+
     <!-- Charts section -->
     <section id="charts-section" class="hidden px-4 py-8 bg-bg">
         <div class="max-w-7xl mx-auto">
@@ -296,6 +328,49 @@
         const validation = validateSearchQuery(query);
         if (!validation.isValid) { displayError(validation.error); return; }
         window.location.href = `/bitcoin?q=${encodeURIComponent(query)}`;
+    }
+
+    // Feedback form handling
+    const feedbackForm = document.getElementById('feedback-form');
+    const feedbackResult = document.getElementById('feedback-result');
+
+    if (feedbackForm) {
+        feedbackForm.addEventListener('submit', async function(e) {
+            e.preventDefault();
+
+            const formData = new FormData(feedbackForm);
+            const data = {
+                name: formData.get('name'),
+                email: formData.get('email'),
+                message: formData.get('message')
+            };
+
+            try {
+                const response = await fetch('/api/feedback', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify(data)
+                });
+
+                const result = await response.json();
+
+                if (response.ok) {
+                    feedbackResult.className = 'mt-4 text-green-600 font-semibold';
+                    feedbackResult.textContent = result.message;
+                    feedbackForm.reset();
+                } else {
+                    feedbackResult.className = 'mt-4 text-red-600 font-semibold';
+                    feedbackResult.textContent = result.error || 'Failed to submit feedback';
+                }
+            } catch (error) {
+                feedbackResult.className = 'mt-4 text-red-600 font-semibold';
+                feedbackResult.textContent = 'Network error. Please try again later.';
+            }
+
+            feedbackResult.classList.remove('hidden');
+        });
     }
     </script>
 </body>

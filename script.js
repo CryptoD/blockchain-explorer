@@ -1025,15 +1025,9 @@
         document.getElementById('share-tx').addEventListener('click', shareResult);
         document.getElementById('share-block').addEventListener('click', shareResult);
 
-        // Load and render charts
-        loadCharts();
                 displayAddressData({result: currentAddressData}, currentPage + 1);
             }
         });
-
-        // Load and render charts
-        loadCharts();
-        loadHistory();
         renderHistory();
 
     function loadCharts() {

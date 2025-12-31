@@ -302,6 +302,8 @@ func main() {
 	r.GET("/api/network-status", networkStatusHandler)
 	r.GET("/api/rates", ratesHandler)
 
+	r.POST("/api/feedback", feedbackHandler)
+
 	// Admin routes
 	r.POST("/api/login", loginHandler)
 	r.POST("/api/logout", logoutHandler)
@@ -441,6 +443,59 @@ func logoutHandler(c *gin.Context) {
 
 	c.SetCookie("session_id", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
+}
+
+// feedbackHandler handles user feedback submissions
+// POST /api/feedback
+// Stores feedback in Redis with a 30-day expiration
+func feedbackHandler(c *gin.Context) {
+	var feedbackReq struct {
+		Name    string `json:"name"`
+		Email   string `json:"email"`
+		Message string `json:"message" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&feedbackReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	// Store feedback in Redis with timestamp
+	feedbackKey := fmt.Sprintf("feedback:%d", time.Now().Unix())
+	feedbackData := map[string]interface{}{
+		"name":      feedbackReq.Name,
+		"email":     feedbackReq.Email,
+		"message":   feedbackReq.Message,
+		"timestamp": time.Now().Format(time.RFC3339),
+		"ip":        c.ClientIP(),
+	}
+
+	jsonData, err := json.Marshal(feedbackData)
+	if err != nil {
+		log.WithError(err).Error("Failed to marshal feedback data")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process feedback"})
+		return
+	}
+
+	err = rdb.Set(ctx, feedbackKey, jsonData, 30*24*time.Hour).Err() // Store for 30 days
+	if err != nil {
+		log.WithError(err).Error("Failed to store feedback in Redis")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save feedback"})
+		return
+	}
+
+	log.WithFields(log.Fields{
+		"name":    feedbackReq.Name,
+		"email":   feedbackReq.Email,
+		"message": func() string {
+			if len(feedbackReq.Message) > 100 {
+				return feedbackReq.Message[:100]
+			}
+			return feedbackReq.Message
+		}(),
+	}).Info("Feedback received")
+
+	c.JSON(http.StatusOK, gin.H{"message": "Thank you for your feedback!"})
 }
 
 // adminStatusHandler provides system status for admin
