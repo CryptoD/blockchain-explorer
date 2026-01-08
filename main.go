@@ -82,6 +82,22 @@ type User struct {
 	Created  time.Time `json:"created"`
 }
 
+type PortfolioItem struct {
+	Address string  `json:"address"`
+	Label   string  `json:"label"`
+	Amount  float64 `json:"amount"`
+}
+
+type Portfolio struct {
+	ID          string          `json:"id"`
+	Username    string          `json:"username"`
+	Name        string          `json:"name"`
+	Description string          `json:"description"`
+	Items       []PortfolioItem `json:"items"`
+	Created     time.Time       `json:"created"`
+	Updated     time.Time       `json:"updated"`
+}
+
 // User authentication variables
 var (
 	users     = make(map[string]User) // username -> User
@@ -504,6 +520,10 @@ func main() {
 	user.Use(authMiddleware)
 	{
 		user.GET("/profile", userProfileHandler)
+		user.GET("/portfolios", listPortfoliosHandler)
+		user.POST("/portfolios", createPortfolioHandler)
+		user.PUT("/portfolios/:id", updatePortfolioHandler)
+		user.DELETE("/portfolios/:id", deletePortfolioHandler)
 	}
 
 	// Admin routes (require authentication and admin role)
@@ -803,6 +823,106 @@ func adminCacheHandler(c *gin.Context) {
 	default:
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'clear' or 'stats'"})
 	}
+}
+
+// Portfolio management handlers
+
+// listPortfoliosHandler returns all portfolios for the authenticated user
+func listPortfoliosHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	keys, err := rdb.Keys(ctx, "portfolio:"+username.(string)+":*").Result()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch portfolios"})
+		return
+	}
+
+	portfolios := []Portfolio{}
+	for _, key := range keys {
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		var p Portfolio
+		if err := json.Unmarshal([]byte(data), &p); err == nil {
+			portfolios = append(portfolios, p)
+		}
+	}
+
+	c.JSON(http.StatusOK, portfolios)
+}
+
+// createPortfolioHandler creates a new portfolio
+func createPortfolioHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	var p Portfolio
+	if err := c.ShouldBindJSON(&p); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	p.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	p.Username = username.(string)
+	p.Created = time.Now()
+	p.Updated = time.Now()
+
+	data, _ := json.Marshal(p)
+	err := rdb.Set(ctx, "portfolio:"+p.Username+":"+p.ID, data, 0).Err()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save portfolio"})
+		return
+	}
+
+	c.JSON(http.StatusCreated, p)
+}
+
+// updatePortfolioHandler updates an existing portfolio
+func updatePortfolioHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+	portfolioID := c.Param("id")
+
+	var updateReq Portfolio
+	if err := c.ShouldBindJSON(&updateReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	key := "portfolio:" + username.(string) + ":" + portfolioID
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{"error": "Portfolio not found"})
+		return
+	}
+
+	var p Portfolio
+	json.Unmarshal([]byte(data), &p)
+
+	// Update fields
+	p.Name = updateReq.Name
+	p.Description = updateReq.Description
+	p.Items = updateReq.Items
+	p.Updated = time.Now()
+
+	newData, _ := json.Marshal(p)
+	rdb.Set(ctx, key, newData, 0)
+
+	c.JSON(http.StatusOK, p)
+}
+
+// deletePortfolioHandler deletes a portfolio
+func deletePortfolioHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+	portfolioID := c.Param("id")
+
+	key := "portfolio:" + username.(string) + ":" + portfolioID
+	err := rdb.Del(ctx, key).Err()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete portfolio"})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Portfolio deleted successfully"})
 }
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
