@@ -1025,9 +1025,6 @@
         document.getElementById('share-tx').addEventListener('click', shareResult);
         document.getElementById('share-block').addEventListener('click', shareResult);
 
-                displayAddressData({result: currentAddressData}, currentPage + 1);
-            }
-        });
         renderHistory();
 
     function loadCharts() {
@@ -1306,3 +1303,144 @@
     if (window.location.pathname === '/admin') {
         initAdminDashboard();
     }
+
+    // Authentication functions
+    function initAuth() {
+        const loginBtn = document.getElementById('login-btn');
+        const registerBtn = document.getElementById('register-btn');
+        const logoutBtn = document.getElementById('logout-btn');
+        const switchToRegister = document.getElementById('switch-to-register');
+        const switchToLogin = document.getElementById('switch-to-login');
+        const loginForm = document.getElementById('login-form');
+        const registerForm = document.getElementById('register-form');
+
+        if (loginBtn) loginBtn.addEventListener('click', showLoginForm);
+        if (registerBtn) registerBtn.addEventListener('click', showRegisterForm);
+        if (logoutBtn) logoutBtn.addEventListener('click', handleLogout);
+        if (switchToRegister) switchToRegister.addEventListener('click', showRegisterForm);
+        if (switchToLogin) switchToLogin.addEventListener('click', showLoginForm);
+        if (loginForm) loginForm.addEventListener('submit', handleLogin);
+        if (registerForm) registerForm.addEventListener('submit', handleRegister);
+
+        // Check if user is already logged in
+        checkAuthStatus();
+    }
+
+    function showLoginForm() {
+        document.getElementById('auth-forms').classList.remove('hidden');
+        document.getElementById('login-form-container').classList.remove('hidden');
+        document.getElementById('register-form-container').classList.add('hidden');
+        document.getElementById('login-error').classList.add('hidden');
+        document.getElementById('register-error').classList.add('hidden');
+    }
+
+    function showRegisterForm() {
+        document.getElementById('auth-forms').classList.remove('hidden');
+        document.getElementById('register-form-container').classList.remove('hidden');
+        document.getElementById('login-form-container').classList.add('hidden');
+        document.getElementById('login-error').classList.add('hidden');
+        document.getElementById('register-error').classList.add('hidden');
+    }
+
+    async function handleLogin(e) {
+        e.preventDefault();
+
+        const username = document.getElementById('login-username').value;
+        const password = document.getElementById('login-password').value;
+        const errorDiv = document.getElementById('login-error');
+
+        try {
+            const response = await fetch('/api/login', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                document.getElementById('auth-forms').classList.add('hidden');
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('username-display').textContent = username;
+                errorDiv.classList.add('hidden');
+                // Redirect to admin if admin user
+                if (data.role === 'admin') {
+                    window.location.href = '/admin';
+                }
+            } else {
+                errorDiv.textContent = data.error || 'Login failed';
+                errorDiv.classList.remove('hidden');
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error occurred';
+            errorDiv.classList.remove('hidden');
+        }
+    }
+
+    async function handleRegister(e) {
+        e.preventDefault();
+
+        const username = document.getElementById('register-username').value;
+        const email = document.getElementById('register-email').value;
+        const password = document.getElementById('register-password').value;
+        const errorDiv = document.getElementById('register-error');
+
+        try {
+            const response = await fetch('/api/register', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/json',
+                },
+                body: JSON.stringify({ username, password, email }),
+            });
+
+            const data = await response.json();
+
+            if (response.ok) {
+                // Registration successful, show login form
+                showLoginForm();
+                document.getElementById('login-username').value = username;
+                alert('Registration successful! Please login.');
+            } else {
+                errorDiv.textContent = data.error || 'Registration failed';
+                errorDiv.classList.remove('hidden');
+            }
+        } catch (error) {
+            errorDiv.textContent = 'Network error occurred';
+            errorDiv.classList.remove('hidden');
+        }
+    }
+
+    async function handleLogout() {
+        try {
+            await fetch('/api/logout', { method: 'POST' });
+        } catch (error) {
+            console.error('Logout error:', error);
+        }
+
+        document.getElementById('auth-buttons').classList.remove('hidden');
+        document.getElementById('user-info').classList.add('hidden');
+        document.getElementById('auth-forms').classList.add('hidden');
+        document.getElementById('username-display').textContent = '';
+    }
+
+    async function checkAuthStatus() {
+        try {
+            const response = await fetch('/api/user/profile');
+            if (response.ok) {
+                const data = await response.json();
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('username-display').textContent = data.username;
+            }
+        } catch (error) {
+            // Not authenticated, show login/register buttons
+        }
+    }
+
+    // Initialize authentication
+    initAuth();
+});

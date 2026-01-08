@@ -50,6 +50,18 @@
                 </select>
             </div>
 
+            <!-- User authentication -->
+            <div id="auth-section" class="flex items-center gap-4">
+                <div id="user-info" class="hidden text-sm text-text-secondary">
+                    Welcome, <span id="username-display"></span>!
+                    <button id="logout-btn" class="ml-2 text-red-600 hover:text-red-800">Logout</button>
+                </div>
+                <div id="auth-buttons" class="flex items-center gap-2">
+                    <button id="login-btn" class="text-sm text-primary hover:text-primary-dark">Login</button>
+                    <button id="register-btn" class="text-sm bg-primary text-white px-3 py-1 rounded hover:bg-primary-dark">Register</button>
+                </div>
+            </div>
+
             <!-- Mobile nav toggle -->
             <div class="md:hidden">
                 <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
@@ -77,6 +89,74 @@
             </div>
         </div>
     </header>
+
+    <!-- Main content area -->
+    <main class="flex-1 flex items-center justify-center px-4 py-8">
+        <div class="w-full max-w-3xl">
+            <div class="text-center mb-6">
+                <h1 class="text-2xl font-bold">Explore the Bitcoin Blockchain</h1>
+                <p class="text-text-secondary mt-2">Search blocks, transactions, and addresses</p>
+            </div>
+
+            <div id="result-container" class="mt-4"></div>
+        </div>
+
+        <!-- Authentication Forms -->
+        <div id="auth-forms" class="hidden w-full max-w-md mx-auto">
+            <!-- Login Form -->
+            <div id="login-form-container" class="bg-bg-secondary rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold mb-4 text-center">Login</h2>
+                <form id="login-form">
+                    <div class="mb-4">
+                        <label for="login-username" class="block text-sm font-medium mb-2">Username</label>
+                        <input type="text" id="login-username" name="username" required
+                               class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div class="mb-6">
+                        <label for="login-password" class="block text-sm font-medium mb-2">Password</label>
+                        <input type="password" id="login-password" name="password" required
+                               class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark">
+                        Login
+                    </button>
+                </form>
+                <div id="login-error" class="mt-4 text-red-600 text-center hidden"></div>
+                <div class="mt-4 text-center">
+                    <button id="switch-to-register" class="text-primary hover:text-primary-dark">Don't have an account? Register</button>
+                </div>
+            </div>
+
+            <!-- Registration Form -->
+            <div id="register-form-container" class="hidden bg-bg-secondary rounded-lg shadow p-6">
+                <h2 class="text-xl font-bold mb-4 text-center">Register</h2>
+                <form id="register-form">
+                    <div class="mb-4">
+                        <label for="register-username" class="block text-sm font-medium mb-2">Username</label>
+                        <input type="text" id="register-username" name="username" required
+                               class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div class="mb-4">
+                        <label for="register-email" class="block text-sm font-medium mb-2">Email (optional)</label>
+                        <input type="email" id="register-email" name="email"
+                               class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <div class="mb-6">
+                        <label for="register-password" class="block text-sm font-medium mb-2">Password</label>
+                        <input type="password" id="register-password" name="password" required minlength="6"
+                               class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
+                    </div>
+                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark">
+                        Register
+                    </button>
+                </form>
+                <div id="register-error" class="mt-4 text-red-600 text-center hidden"></div>
+                <div class="mt-4 text-center">
+                    <button id="switch-to-login" class="text-primary hover:text-primary-dark">Already have an account? Login</button>
+                </div>
+            </div>
+        </div>
+    </main>
 
     <!-- Main content area -->
     <main class="flex-1 flex items-center justify-center px-4 py-8">

@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -23,6 +22,7 @@ import (
 	"github.com/go-resty/resty/v2"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // Simple i18n support
@@ -74,15 +74,21 @@ var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
 
+// User struct definition
+type User struct {
+	Username string    `json:"username"`
+	Password string    `json:"-"`    // Hashed password, never sent in JSON
+	Role     string    `json:"role"` // "admin" or "user"
+	Created  time.Time `json:"created"`
+}
+
 // User authentication variables
 var (
-	adminUser = User{
-		Username: getEnvWithDefault("ADMIN_USERNAME", "admin"),
-		Password: getEnvWithDefault("ADMIN_PASSWORD", "admin123"), // In production, use hashed passwords
-	}
+	users     = make(map[string]User) // username -> User
+	userMutex sync.RWMutex
 	// In-memory session store as a fallback
 	sessionStore = make(map[string]string)
-	sessionMutex = sync.RWMutex{}
+	sessionMutex sync.RWMutex
 )
 
 // generateSessionID creates a random session ID
@@ -141,6 +147,157 @@ func destroySession(sessionID string) {
 	}
 }
 
+// loadUsersFromRedis loads all users from Redis
+func loadUsersFromRedis() error {
+	if rdb == nil {
+		return nil // No Redis, use in-memory only
+	}
+
+	keys, err := rdb.Keys(ctx, "user:*").Result()
+	if err != nil {
+		return err
+	}
+
+	userMutex.Lock()
+	defer userMutex.Unlock()
+
+	for _, key := range keys {
+		username := strings.TrimPrefix(key, "user:")
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			log.WithError(err).WithField("username", username).Warn("Failed to load user from Redis")
+			continue
+		}
+
+		var user User
+		if err := json.Unmarshal([]byte(data), &user); err != nil {
+			log.WithError(err).WithField("username", username).Warn("Failed to unmarshal user from Redis")
+			continue
+		}
+
+		users[username] = user
+	}
+
+	return nil
+}
+
+// saveUserToRedis saves a user to Redis
+func saveUserToRedis(user User) error {
+	if rdb == nil {
+		return nil // No Redis, use in-memory only
+	}
+
+	data, err := json.Marshal(user)
+	if err != nil {
+		return err
+	}
+
+	return rdb.Set(ctx, "user:"+user.Username, data, 0).Err() // No expiration
+}
+
+// initializeDefaultAdmin creates the default admin user if it doesn't exist
+func initializeDefaultAdmin() {
+	// First try to load existing users from Redis
+	if err := loadUsersFromRedis(); err != nil {
+		log.WithError(err).Warn("Failed to load users from Redis")
+	}
+
+	userMutex.Lock()
+	defer userMutex.Unlock()
+
+	adminUsername := getEnvWithDefault("ADMIN_USERNAME", "admin")
+	if _, exists := users[adminUsername]; !exists {
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(getEnvWithDefault("ADMIN_PASSWORD", "admin123")), bcrypt.DefaultCost)
+		if err != nil {
+			log.WithError(err).Fatal("Failed to hash default admin password")
+		}
+
+		adminUser := User{
+			Username: adminUsername,
+			Password: string(hashedPassword),
+			Role:     "admin",
+			Created:  time.Now(),
+		}
+
+		users[adminUsername] = adminUser
+
+		// Save to Redis
+		if err := saveUserToRedis(adminUser); err != nil {
+			log.WithError(err).Warn("Failed to save default admin to Redis")
+		}
+
+		log.Info("Default admin user initialized")
+	}
+}
+
+// createUser adds a new user to the system
+func createUser(username, password, role string) error {
+	userMutex.Lock()
+	defer userMutex.Unlock()
+
+	if _, exists := users[username]; exists {
+		return errors.New("user already exists")
+	}
+
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	user := User{
+		Username: username,
+		Password: string(hashedPassword),
+		Role:     role,
+		Created:  time.Now(),
+	}
+
+	users[username] = user
+
+	// Save to Redis
+	if rdb != nil {
+		data, _ := json.Marshal(user)
+		_ = rdb.Set(ctx, "user:"+user.Username, data, 0).Err()
+	}
+
+	return nil
+}
+
+// getUser retrieves a user by username
+func getUser(username string) (User, bool) {
+	userMutex.RLock()
+	defer userMutex.RUnlock()
+	user, exists := users[username]
+	return user, exists
+}
+
+// authenticateUser checks if username/password combination is valid
+func authenticateUser(username, password string) (User, bool) {
+	user, exists := getUser(username)
+	if !exists {
+		return User{}, false
+	}
+
+	err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(password))
+	return user, err == nil
+}
+
+// userProfileHandler returns the profile of the authenticated user
+func userProfileHandler(c *gin.Context) {
+	username, exists := c.Get("username")
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in session"})
+		return
+	}
+
+	user, exists := getUser(username.(string))
+	if !exists {
+		c.JSON(http.StatusNotFound, gin.H{"error": "User profile not found"})
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
 // authMiddleware checks for valid authentication
 func authMiddleware(c *gin.Context) {
 	sessionID, err := c.Cookie("session_id")
@@ -157,13 +314,43 @@ func authMiddleware(c *gin.Context) {
 		return
 	}
 
+	user, exists := getUser(username)
+	if !exists {
+		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		c.Abort()
+		return
+	}
+
 	c.Set("username", username)
+	c.Set("role", user.Role)
 	c.Next()
 }
 
-type User struct {
-	Username string `json:"username"`
-	Password string `json:"password"` // In production, this should be hashed
+// requireRoleMiddleware checks for specific role access
+func requireRoleMiddleware(requiredRole string) gin.HandlerFunc {
+	return func(c *gin.Context) {
+		role, exists := c.Get("role")
+		if !exists {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Role information missing"})
+			c.Abort()
+			return
+		}
+
+		userRole, ok := role.(string)
+		if !ok {
+			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid role format"})
+			c.Abort()
+			return
+		}
+
+		if userRole != requiredRole && userRole != "admin" { // Admin can access everything
+			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			c.Abort()
+			return
+		}
+
+		c.Next()
+	}
 }
 
 // rateLimitMiddleware limits requests to 10 per minute per IP
@@ -258,7 +445,7 @@ func main() {
 	sentryDSN := getEnvWithDefault("SENTRY_DSN", "")
 	if sentryDSN != "" {
 		if initErr := sentry.Init(sentry.ClientOptions{
-			Dsn:              sentryDSN,
+			Dsn: sentryDSN,
 			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
 			TracesSampleRate: 1.0,
 		}); initErr != nil {
@@ -287,6 +474,9 @@ func main() {
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")
 	rdb.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru")
 
+	// Initialize default admin user
+	initializeDefaultAdmin()
+
 	// Serve static assets: images plus specific static files
 	r.Static("/images", "./images")
 	// Serve built Tailwind CSS
@@ -304,11 +494,22 @@ func main() {
 
 	r.POST("/api/feedback", feedbackHandler)
 
-	// Admin routes
+	// Authentication routes
 	r.POST("/api/login", loginHandler)
 	r.POST("/api/logout", logoutHandler)
+	r.POST("/api/register", registerHandler)
+
+	// User routes (require authentication)
+	user := r.Group("/api/user")
+	user.Use(authMiddleware)
+	{
+		user.GET("/profile", userProfileHandler)
+	}
+
+	// Admin routes (require authentication and admin role)
 	admin := r.Group("/api/admin")
 	admin.Use(authMiddleware)
+	admin.Use(requireRoleMiddleware("admin"))
 	{
 		admin.GET("/status", adminStatusHandler)
 		admin.GET("/cache", adminCacheHandler)
@@ -414,24 +615,30 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	// Simple authentication (in production, use proper password hashing)
-	if subtle.ConstantTimeCompare([]byte(loginReq.Username), []byte(adminUser.Username)) == 1 &&
-		subtle.ConstantTimeCompare([]byte(loginReq.Password), []byte(adminUser.Password)) == 1 {
-
-		sessionID, err := createSession(loginReq.Username)
-		if err != nil {
-			log.WithError(err).Error("Failed to create session")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
-			return
-		}
-
-		c.SetCookie("session_id", sessionID, 86400, "/", "", false, true) // 24 hours
-		c.JSON(http.StatusOK, gin.H{"message": "Login successful", "username": loginReq.Username})
-		log.WithField("username", loginReq.Username).Info("User logged in successfully")
-	} else {
+	user, authenticated := authenticateUser(loginReq.Username, loginReq.Password)
+	if !authenticated {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
 		log.WithField("username", loginReq.Username).Warn("Failed login attempt")
+		return
 	}
+
+	sessionID, err := createSession(loginReq.Username)
+	if err != nil {
+		log.WithError(err).Error("Failed to create session")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		return
+	}
+
+	c.SetCookie("session_id", sessionID, 86400, "/", "", false, true) // 24 hours
+	c.JSON(http.StatusOK, gin.H{
+		"message":  "Login successful",
+		"username": loginReq.Username,
+		"role":     user.Role,
+	})
+	log.WithFields(log.Fields{
+		"username": loginReq.Username,
+		"role":     user.Role,
+	}).Info("User logged in successfully")
 }
 
 // logoutHandler handles user logout
@@ -443,6 +650,45 @@ func logoutHandler(c *gin.Context) {
 
 	c.SetCookie("session_id", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
+}
+
+// registerHandler handles user registration
+func registerHandler(c *gin.Context) {
+	var registerReq struct {
+		Username string `json:"username" binding:"required"`
+		Password string `json:"password" binding:"required"`
+		Email    string `json:"email"` // Optional for now
+	}
+
+	if err := c.ShouldBindJSON(&registerReq); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	// Basic validation
+	if len(registerReq.Username) < 3 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be at least 3 characters"})
+		return
+	}
+	if len(registerReq.Password) < 6 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
+		return
+	}
+
+	// Create user with default "user" role
+	err := createUser(registerReq.Username, registerReq.Password, "user")
+	if err != nil {
+		if err.Error() == "user already exists" {
+			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+		} else {
+			log.WithError(err).Error("Failed to create user")
+			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+		}
+		return
+	}
+
+	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully"})
+	log.WithField("username", registerReq.Username).Info("New user registered")
 }
 
 // feedbackHandler handles user feedback submissions
@@ -485,8 +731,8 @@ func feedbackHandler(c *gin.Context) {
 	}
 
 	log.WithFields(log.Fields{
-		"name":    feedbackReq.Name,
-		"email":   feedbackReq.Email,
+		"name":  feedbackReq.Name,
+		"email": feedbackReq.Email,
 		"message": func() string {
 			if len(feedbackReq.Message) > 100 {
 				return feedbackReq.Message[:100]
@@ -501,6 +747,7 @@ func feedbackHandler(c *gin.Context) {
 // adminStatusHandler provides system status for admin
 func adminStatusHandler(c *gin.Context) {
 	username, _ := c.Get("username")
+	role, _ := c.Get("role")
 
 	// Get Redis info
 	info := rdb.Info(ctx, "memory").Val()
@@ -513,6 +760,7 @@ func adminStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"status":             "ok",
 		"user":               username,
+		"role":               role,
 		"redis_memory":       info,
 		"active_rate_limits": activeLimits,
 		"timestamp":          time.Now().Unix(),
@@ -898,7 +1146,7 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	return result, nil
 }
 
- // updated to use rdb Redis client
+// updated to use rdb Redis client
 func getAddressDetails(address string) (map[string]interface{}, error) {
 	cacheKey := "address:" + address
 	cached, err := rdb.Get(context.Background(), cacheKey).Result()
