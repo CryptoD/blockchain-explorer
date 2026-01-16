@@ -507,6 +507,7 @@ func main() {
 	r.GET("/api/metrics", metricsHandler)
 	r.GET("/api/network-status", networkStatusHandler)
 	r.GET("/api/rates", ratesHandler)
+	r.GET("/api/price-history", priceHistoryHandler)
 
 	r.POST("/api/feedback", feedbackHandler)
 
@@ -1092,6 +1093,40 @@ func networkStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+func priceHistoryHandler(c *gin.Context) {
+	if rdb == nil {
+		handleError(c, errors.New("redis not available"), http.StatusInternalServerError)
+		return
+	}
+
+	// Get history for the last 24 hours (288 data points at 5-minute intervals)
+	history, err := rdb.ZRevRangeWithScores(ctx, "btc_price_history", 0, 287).Result()
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	type PricePoint struct {
+		Timestamp int64   `json:"timestamp"`
+		Price     float64 `json:"price"`
+	}
+
+	result := make([]PricePoint, 0, len(history))
+	for _, z := range history {
+		priceStr, ok := z.Member.(string)
+		if !ok {
+			continue
+		}
+		price, _ := strconv.ParseFloat(priceStr, 64)
+		result = append(result, PricePoint{
+			Timestamp: int64(z.Score),
+			Price:     price,
+		})
+	}
+
+	c.JSON(http.StatusOK, result)
+}
+
 func ratesHandler(c *gin.Context) {
 	cacheKey := "btc:rates"
 	ctx := context.Background()
@@ -1395,6 +1430,23 @@ func blockchairRequest(method string, params []interface{}) (*resty.Response, er
 func collectMetrics() {
 	// Use a float64 timestamp for Redis scores
 	now := float64(time.Now().Unix())
+
+	// Collect Bitcoin price for history
+	resp, err := httpClient.R().
+		SetHeader("Accept", "application/json").
+		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
+	if err == nil {
+		var rates map[string]map[string]float64
+		if err := json.Unmarshal(resp.Body(), &rates); err == nil {
+			if btc, ok := rates["bitcoin"]; ok {
+				if usd, ok := btc["usd"]; ok {
+					rdb.ZAdd(context.Background(), "btc_price_history", redis.Z{Score: now, Member: usd})
+					// Keep only last 30 days of 5-minute data (roughly 8640 points)
+					rdb.ZRemRangeByRank(context.Background(), "btc_price_history", 0, -8641)
+				}
+			}
+		}
+	}
 
 	// Get mempool size
 	mempoolResp, err := blockchairRequest("getmempoolinfo", []interface{}{})
