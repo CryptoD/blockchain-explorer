@@ -98,6 +98,18 @@ type Portfolio struct {
 	Updated     time.Time       `json:"updated"`
 }
 
+type PriceAlert struct {
+	ID          string    `json:"id"`
+	Username    string    `json:"username"`
+	Asset       string    `json:"asset"`       // e.g., "bitcoin"
+	TargetPrice float64   `json:"target_price"`
+	Currency    string    `json:"currency"`     // e.g., "usd"
+	Condition   string    `json:"condition"`    // "above" or "below"
+	IsActive    bool      `json:"is_active"`
+	TriggeredAt *time.Time `json:"triggered_at"`
+	Created     time.Time `json:"created"`
+}
+
 // User authentication variables
 var (
 	users     = make(map[string]User) // username -> User
@@ -506,6 +518,20 @@ func main() {
 	r.GET("/api/autocomplete", autocompleteHandler)
 	r.GET("/api/metrics", metricsHandler)
 	r.GET("/api/network-status", networkStatusHandler)
+
+	r.GET("/api/rates", ratesHandler)
+	r.GET("/api/price-history", priceHistoryHandler)
+
+	r.POST("/api/feedback", feedbackHandler)
+
+	// Price alert routes
+	priceAlerts := r.Group("/api/price-alerts")
+	priceAlerts.Use(authMiddleware)
+	{
+		priceAlerts.GET("", listPriceAlertsHandler)
+		priceAlerts.POST("", createPriceAlertHandler)
+		priceAlerts.DELETE("/:id", deletePriceAlertHandler)
+	}
 	r.GET("/api/rates", ratesHandler)
 	r.GET("/api/price-history", priceHistoryHandler)
 
@@ -567,6 +593,16 @@ func main() {
 				}
 				log.Info("Prefetched latest blocks and transactions")
 			}()
+			<-ticker.C
+		}
+	}()
+
+	go func() {
+		log.Info("Starting background price alert worker")
+		ticker := time.NewTicker(2 * time.Minute)
+		defer ticker.Stop()
+		for {
+			checkPriceAlerts()
 			<-ticker.C
 		}
 	}()
@@ -1518,6 +1554,164 @@ func collectMetrics() {
 					rdb.ZAdd(context.Background(), "tx_volume", redis.Z{Score: now, Member: totalTx})
 				}
 			}
+		}
+	}
+}
+
+// Price alert handlers and worker
+
+func listPriceAlertsHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	keys, err := rdb.Keys(ctx, fmt.Sprintf("alerts:%s:*", username)).Result()
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	alerts := []PriceAlert{}
+	for _, key := range keys {
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		var alert PriceAlert
+		if err := json.Unmarshal([]byte(data), &alert); err == nil {
+			alerts = append(alerts, alert)
+		}
+	}
+
+	c.JSON(http.StatusOK, alerts)
+}
+
+func createPriceAlertHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	var req struct {
+		Asset       string  `json:"asset" binding:"required"`
+		TargetPrice float64 `json:"target_price" binding:"required"`
+		Currency    string  `json:"currency" binding:"required"`
+		Condition   string  `json:"condition" binding:"required"` // "above" or "below"
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	if req.Condition != "above" && req.Condition != "below" {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Condition must be 'above' or 'below'"})
+		return
+	}
+
+	alertID := fmt.Sprintf("%d", time.Now().UnixNano())
+	alert := PriceAlert{
+		ID:          alertID,
+		Username:    username.(string),
+		Asset:       req.Asset,
+		TargetPrice: req.TargetPrice,
+		Currency:    strings.ToLower(req.Currency),
+		Condition:   req.Condition,
+		IsActive:    true,
+		Created:     time.Now(),
+	}
+
+	data, _ := json.Marshal(alert)
+	err := rdb.Set(ctx, fmt.Sprintf("alerts:%s:%s", username, alertID), data, 0).Err()
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusCreated, alert)
+}
+
+func deletePriceAlertHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+	alertID := c.Param("id")
+
+	err := rdb.Del(ctx, fmt.Sprintf("alerts:%s:%s", username, alertID)).Err()
+	if err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{"message": "Alert deleted"})
+}
+
+func checkPriceAlerts() {
+	log.Debug("Checking price alerts")
+
+	// Get Bitcoin price
+	resp, err := httpClient.R().
+		SetHeader("Accept", "application/json").
+		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur,gbp,jpy")
+
+	if err != nil {
+		log.WithError(err).Error("Failed to fetch prices for alerts")
+		return
+	}
+
+	var rates map[string]map[string]float64
+	if err := json.Unmarshal(resp.Body(), &rates); err != nil {
+		log.WithError(err).Error("Failed to unmarshal prices for alerts")
+		return
+	}
+
+	btcRates := rates["bitcoin"]
+
+	// Get all alert keys
+	keys, err := rdb.Keys(ctx, "alerts:*:*").Result()
+	if err != nil {
+		log.WithError(err).Error("Failed to list alert keys")
+		return
+	}
+
+	for _, key := range keys {
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+
+		var alert PriceAlert
+		if err := json.Unmarshal([]byte(data), &alert); err != nil {
+			continue
+		}
+
+		if !alert.IsActive {
+			continue
+		}
+
+		currentPrice, ok := btcRates[alert.Currency]
+		if !ok {
+			continue
+		}
+
+		triggered := false
+		if alert.Condition == "above" && currentPrice >= alert.TargetPrice {
+			triggered = true
+		} else if alert.Condition == "below" && currentPrice <= alert.TargetPrice {
+			triggered = true
+		}
+
+		if triggered {
+			now := time.Now()
+			alert.IsActive = false
+			alert.TriggeredAt = &now
+
+			// Update in Redis
+			updatedData, _ := json.Marshal(alert)
+			rdb.Set(ctx, key, updatedData, 0)
+
+			// Log notification (proper notification system could involve email/webhook/push)
+			log.WithFields(log.Fields{
+				"username":     alert.Username,
+				"asset":        alert.Asset,
+				"target":       alert.TargetPrice,
+				"current":      currentPrice,
+				"currency":     alert.Currency,
+				"condition":    alert.Condition,
+			}).Info("Price Alert Triggered!")
 		}
 	}
 }
