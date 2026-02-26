@@ -514,8 +514,13 @@ func main() {
 	r.StaticFile("/", "index.html")
 	r.StaticFile("/admin", "admin.html")
 	r.StaticFile("/dashboard", "dashboard.html")
+	r.StaticFile("/symbols", "symbols.html")
 
 	r.GET("/api/search", searchHandler)
+
+	// Enhanced search with filters and sorting
+	r.GET("/api/search/advanced", advancedSearchHandler)
+	r.GET("/api/search/categories", getSymbolCategoriesHandler)
 
 	r.GET("/api/autocomplete", autocompleteHandler)
 	r.GET("/api/metrics", metricsHandler)
@@ -1052,6 +1057,348 @@ func autocompleteHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+}
+
+// SymbolInfo represents a cryptocurrency or asset symbol
+type SymbolInfo struct {
+	Symbol      string  `json:"symbol"`
+	Name        string  `json:"name"`
+	Type        string  `json:"type"`        // "crypto", "stock", "commodity", etc.
+	Category    string  `json:"category"`    // e.g., "layer1", "defi", "nft", "payment"
+	MarketCap   float64 `json:"market_cap"`
+	Price       float64 `json:"price"`
+	Volume24h   float64 `json:"volume_24h"`
+	Change24h   float64 `json:"change_24h"`  // percentage change
+	Rank        int     `json:"rank"`
+	IsActive    bool    `json:"is_active"`
+	ListedSince int64   `json:"listed_since"` // timestamp
+}
+
+// SearchFilters represents the filter parameters for symbol search
+type SearchFilters struct {
+	Types      []string `json:"types"`       // Filter by symbol types
+	Categories []string `json:"categories"`  // Filter by categories
+	MinPrice   float64  `json:"min_price"`   // Minimum price filter
+	MaxPrice   float64  `json:"max_price"`   // Maximum price filter
+	MinMarketCap float64 `json:"min_market_cap"`
+	MaxMarketCap float64 `json:"max_market_cap"`
+	IsActive   *bool    `json:"is_active"`   // Filter by active status
+}
+
+// SortOptions represents sorting configuration
+type SortOptions struct {
+	Field     string `json:"field"`     // Field to sort by
+	Direction string `json:"direction"` // "asc" or "desc"
+}
+
+// In-memory symbol database (in production, this would be a real database)
+var (
+	symbolDatabase = []SymbolInfo{
+		{Symbol: "BTC", Name: "Bitcoin", Type: "crypto", Category: "layer1", MarketCap: 850000000000, Price: 45000.00, Volume24h: 25000000000, Change24h: 2.5, Rank: 1, IsActive: true, ListedSince: 1279408155},
+		{Symbol: "ETH", Name: "Ethereum", Type: "crypto", Category: "layer1", MarketCap: 280000000000, Price: 2300.00, Volume24h: 15000000000, Change24h: -1.2, Rank: 2, IsActive: true, ListedSince: 1438905600},
+		{Symbol: "USDT", Name: "Tether", Type: "crypto", Category: "stablecoin", MarketCap: 95000000000, Price: 1.00, Volume24h: 45000000000, Change24h: 0.01, Rank: 3, IsActive: true, ListedSince: 1420070400},
+		{Symbol: "BNB", Name: "BNB", Type: "crypto", Category: "exchange", MarketCap: 45000000000, Price: 320.00, Volume24h: 1200000000, Change24h: 0.8, Rank: 4, IsActive: true, ListedSince: 1502928000},
+		{Symbol: "SOL", Name: "Solana", Type: "crypto", Category: "layer1", MarketCap: 42000000000, Price: 98.00, Volume24h: 2500000000, Change24h: 5.2, Rank: 5, IsActive: true, ListedSince: 1584403200},
+		{Symbol: "XRP", Name: "XRP", Type: "crypto", Category: "payment", MarketCap: 28000000000, Price: 0.52, Volume24h: 1800000000, Change24h: -0.5, Rank: 6, IsActive: true, ListedSince: 1386547200},
+		{Symbol: "USDC", Name: "USD Coin", Type: "crypto", Category: "stablecoin", MarketCap: 26000000000, Price: 1.00, Volume24h: 8000000000, Change24h: 0.0, Rank: 7, IsActive: true, ListedSince: 1538352000},
+		{Symbol: "ADA", Name: "Cardano", Type: "crypto", Category: "layer1", MarketCap: 15000000000, Price: 0.42, Volume24h: 450000000, Change24h: 1.8, Rank: 8, IsActive: true, ListedSince: 1506816000},
+		{Symbol: "AVAX", Name: "Avalanche", Type: "crypto", Category: "layer1", MarketCap: 12000000000, Price: 32.00, Volume24h: 600000000, Change24h: 3.1, Rank: 9, IsActive: true, ListedSince: 1609459200},
+		{Symbol: "DOGE", Name: "Dogecoin", Type: "crypto", Category: "meme", MarketCap: 11000000000, Price: 0.08, Volume24h: 900000000, Change24h: -2.1, Rank: 10, IsActive: true, ListedSince: 1388966400},
+		{Symbol: "LINK", Name: "Chainlink", Type: "crypto", Category: "defi", MarketCap: 8500000000, Price: 14.50, Volume24h: 400000000, Change24h: 2.8, Rank: 11, IsActive: true, ListedSince: 1509494400},
+		{Symbol: "UNI", Name: "Uniswap", Type: "crypto", Category: "defi", MarketCap: 5200000000, Price: 6.80, Volume24h: 250000000, Change24h: 4.2, Rank: 12, IsActive: true, ListedSince: 1600041600},
+		{Symbol: "AAVE", Name: "Aave", Type: "crypto", Category: "defi", MarketCap: 1800000000, Price: 120.00, Volume24h: 120000000, Change24h: 1.5, Rank: 13, IsActive: true, ListedSince: 1609459200},
+		{Symbol: "SUSHI", Name: "SushiSwap", Type: "crypto", Category: "defi", MarketCap: 450000000, Price: 1.80, Volume24h: 45000000, Change24h: -1.8, Rank: 14, IsActive: true, ListedSince: 1598918400},
+		{Symbol: "COMP", Name: "Compound", Type: "crypto", Category: "defi", MarketCap: 380000000, Price: 52.00, Volume24h: 28000000, Change24h: 0.9, Rank: 15, IsActive: true, ListedSince: 1592179200},
+		{Symbol: "MKR", Name: "Maker", Type: "crypto", Category: "defi", MarketCap: 1600000000, Price: 1750.00, Volume24h: 85000000, Change24h: -0.7, Rank: 16, IsActive: true, ListedSince: 1514764800},
+		{Symbol: "YFI", Name: "yearn.finance", Type: "crypto", Category: "defi", MarketCap: 220000000, Price: 6600.00, Volume24h: 18000000, Change24h: 3.5, Rank: 17, IsActive: true, ListedSince: 1598918400},
+		{Symbol: "SNX", Name: "Synthetix", Type: "crypto", Category: "defi", MarketCap: 650000000, Price: 2.10, Volume24h: 35000000, Change24h: -2.3, Rank: 18, IsActive: true, ListedSince: 1567296000},
+		{Symbol: "CRV", Name: "Curve DAO Token", Type: "crypto", Category: "defi", MarketCap: 480000000, Price: 0.55, Volume24h: 42000000, Change24h: 1.2, Rank: 19, IsActive: true, ListedSince: 1593561600},
+		{Symbol: "BAL", Name: "Balancer", Type: "crypto", Category: "defi", MarketCap: 180000000, Price: 3.20, Volume24h: 12000000, Change24h: -0.5, Rank: 20, IsActive: true, ListedSince: 1590969600},
+	}
+	symbolDBMutex sync.RWMutex
+)
+
+// parseSearchFilters parses filter parameters from the request
+func parseSearchFilters(c *gin.Context) SearchFilters {
+	filters := SearchFilters{}
+
+	// Parse types filter (comma-separated)
+	if types := c.Query("types"); types != "" {
+		filters.Types = strings.Split(types, ",")
+	}
+
+	// Parse categories filter (comma-separated)
+	if categories := c.Query("categories"); categories != "" {
+		filters.Categories = strings.Split(categories, ",")
+	}
+
+	// Parse price range
+	if minPrice := c.Query("min_price"); minPrice != "" {
+		filters.MinPrice, _ = strconv.ParseFloat(minPrice, 64)
+	}
+	if maxPrice := c.Query("max_price"); maxPrice != "" {
+		filters.MaxPrice, _ = strconv.ParseFloat(maxPrice, 64)
+	}
+
+	// Parse market cap range
+	if minCap := c.Query("min_market_cap"); minCap != "" {
+		filters.MinMarketCap, _ = strconv.ParseFloat(minCap, 64)
+	}
+	if maxCap := c.Query("max_market_cap"); maxCap != "" {
+		filters.MaxMarketCap, _ = strconv.ParseFloat(maxCap, 64)
+	}
+
+	// Parse active status
+	if active := c.Query("is_active"); active != "" {
+		isActive := active == "true"
+		filters.IsActive = &isActive
+	}
+
+	return filters
+}
+
+// parseSortOptions parses sorting parameters from the request
+func parseSortOptions(c *gin.Context) SortOptions {
+	sort := SortOptions{
+		Field:     c.DefaultQuery("sort_by", "rank"),
+		Direction: c.DefaultQuery("sort_dir", "asc"),
+	}
+
+	// Validate sort field
+	validFields := map[string]bool{
+		"symbol": true, "name": true, "type": true, "category": true,
+		"market_cap": true, "price": true, "volume_24h": true,
+		"change_24h": true, "rank": true, "listed_since": true,
+	}
+	if !validFields[sort.Field] {
+		sort.Field = "rank"
+	}
+
+	// Validate direction
+	if sort.Direction != "asc" && sort.Direction != "desc" {
+		sort.Direction = "asc"
+	}
+
+	return sort
+}
+
+// matchesFilters checks if a symbol matches the given filters
+func matchesFilters(symbol SymbolInfo, filters SearchFilters) bool {
+	// Type filter
+	if len(filters.Types) > 0 {
+		found := false
+		for _, t := range filters.Types {
+			if strings.EqualFold(symbol.Type, t) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// Category filter
+	if len(filters.Categories) > 0 {
+		found := false
+		for _, c := range filters.Categories {
+			if strings.EqualFold(symbol.Category, c) {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+
+	// Price range filter
+	if filters.MinPrice > 0 && symbol.Price < filters.MinPrice {
+		return false
+	}
+	if filters.MaxPrice > 0 && symbol.Price > filters.MaxPrice {
+		return false
+	}
+
+	// Market cap range filter
+	if filters.MinMarketCap > 0 && symbol.MarketCap < filters.MinMarketCap {
+		return false
+	}
+	if filters.MaxMarketCap > 0 && symbol.MarketCap > filters.MaxMarketCap {
+		return false
+	}
+
+	// Active status filter
+	if filters.IsActive != nil && symbol.IsActive != *filters.IsActive {
+		return false
+	}
+
+	return true
+}
+
+// sortSymbols sorts the symbols based on the given options
+func sortSymbols(symbols []SymbolInfo, sort SortOptions) {
+	less := func(i, j int) bool {
+		var result bool
+		switch sort.Field {
+		case "symbol":
+			result = symbols[i].Symbol < symbols[j].Symbol
+		case "name":
+			result = symbols[i].Name < symbols[j].Name
+		case "type":
+			result = symbols[i].Type < symbols[j].Type
+		case "category":
+			result = symbols[i].Category < symbols[j].Category
+		case "market_cap":
+			result = symbols[i].MarketCap < symbols[j].MarketCap
+		case "price":
+			result = symbols[i].Price < symbols[j].Price
+		case "volume_24h":
+			result = symbols[i].Volume24h < symbols[j].Volume24h
+		case "change_24h":
+			result = symbols[i].Change24h < symbols[j].Change24h
+		case "rank":
+			result = symbols[i].Rank < symbols[j].Rank
+		case "listed_since":
+			result = symbols[i].ListedSince < symbols[j].ListedSince
+		default:
+			result = symbols[i].Rank < symbols[j].Rank
+		}
+
+		if sort.Direction == "desc" {
+			return !result
+		}
+		return result
+	}
+
+	// Simple bubble sort for simplicity (for larger datasets, use sort.Slice)
+	n := len(symbols)
+	for i := 0; i < n-1; i++ {
+		for j := 0; j < n-i-1; j++ {
+			if !less(j, j+1) {
+				symbols[j], symbols[j+1] = symbols[j+1], symbols[j]
+			}
+		}
+	}
+}
+
+// advancedSearchHandler handles advanced symbol search with filters and sorting
+func advancedSearchHandler(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	log.WithField("query", query).Info("Advanced search request received")
+
+	// Parse pagination
+	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
+	if page < 1 {
+		page = 1
+	}
+	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	// Parse filters and sort options
+	filters := parseSearchFilters(c)
+	sort := parseSortOptions(c)
+
+	// Search and filter symbols
+	symbolDBMutex.RLock()
+	var results []SymbolInfo
+	for _, symbol := range symbolDatabase {
+		// Text search on symbol or name
+		if query != "" {
+			queryLower := strings.ToLower(query)
+			if !strings.Contains(strings.ToLower(symbol.Symbol), queryLower) &&
+				!strings.Contains(strings.ToLower(symbol.Name), queryLower) {
+				continue
+			}
+		}
+
+		// Apply filters
+		if matchesFilters(symbol, filters) {
+			results = append(results, symbol)
+		}
+	}
+	symbolDBMutex.RUnlock()
+
+	// Sort results
+	sortSymbols(results, sort)
+
+	// Pagination
+	total := len(results)
+	start := (page - 1) * pageSize
+	end := start + pageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	paginatedResults := results[start:end]
+
+	// Get available filter options
+	availableTypes := make(map[string]bool)
+	availableCategories := make(map[string]bool)
+	symbolDBMutex.RLock()
+	for _, symbol := range symbolDatabase {
+		availableTypes[symbol.Type] = true
+		availableCategories[symbol.Category] = true
+	}
+	symbolDBMutex.RUnlock()
+
+	typeList := make([]string, 0, len(availableTypes))
+	for t := range availableTypes {
+		typeList = append(typeList, t)
+	}
+
+	categoryList := make([]string, 0, len(availableCategories))
+	for c := range availableCategories {
+		categoryList = append(categoryList, c)
+	}
+
+	log.WithFields(log.Fields{
+		"query":      query,
+		"results":    len(paginatedResults),
+		"total":      total,
+		"page":       page,
+		"sort_by":    sort.Field,
+		"sort_dir":   sort.Direction,
+	}).Info("Advanced search completed")
+
+	c.JSON(http.StatusOK, gin.H{
+		"data":       paginatedResults,
+		"pagination": gin.H{
+			"page":       page,
+			"page_size":  pageSize,
+			"total":      total,
+			"total_pages": (total + pageSize - 1) / pageSize,
+		},
+		"filters_applied": gin.H{
+			"types":          filters.Types,
+			"categories":     filters.Categories,
+			"min_price":      filters.MinPrice,
+			"max_price":      filters.MaxPrice,
+			"min_market_cap": filters.MinMarketCap,
+			"max_market_cap": filters.MaxMarketCap,
+		},
+		"sort_applied": gin.H{
+			"field":     sort.Field,
+			"direction": sort.Direction,
+		},
+		"available_filters": gin.H{
+			"types":      typeList,
+			"categories": categoryList,
+		},
+	})
+}
+
+// getSymbolCategoriesHandler returns available symbol categories
+func getSymbolCategoriesHandler(c *gin.Context) {
+	categories := map[string][]string{
+		"types":      {"crypto", "stock", "commodity", "forex"},
+		"categories": {"layer1", "layer2", "defi", "nft", "stablecoin", "payment", "exchange", "meme", "privacy", "infrastructure"},
+	}
+	c.JSON(http.StatusOK, categories)
 }
 
 func metricsHandler(c *gin.Context) {
