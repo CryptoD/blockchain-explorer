@@ -83,6 +83,7 @@ type User struct {
 }
 
 type PortfolioItem struct {
+	Type    string  `json:"type"` // "stock", "crypto", "bond", "commodity"
 	Address string  `json:"address"`
 	Label   string  `json:"label"`
 	Amount  float64 `json:"amount"`
@@ -512,6 +513,7 @@ func main() {
 	r.StaticFile("/bitcoin.html", "bitcoin.html")
 	r.StaticFile("/", "index.html")
 	r.StaticFile("/admin", "admin.html")
+	r.StaticFile("/dashboard", "dashboard.html")
 
 	r.GET("/api/search", searchHandler)
 

@@ -21,6 +21,7 @@
                 <a href="/transactions" class="hover:text-primary">Transactions</a>
                 <a href="/addresses" class="hover:text-primary">Addresses</a>
                 <a href="/portfolios" id="portfolios-nav" class="hover:text-primary hidden">Portfolios</a>
+                <a href="/dashboard" id="dashboard-nav" class="hover:text-primary hidden">Dashboard</a>
                 <a href="/admin" class="hover:text-primary">Admin</a>
             </nav>
 
@@ -78,6 +79,7 @@
                     <a href="/transactions" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Transactions</a>
                     <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Addresses</a>
                     <a href="/portfolios" id="portfolios-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Portfolios</a>
+                    <a href="/dashboard" id="dashboard-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Dashboard</a>
                     <a href="/admin" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Admin</a>
                 </nav>
 
@@ -496,12 +498,22 @@
                 if (portfoliosNav) portfoliosNav.classList.remove('hidden');
                 const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
                 if (portfoliosNavMobile) portfoliosNavMobile.classList.remove('hidden');
+                // Show dashboard links
+                const dashboardNav = document.getElementById('dashboard-nav');
+                const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
+                if (dashboardNav) dashboardNav.classList.remove('hidden');
+                if (dashboardNavMobile) dashboardNavMobile.classList.remove('hidden');
             } else {
                 userInfo.classList.add('hidden');
                 authButtons.classList.remove('hidden');
                 if (portfoliosNav) portfoliosNav.classList.add('hidden');
                 const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
                 if (portfoliosNavMobile) portfoliosNavMobile.classList.add('hidden');
+                // Hide dashboard links
+                const dashboardNav = document.getElementById('dashboard-nav');
+                const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
+                if (dashboardNav) dashboardNav.classList.add('hidden');
+                if (dashboardNavMobile) dashboardNavMobile.classList.add('hidden');
             }
         } catch (err) {
             userInfo.classList.add('hidden');
@@ -635,7 +647,7 @@
                     <h3 class="text-xl font-bold">${p.name}</h3>
                     <p class="text-text-secondary text-sm mb-4">${p.description || 'No description'}</p>
                     <div class="text-sm space-y-1 mb-4">
-                        ${p.items.map(item => `<div><span class="font-medium">${item.label}:</span> ${item.address}</div>`).join('')}
+                        ${p.items.map(item => `<div><span class="font-medium">[${(item.type || 'stock').toUpperCase()}] ${item.label}:</span> ${item.address}</div>`).join('')}
                     </div>
                     <div class="flex gap-2">
                         <button onclick="editPortfolio('${p.id}')" class="text-primary hover:underline">Edit</button>
@@ -653,6 +665,12 @@
             const itemDiv = document.createElement('div');
             itemDiv.className = 'flex gap-2 items-center';
             itemDiv.innerHTML = `
+                <select class="p-2 border rounded bg-bg text-text border-border portfolio-type">
+                    <option value="stock">Stock</option>
+                    <option value="crypto">Crypto</option>
+                    <option value="bond">Bond</option>
+                    <option value="commodity">Commodity</option>
+                </select>
                 <input type="text" placeholder="Label" class="flex-1 p-2 border rounded bg-bg text-text border-border portfolio-label">
                 <input type="text" placeholder="Address" class="flex-[2] p-2 border rounded bg-bg text-text border-border portfolio-address">
                 <button type="button" class="text-red-600 px-2" onclick="this.parentElement.remove()">×</button>
@@ -685,6 +703,7 @@
             const description = document.getElementById('portfolio-description').value;
 
             const items = Array.from(itemsContainer.children).map(div => ({
+                type: div.querySelector('.portfolio-type').value,
                 label: div.querySelector('.portfolio-label').value,
                 address: div.querySelector('.portfolio-address').value
             }));
@@ -722,6 +741,12 @@
                 const itemDiv = document.createElement('div');
                 itemDiv.className = 'flex gap-2 items-center';
                 itemDiv.innerHTML = `
+                    <select class="p-2 border rounded bg-bg text-text border-border portfolio-type">
+                        <option value="stock" ${(item.type === 'stock' || !item.type) ? 'selected' : ''}>Stock</option>
+                        <option value="crypto" ${item.type === 'crypto' ? 'selected' : ''}>Crypto</option>
+                        <option value="bond" ${item.type === 'bond' ? 'selected' : ''}>Bond</option>
+                        <option value="commodity" ${item.type === 'commodity' ? 'selected' : ''}>Commodity</option>
+                    </select>
                     <input type="text" value="${item.label}" class="flex-1 p-2 border rounded bg-bg text-text border-border portfolio-label">
                     <input type="text" value="${item.address}" class="flex-[2] p-2 border rounded bg-bg text-text border-border portfolio-address">
                     <button type="button" class="text-red-600 px-2" onclick="this.parentElement.remove()">×</button>
