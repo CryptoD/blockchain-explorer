@@ -79,7 +79,10 @@ The Bitcoin Explorer follows a microservices-inspired architecture with clear se
 2. Copy environment file and configure:
    ```bash
    cp .env.example .env
-   # Edit .env and set required values (POSTGRES_PASSWORD, GETBLOCK_BASE_URL, GETBLOCK_ACCESS_TOKEN)
+   # Edit .env and set required values:
+   # - POSTGRES_PASSWORD
+   # - GETBLOCK_BASE_URL / GETBLOCK_ACCESS_TOKEN
+   # - ADMIN_USERNAME / ADMIN_PASSWORD (especially for non-development environments)
    ```
 
 3. Install frontend dependencies:
@@ -104,9 +107,12 @@ The application will start on `http://localhost:3000`, with Adminer available at
 
 2. Configure environment variables:
    ```bash
+   export APP_ENV=development                               # or staging/production
    export GETBLOCK_BASE_URL="https://your.bitcoin.node.endpoint"
    export GETBLOCK_ACCESS_TOKEN="your-api-key"
    export REDIS_URL="redis://localhost:6379"
+   export ADMIN_USERNAME="admin"                            # for local dev only
+   export ADMIN_PASSWORD="change_me_admin_password"         # for local dev only
    ```
 
 3. Run the application:
@@ -217,6 +223,11 @@ bitcoin-explorer/
    ```bash
    go run main.go
    ```
+
+### Admin credentials, environments, and rotation
+
+- In **development** (`APP_ENV=development` or unset), the application will fall back to `admin` / `admin123` if `ADMIN_USERNAME` / `ADMIN_PASSWORD` are not provided. This is for local convenience only and must not be used in shared or production deployments.
+- In any **non-development** environment (`APP_ENV` not equal to `development`), the app will **refuse to start** if `ADMIN_USERNAME` or `ADMIN_PASSWORD` are missing. Set these to strong, unique values and rotate them by updating the environment, restarting the app, and then changing the password through the UI if desired.
 
 ## Documentation
 

@@ -224,19 +224,47 @@ func saveUserToRedis(user User) error {
 	return rdb.Set(ctx, "user:"+user.Username, data, 0).Err() // No expiration
 }
 
-// initializeDefaultAdmin creates the default admin user if it doesn't exist
+// getAppEnv returns the current application environment, defaulting to "development".
+func getAppEnv() string {
+	env := os.Getenv("APP_ENV")
+	if env == "" {
+		return "development"
+	}
+	return strings.ToLower(env)
+}
+
+// initializeDefaultAdmin creates the default admin user if it doesn't exist.
+// In non-development environments, ADMIN_USERNAME and ADMIN_PASSWORD must be provided.
+// In development, sensible but insecure defaults are allowed for convenience.
 func initializeDefaultAdmin() {
 	// First try to load existing users from Redis
 	if err := loadUsersFromRedis(); err != nil {
 		log.WithError(err).Warn("Failed to load users from Redis")
 	}
 
+	appEnv := getAppEnv()
+
 	userMutex.Lock()
 	defer userMutex.Unlock()
 
-	adminUsername := getEnvWithDefault("ADMIN_USERNAME", "admin")
+	adminUsername := os.Getenv("ADMIN_USERNAME")
+	adminPassword := os.Getenv("ADMIN_PASSWORD")
+
+	if appEnv == "development" {
+		if adminUsername == "" {
+			adminUsername = "admin"
+		}
+		if adminPassword == "" {
+			adminPassword = "admin123"
+		}
+	} else {
+		if adminUsername == "" || adminPassword == "" {
+			log.Fatal("ADMIN_USERNAME and ADMIN_PASSWORD must be set in non-development environments")
+		}
+	}
+
 	if _, exists := users[adminUsername]; !exists {
-		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(getEnvWithDefault("ADMIN_PASSWORD", "admin123")), bcrypt.DefaultCost)
+		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 		if err != nil {
 			log.WithError(err).Fatal("Failed to hash default admin password")
 		}
@@ -255,7 +283,13 @@ func initializeDefaultAdmin() {
 			log.WithError(err).Warn("Failed to save default admin to Redis")
 		}
 
-		log.Info("Default admin user initialized")
+		if appEnv == "development" && (os.Getenv("ADMIN_USERNAME") == "" || os.Getenv("ADMIN_PASSWORD") == "") {
+			log.WithField("env", appEnv).Warn("Default admin credentials (admin/admin123) are being used in development")
+		}
+		log.WithFields(log.Fields{
+			"username": adminUsername,
+			"env":      appEnv,
+		}).Info("Default admin user initialized")
 	}
 }
 
@@ -463,6 +497,9 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
+
+	appEnv := getAppEnv()
+	log.WithField("env", appEnv).Info("Starting Bitcoin Explorer server")
 
 	// Ensure required GetBlock configuration is present for production use.
 	if baseURL == "" || apiKey == "" {
