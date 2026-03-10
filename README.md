@@ -232,6 +232,8 @@ bitcoin-explorer/
 ## Documentation
 
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
+- [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
+
 ## Contributing
 
 We welcome contributions to improve the Bitcoin Explorer. Please follow standard Go and web development practices.
