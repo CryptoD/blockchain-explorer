@@ -1,0 +1,806 @@
+openapi: 3.0.3
+info:
+  title: Bitcoin Explorer API
+  version: 1.0.0
+  description: >
+    HTTP+JSON API for the Bitcoin Explorer backend.
+    This specification captures the current, stable `/api/v1` contracts and is
+    intended as the source of truth for future SDK generation.
+
+servers:
+  - url: http://localhost:8080
+    description: Local development
+
+tags:
+  - name: Public Search
+  - name: Market Data
+  - name: User
+  - name: Portfolio
+  - name: Admin
+  - name: System
+
+paths:
+  /api/v1/search:
+    get:
+      tags: [Public Search]
+      summary: Search for a block, transaction, or address
+      parameters:
+        - name: q
+          in: query
+          required: true
+          schema:
+            type: string
+            maxLength: 100
+          description: >
+            Search term. Can be a Bitcoin address, transaction ID, block height,
+            or block hash.
+      responses:
+        '200':
+          description: Search result
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  type:
+                    type: string
+                    enum: [address, transaction, block]
+                  result:
+                    type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/search/advanced:
+    get:
+      tags: [Public Search]
+      summary: Advanced symbol search with filters and sorting
+      parameters:
+        - name: q
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: page
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: types
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of symbol types to include.
+        - name: categories
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated list of categories to include.
+        - name: min_price
+          in: query
+          schema:
+            type: number
+        - name: max_price
+          in: query
+          schema:
+            type: number
+        - name: min_market_cap
+          in: query
+          schema:
+            type: number
+        - name: max_market_cap
+          in: query
+          schema:
+            type: number
+        - name: is_active
+          in: query
+          schema:
+            type: boolean
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum:
+              [symbol, name, type, category, market_cap, price, volume_24h, change_24h, rank, listed_since]
+            default: rank
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: asc
+      responses:
+        '200':
+          description: Paginated symbol search results
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/SymbolSearchResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/search/categories:
+    get:
+      tags: [Public Search]
+      summary: List available symbol types and categories
+      responses:
+        '200':
+          description: Available filters
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  types:
+                    type: array
+                    items:
+                      type: string
+                  categories:
+                    type: array
+                    items:
+                      type: string
+
+  /api/v1/autocomplete:
+    get:
+      tags: [Public Search]
+      summary: Autocomplete helper for search
+      parameters:
+        - name: q
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Autocomplete suggestions
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  suggestions:
+                    type: array
+                    items:
+                      type: object
+                      properties:
+                        type:
+                          type: string
+                          description: address, tx, or block
+                        value:
+                          type: string
+                        label:
+                          type: string
+
+  /api/v1/metrics:
+    get:
+      tags: [Market Data]
+      summary: Historical mempool, block time, and tx volume metrics
+      responses:
+        '200':
+          description: Time-series metrics
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  mempool_size:
+                    $ref: '#/components/schemas/TimeSeries'
+                  block_times:
+                    $ref: '#/components/schemas/TimeSeries'
+                  tx_volume:
+                    $ref: '#/components/schemas/TimeSeries'
+
+  /api/v1/network-status:
+    get:
+      tags: [Market Data]
+      summary: Current Bitcoin network status
+      responses:
+        '200':
+          description: Network status snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  block_height:
+                    type: number
+                  difficulty:
+                    type: number
+                  hash_rate:
+                    type: number
+
+  /api/v1/rates:
+    get:
+      tags: [Market Data]
+      summary: Bitcoin spot price in multiple fiat currencies
+      responses:
+        '200':
+          description: Current price map keyed by asset and currency
+          content:
+            application/json:
+              schema:
+                type: object
+                additionalProperties: {}
+        '500':
+          $ref: '#/components/responses/InternalError'
+
+  /api/v1/price-history:
+    get:
+      tags: [Market Data]
+      summary: Historical BTC/USD price points for charts
+      responses:
+        '200':
+          description: Array of historical price points
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PricePoint'
+
+  /api/v1/feedback:
+    post:
+      tags: [Public Search]
+      summary: Submit user feedback
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/FeedbackRequest'
+      responses:
+        '200':
+          description: Feedback accepted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+
+  /api/v1/register:
+    post:
+      tags: [User]
+      summary: Register a new user account
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RegisterRequest'
+      responses:
+        '201':
+          description: User created
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '409':
+          $ref: '#/components/responses/Conflict'
+
+  /api/v1/login:
+    post:
+      tags: [User]
+      summary: Login with username and password
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/LoginRequest'
+      responses:
+        '200':
+          description: Login successful
+          headers:
+            Set-Cookie:
+              description: >
+                HTTP-only session cookie (`session_id`); Secure in non-development environments.
+              schema:
+                type: string
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/LoginResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/logout:
+    post:
+      tags: [User]
+      summary: Logout the current session
+      responses:
+        '200':
+          description: Logout successful
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+
+  /api/v1/user/profile:
+    get:
+      tags: [User]
+      summary: Get the authenticated user's profile
+      security:
+        - SessionCookieAuth: []
+      responses:
+        '200':
+          description: User profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /api/v1/user/portfolios:
+    get:
+      tags: [Portfolio]
+      summary: List portfolios for the authenticated user
+      security:
+        - SessionCookieAuth: []
+      parameters:
+        - name: page
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: page_size
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: sort_by
+          in: query
+          schema:
+            type: string
+            enum: [created, updated]
+            default: created
+        - name: sort_dir
+          in: query
+          schema:
+            type: string
+            enum: [asc, desc]
+            default: desc
+      responses:
+        '200':
+          description: Paginated portfolios
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  data:
+                    type: array
+                    items:
+                      $ref: '#/components/schemas/Portfolio'
+                  pagination:
+                    $ref: '#/components/schemas/PaginationMeta'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags: [Portfolio]
+      summary: Create a new portfolio
+      security:
+        - SessionCookieAuth: []
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Portfolio'
+      responses:
+        '201':
+          description: Portfolio created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/user/portfolios/{id}:
+    put:
+      tags: [Portfolio]
+      summary: Update an existing portfolio
+      security:
+        - SessionCookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Portfolio'
+      responses:
+        '200':
+          description: Updated portfolio
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Portfolio'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags: [Portfolio]
+      summary: Delete a portfolio
+      security:
+        - SessionCookieAuth: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Portfolio deleted
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /api/v1/admin/status:
+    get:
+      tags: [Admin]
+      summary: View system status (admin only)
+      security:
+        - SessionCookieAuth: []
+      responses:
+        '200':
+          description: System status snapshot
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                  user:
+                    type: string
+                  role:
+                    type: string
+                  redis_memory:
+                    type: string
+                  active_rate_limits:
+                    type: integer
+                  timestamp:
+                    type: integer
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /api/v1/admin/cache:
+    get:
+      tags: [Admin]
+      summary: Manage cache (admin only)
+      security:
+        - SessionCookieAuth: []
+      parameters:
+        - name: action
+          in: query
+          required: true
+          schema:
+            type: string
+            enum: [clear, stats]
+      responses:
+        '200':
+          description: Cache operation result
+          content:
+            application/json:
+              schema:
+                type: object
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /healthz:
+    get:
+      tags: [System]
+      summary: Liveness probe
+      responses:
+        '200':
+          description: Process is alive (may be degraded)
+
+  /readyz:
+    get:
+      tags: [System]
+      summary: Readiness probe
+      responses:
+        '200':
+          description: Instance is ready to receive traffic
+        '503':
+          description: Instance is not ready
+
+components:
+  securitySchemes:
+    SessionCookieAuth:
+      type: apiKey
+      in: cookie
+      name: session_id
+
+  responses:
+    BadRequest:
+      description: Bad request
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Unauthorized:
+      description: Unauthorized
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Forbidden:
+      description: Forbidden
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    Conflict:
+      description: Resource conflict
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+    InternalError:
+      description: Internal server error
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/ErrorResponse'
+
+  schemas:
+    Error:
+      type: object
+      properties:
+        code:
+          type: string
+          description: Stable, machine-readable error code.
+        message:
+          type: string
+          description: Human-readable description of the error.
+
+    ErrorResponse:
+      type: object
+      properties:
+        error:
+          $ref: '#/components/schemas/Error'
+
+    PaginationMeta:
+      type: object
+      properties:
+        page:
+          type: integer
+        page_size:
+          type: integer
+        total:
+          type: integer
+        total_pages:
+          type: integer
+
+    TimePoint:
+      type: object
+      properties:
+        time:
+          type: integer
+        value:
+          type: string
+
+    TimeSeries:
+      type: array
+      items:
+        $ref: '#/components/schemas/TimePoint'
+
+    PricePoint:
+      type: object
+      properties:
+        timestamp:
+          type: integer
+        price:
+          type: number
+
+    FeedbackRequest:
+      type: object
+      properties:
+        name:
+          type: string
+          maxLength: 100
+        email:
+          type: string
+          format: email
+        message:
+          type: string
+          minLength: 5
+          maxLength: 1000
+      required: [message]
+
+    LoginRequest:
+      type: object
+      properties:
+        username:
+          type: string
+          minLength: 3
+          maxLength: 64
+        password:
+          type: string
+          minLength: 6
+          maxLength: 128
+      required: [username, password]
+
+    LoginResponse:
+      type: object
+      properties:
+        message:
+          type: string
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+        csrfToken:
+          type: string
+
+    RegisterRequest:
+      type: object
+      properties:
+        username:
+          type: string
+        password:
+          type: string
+        email:
+          type: string
+          format: email
+      required: [username, password]
+
+    User:
+      type: object
+      properties:
+        username:
+          type: string
+        role:
+          type: string
+          enum: [admin, user]
+        created:
+          type: string
+          format: date-time
+
+    PortfolioItem:
+      type: object
+      properties:
+        type:
+          type: string
+          description: Asset type (e.g. stock, crypto, bond, commodity).
+        address:
+          type: string
+        label:
+          type: string
+        amount:
+          type: number
+
+    Portfolio:
+      type: object
+      properties:
+        id:
+          type: string
+        username:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/PortfolioItem'
+        created:
+          type: string
+          format: date-time
+        updated:
+          type: string
+          format: date-time
+
+    SymbolInfo:
+      type: object
+      properties:
+        symbol:
+          type: string
+        name:
+          type: string
+        type:
+          type: string
+        category:
+          type: string
+        market_cap:
+          type: number
+        price:
+          type: number
+        volume_24h:
+          type: number
+        change_24h:
+          type: number
+        rank:
+          type: integer
+        is_active:
+          type: boolean
+        listed_since:
+          type: integer
+
+    SymbolSearchResponse:
+      type: object
+      properties:
+        data:
+          type: array
+          items:
+            $ref: '#/components/schemas/SymbolInfo'
+        pagination:
+          $ref: '#/components/schemas/PaginationMeta'
+        filters_applied:
+          type: object
+        sort_applied:
+          type: object
+        available_filters:
+          type: object
+
