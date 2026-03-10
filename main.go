@@ -9,6 +9,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"html"
 	"net/http"
 	"os"
 	"regexp"
@@ -277,6 +278,26 @@ func getAppEnv() string {
 		return "development"
 	}
 	return strings.ToLower(env)
+}
+
+// sanitizeText trims, truncates, strips control characters (except basic
+// whitespace), and HTML-escapes user-supplied text before storage or rendering.
+func sanitizeText(input string, maxLen int) string {
+	s := strings.TrimSpace(input)
+	if maxLen > 0 && len(s) > maxLen {
+		s = s[:maxLen]
+	}
+
+	var b strings.Builder
+	for _, r := range s {
+		// Skip non-printable control characters except tab/newline/carriage-return
+		if r < 32 && r != '\n' && r != '\r' && r != '\t' {
+			continue
+		}
+		b.WriteRune(r)
+	}
+	cleaned := b.String()
+	return html.EscapeString(cleaned)
 }
 
 // useSecureCookies determines whether cookies should be marked Secure.
@@ -948,17 +969,17 @@ func feedbackHandler(c *gin.Context) {
 			return
 		}
 	}
-	if len(feedbackReq.Message) < 5 || len(feedbackReq.Message) > 2000 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Message must be between 5 and 2000 characters"})
+	if len(feedbackReq.Message) < 5 || len(feedbackReq.Message) > 1000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Message must be between 5 and 1000 characters"})
 		return
 	}
 
 	// Store feedback in Redis with timestamp
 	feedbackKey := fmt.Sprintf("feedback:%d", time.Now().Unix())
 	feedbackData := map[string]interface{}{
-		"name":      feedbackReq.Name,
+		"name":      sanitizeText(feedbackReq.Name, 100),
 		"email":     feedbackReq.Email,
-		"message":   feedbackReq.Message,
+		"message":   sanitizeText(feedbackReq.Message, 1000),
 		"timestamp": time.Now().Format(time.RFC3339),
 		"ip":        c.ClientIP(),
 	}
@@ -1122,11 +1143,16 @@ func createPortfolioHandler(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
 			return
 		}
+		item.Label = sanitizeText(item.Label, 100)
+		// Addresses are identifiers; normalize whitespace and strip control chars without HTML-escaping.
+		item.Address = sanitizeText(item.Address, 256)
 		p.Items[i] = item
 	}
 
 	p.ID = fmt.Sprintf("%d", time.Now().UnixNano())
 	p.Username = username.(string)
+	p.Name = sanitizeText(p.Name, 100)
+	p.Description = sanitizeText(p.Description, 500)
 	p.Created = time.Now()
 	p.Updated = time.Now()
 
@@ -1184,6 +1210,8 @@ func updatePortfolioHandler(c *gin.Context) {
 			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
 			return
 		}
+		item.Label = sanitizeText(item.Label, 100)
+		item.Address = sanitizeText(item.Address, 256)
 		updateReq.Items[i] = item
 	}
 
@@ -1198,8 +1226,8 @@ func updatePortfolioHandler(c *gin.Context) {
 	json.Unmarshal([]byte(data), &p)
 
 	// Update fields
-	p.Name = updateReq.Name
-	p.Description = updateReq.Description
+	p.Name = sanitizeText(updateReq.Name, 100)
+	p.Description = sanitizeText(updateReq.Description, 500)
 	p.Items = updateReq.Items
 	p.Updated = time.Now()
 
