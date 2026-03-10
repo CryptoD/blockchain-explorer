@@ -1,0 +1,84 @@
+# Git ignore for blockchain-explorer project
+
+# Environment files
+.env
+.env.*
+
+# Go build / binary files
+/bin/
+*.exe
+*.exe~
+*.dll
+*.so
+*.dylib
+*.test
+*.out
+
+# Go modules cache and vendor
+vendor/
+
+# Archive / installer files
+*.tar.gz
+*.zip
+
+# Docker
+docker-compose.override.yml
+**/db-data/
+**/redis-data/
+
+# Logs
+*.log
+logs/
+
+# IDE / editor
+.vscode/
+.idea/
+*.swp
+
+# Ignore all by default, then explicitly un-ignore tracked/project files
+*
+
+# macOS
+.DS_Store
+
+# Node
+node_modules/
+package-lock.json
+
+# Coverage
+coverage.out
+
+# Misc
+API_TEST_RESULTS.md
+
+# Ignore local build artifacts
+dist/
+build/
+
+# Secrets
+secrets/
+
+# Images or large assets that shouldn't be committed
+*.jpg
+*.jpeg
+*.png
+*.gif
+
+# Keep README, env example, docs, and source files tracked explicitly
+!.env.example
+!readme.md
+!README.md
+!main.go
+!go.mod
+!go.sum
+!Dockerfile
+!docker-compose.yml
+!package.json
+!tailwind.config.js
+!postcss.config.js
+!src/
+!dist/
+!images/
+!k8s/
+!terraform/
+!.github/
