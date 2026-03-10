@@ -19,7 +19,9 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
@@ -697,6 +699,10 @@ func main() {
 	// Configure Redis for LRU eviction
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")
 	rdb.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru")
+
+	// Initialize pluggable service clients
+	blockchainClient = blockchain.NewGetBlockRPCClient(baseURL, apiKey, httpClient)
+	pricingClient = pricing.NewCoinGeckoClient(httpClient)
 
 	// Initialize default admin user
 	initializeDefaultAdmin()
@@ -1961,17 +1967,14 @@ func ratesHandler(c *gin.Context) {
 		}
 	}
 
-	// Fetch from CoinGecko API
-	resp, err := httpClient.R().
-		SetHeader("Accept", "application/json").
-		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd,eur,gbp,jpy")
-	if err != nil {
-		handleError(c, err, http.StatusInternalServerError)
+	// Fetch from pricing provider
+	if pricingClient == nil {
+		handleError(c, errors.New("pricing client not initialized"), http.StatusInternalServerError)
 		return
 	}
 
-	var rates map[string]interface{}
-	if err := json.Unmarshal(resp.Body(), &rates); err != nil {
+	rates, err := pricingClient.GetMultiCurrencyRates(ctx)
+	if err != nil {
 		handleError(c, err, http.StatusInternalServerError)
 		return
 	}
@@ -2079,6 +2082,10 @@ var (
 	httpClient = resty.New().
 			SetTimeout(10 * time.Second).
 			SetRetryCount(3)
+	// blockchainClient is the pluggable blockchain data provider.
+	blockchainClient blockchain.RPCClient
+	// pricingClient is the pluggable pricing/FX provider.
+	pricingClient pricing.Client
 )
 
 // SetHTTPClient allows tests or other packages to replace the internal HTTP client used for API calls.
@@ -2086,6 +2093,16 @@ func SetHTTPClient(c *resty.Client) {
 	if c != nil {
 		httpClient = c
 	}
+}
+
+// SetBlockchainClient allows tests to inject a mock blockchain RPC client.
+func SetBlockchainClient(c blockchain.RPCClient) {
+	blockchainClient = c
+}
+
+// SetPricingClient allows tests to inject a mock pricing client.
+func SetPricingClient(c pricing.Client) {
+	pricingClient = c
 }
 
 // handleError standardizes error responses
@@ -2136,8 +2153,14 @@ func getNetworkStatus() (map[string]interface{}, error) {
 			return data, nil
 		}
 	}
+	if blockchainClient == nil {
+		return nil, errors.New("blockchain client not initialized")
+	}
+
+	ctx := context.Background()
+
 	// Fetch block height
-	blockCountResp, err := blockchairRequest("getblockcount", []interface{}{})
+	blockCountResp, err := blockchainClient.Call(ctx, "getblockcount", []interface{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -2151,7 +2174,7 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	}
 
 	// Fetch difficulty
-	difficultyResp, err := blockchairRequest("getdifficulty", []interface{}{})
+	difficultyResp, err := blockchainClient.Call(ctx, "getdifficulty", []interface{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -2165,7 +2188,7 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	}
 
 	// Fetch network hash rate
-	hashRateResp, err := blockchairRequest("getnetworkhashps", []interface{}{})
+	hashRateResp, err := blockchainClient.Call(ctx, "getnetworkhashps", []interface{}{})
 	if err != nil {
 		return nil, err
 	}
@@ -2207,7 +2230,11 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 		}
 	}
 
-	response, err := blockchairRequest("getaddressinfo", []interface{}{address})
+	if blockchainClient == nil {
+		return nil, errors.New("blockchain client not initialized")
+	}
+
+	response, err := blockchainClient.Call(context.Background(), "getaddressinfo", []interface{}{address})
 	if err != nil {
 		return nil, err
 	}
@@ -2239,7 +2266,11 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 		}
 	}
 
-	response, err := blockchairRequest("getrawtransaction", []interface{}{txID, 1})
+	if blockchainClient == nil {
+		return nil, errors.New("blockchain client not initialized")
+	}
+
+	response, err := blockchainClient.Call(context.Background(), "getrawtransaction", []interface{}{txID, 1})
 	if err != nil {
 		return nil, err
 	}
@@ -2269,8 +2300,12 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 		}
 	}
 
+	if blockchainClient == nil {
+		return nil, errors.New("blockchain client not initialized")
+	}
+
 	height, _ := strconv.Atoi(blockHeight)
-	response, err := blockchairRequest("getblockbyheight", []interface{}{height, 1})
+	response, err := blockchainClient.Call(context.Background(), "getblockbyheight", []interface{}{height, 1})
 	if err != nil {
 		return nil, err
 	}
@@ -2289,62 +2324,26 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	return result, nil
 }
 
-func blockchairRequest(method string, params []interface{}) (*resty.Response, error) {
-	if baseURL == "" || apiKey == "" {
-		return nil, errors.New("missing required environment variables")
-	}
-
-	// Generate a unique ID for this request
-	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-	payload := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      requestID,
-		"method":  method,
-		"params":  params,
-	}
-
-	response, err := httpClient.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("x-api-key", apiKey).
-		SetBody(payload).
-		Post(baseURL)
-
-	if err != nil {
-		return nil, fmt.Errorf("API request failed: %w", err)
-	}
-
-	if response.StatusCode() >= 400 {
-		return nil, fmt.Errorf("API error: %s", response.Status())
-	}
-
-	return response, nil
-}
-
 // collectMetrics collects historical metrics for charts
 func collectMetrics() {
 	// Use a float64 timestamp for Redis scores
 	now := float64(time.Now().Unix())
 
 	// Collect Bitcoin price for history
-	resp, err := httpClient.R().
-		SetHeader("Accept", "application/json").
-		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
-	if err == nil {
-		var rates map[string]map[string]float64
-		if err := json.Unmarshal(resp.Body(), &rates); err == nil {
-			if btc, ok := rates["bitcoin"]; ok {
-				if usd, ok := btc["usd"]; ok {
-					rdb.ZAdd(context.Background(), "btc_price_history", redis.Z{Score: now, Member: usd})
-					// Keep only last 30 days of 5-minute data (roughly 8640 points)
-					rdb.ZRemRangeByRank(context.Background(), "btc_price_history", 0, -8641)
-				}
-			}
+	if pricingClient != nil {
+		if usd, err := pricingClient.GetBTCUSD(context.Background()); err == nil {
+			rdb.ZAdd(context.Background(), "btc_price_history", redis.Z{Score: now, Member: usd})
+			// Keep only last 30 days of 5-minute data (roughly 8640 points)
+			rdb.ZRemRangeByRank(context.Background(), "btc_price_history", 0, -8641)
 		}
 	}
 
+	if blockchainClient == nil {
+		return
+	}
+
 	// Get mempool size
-	mempoolResp, err := blockchairRequest("getmempoolinfo", []interface{}{})
+	mempoolResp, err := blockchainClient.Call(context.Background(), "getmempoolinfo", []interface{}{})
 	if err == nil {
 		var mempoolData map[string]interface{}
 		_ = json.Unmarshal(mempoolResp.Body(), &mempoolData)
@@ -2356,7 +2355,7 @@ func collectMetrics() {
 	}
 
 	// Get latest blocks for block times and tx volume
-	blocksResp, err := blockchairRequest("getblockchaininfo", []interface{}{})
+	blocksResp, err := blockchainClient.Call(context.Background(), "getblockchaininfo", []interface{}{})
 	if err == nil {
 		var chainData map[string]interface{}
 		_ = json.Unmarshal(blocksResp.Body(), &chainData)
@@ -2371,14 +2370,14 @@ func collectMetrics() {
 					if h < 0 {
 						break
 					}
-					blockResp, err := blockchairRequest("getblockhash", []interface{}{h})
+					blockResp, err := blockchainClient.Call(context.Background(), "getblockhash", []interface{}{h})
 					if err != nil {
 						continue
 					}
 					var hashData map[string]interface{}
 					_ = json.Unmarshal(blockResp.Body(), &hashData)
 					if hash, ok := hashData["result"].(string); ok {
-						blockDetailResp, err := blockchairRequest("getblock", []interface{}{hash})
+						blockDetailResp, err := blockchainClient.Call(context.Background(), "getblock", []interface{}{hash})
 						if err != nil {
 							continue
 						}
