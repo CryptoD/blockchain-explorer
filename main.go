@@ -71,7 +71,7 @@ var rdb = redis.NewClient(&redis.Options{
 	DB:   0, // use default DB
 })
 
-// Rate limiting variables
+// Rate limiting variables (used as a fallback when Redis is unavailable)
 var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
@@ -311,6 +311,19 @@ func useSecureCookies() bool {
 	return getAppEnv() != "development"
 }
 
+// getEnvIntWithDefault reads an environment variable and parses it as int,
+// returning defaultValue if unset or invalid.
+func getEnvIntWithDefault(key string, defaultValue int) int {
+	valStr := os.Getenv(key)
+	if valStr == "" {
+		return defaultValue
+	}
+	if v, err := strconv.Atoi(valStr); err == nil {
+		return v
+	}
+	return defaultValue
+}
+
 // initializeDefaultAdmin creates the default admin user if it doesn't exist.
 // In non-development environments, ADMIN_USERNAME and ADMIN_PASSWORD must be provided.
 // In development, sensible but insecure defaults are allowed for convenience.
@@ -494,25 +507,92 @@ func requireRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	}
 }
 
-// rateLimitMiddleware limits requests to 10 per minute per IP
+// rateLimitMiddleware limits requests per IP and per authenticated user.
+// It prefers a Redis-backed implementation for multi-instance resilience,
+// and falls back to an in-memory limiter when Redis is unavailable.
 func rateLimitMiddleware(c *gin.Context) {
 	ip := c.ClientIP()
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+
+	// Configurable limits via environment variables
+	windowSeconds := getEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60)
+	perIPLimit := getEnvIntWithDefault("RATE_LIMIT_PER_IP", 10)
+	perUserLimit := getEnvIntWithDefault("RATE_LIMIT_PER_USER", 10)
+	window := time.Duration(windowSeconds) * time.Second
+
+	// Prefer Redis-backed rate limiting when available
+	if rdb != nil {
+		ctx := context.Background()
+		var exceeded bool
+
+		// Per-IP limiting
+		if perIPLimit > 0 {
+			ipKey := fmt.Sprintf("rate:ip:%s", ip)
+			ipCount, err := rdb.Incr(ctx, ipKey).Result()
+			if err == nil {
+				if ipCount == 1 {
+					_ = rdb.Expire(ctx, ipKey, window).Err()
+				}
+				if ipCount > int64(perIPLimit) {
+					exceeded = true
+				}
+			} else {
+				log.WithError(err).Warn("Redis rate limit per IP failed, falling back to in-memory limiter")
+			}
+		}
+
+		// Per-user limiting (only if authenticated)
+		if !exceeded && username != "" && perUserLimit > 0 {
+			userKey := fmt.Sprintf("rate:user:%s", username)
+			userCount, err := rdb.Incr(ctx, userKey).Result()
+			if err == nil {
+				if userCount == 1 {
+					_ = rdb.Expire(ctx, userKey, window).Err()
+				}
+				if userCount > int64(perUserLimit) {
+					exceeded = true
+				}
+			} else {
+				log.WithError(err).Warn("Redis rate limit per user failed, falling back to in-memory limiter")
+			}
+		}
+
+		if exceeded {
+			log.WithFields(log.Fields{
+				"ip":       ip,
+				"username": username,
+			}).Warn("Rate limit exceeded (Redis)")
+			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
+			c.Abort()
+			return
+		}
+
+		// If Redis calls succeeded and limits not exceeded, proceed.
+		if err := rdb.Ping(ctx).Err(); err == nil {
+			c.Next()
+			return
+		}
+		// If Redis is unhealthy, fall through to in-memory limiter.
+	}
+
+	// In-memory fallback (per IP only, 10 req/min default)
 	rateLimitMutex.Lock()
 	defer rateLimitMutex.Unlock()
 
 	now := time.Now()
 	if reset, ok := rateLimitReset[ip]; ok && now.After(reset) {
 		rateLimitCount[ip] = 0
-		rateLimitReset[ip] = now.Add(time.Minute)
+		rateLimitReset[ip] = now.Add(window)
 	}
 	if _, ok := rateLimitCount[ip]; !ok {
 		rateLimitCount[ip] = 0
-		rateLimitReset[ip] = now.Add(time.Minute)
+		rateLimitReset[ip] = now.Add(window)
 	}
 	rateLimitCount[ip]++
-	if rateLimitCount[ip] > 10 {
-		log.WithField("ip", ip).Warn("Rate limit exceeded")
-		c.JSON(429, gin.H{"error": "Too many requests"})
+	if rateLimitCount[ip] > perIPLimit {
+		log.WithField("ip", ip).Warn("Rate limit exceeded (in-memory)")
+		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
 		c.Abort()
 		return
 	}
@@ -1021,9 +1101,7 @@ func adminStatusHandler(c *gin.Context) {
 	info := rdb.Info(ctx, "memory").Val()
 
 	// Get rate limiting stats
-	rateLimitMutex.Lock()
-	activeLimits := len(rateLimitCount)
-	rateLimitMutex.Unlock()
+	activeLimits := getActiveRateLimitCount()
 
 	c.JSON(http.StatusOK, gin.H{
 		"status":             "ok",
@@ -1033,6 +1111,28 @@ func adminStatusHandler(c *gin.Context) {
 		"active_rate_limits": activeLimits,
 		"timestamp":          time.Now().Unix(),
 	})
+}
+
+// getActiveRateLimitCount returns the number of active rate limit entries.
+// When Redis is available, it counts keys with the "rate:" prefix; otherwise,
+// it falls back to the in-memory map size.
+func getActiveRateLimitCount() int {
+	if rdb != nil {
+		ctx := context.Background()
+		iter := rdb.Scan(ctx, 0, "rate:*", 0).Iterator()
+		count := 0
+		for iter.Next(ctx) {
+			count++
+		}
+		if err := iter.Err(); err != nil {
+			log.WithError(err).Warn("Failed to scan rate limit keys from Redis")
+		}
+		return count
+	}
+
+	rateLimitMutex.Lock()
+	defer rateLimitMutex.Unlock()
+	return len(rateLimitCount)
 }
 
 // adminCacheHandler provides cache management for admin
