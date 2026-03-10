@@ -435,13 +435,13 @@ func authenticateUser(username, password string) (User, bool) {
 func userProfileHandler(c *gin.Context) {
 	username, exists := c.Get("username")
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found in session"})
+		errorResponse(c, http.StatusUnauthorized, "user_not_found", "User not found in session")
 		return
 	}
 
 	user, exists := getUser(username.(string))
 	if !exists {
-		c.JSON(http.StatusNotFound, gin.H{"error": "User profile not found"})
+		errorResponse(c, http.StatusNotFound, "user_profile_not_found", "User profile not found")
 		return
 	}
 
@@ -452,21 +452,21 @@ func userProfileHandler(c *gin.Context) {
 func authMiddleware(c *gin.Context) {
 	sessionID, err := c.Cookie("session_id")
 	if err != nil {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Authentication required"})
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
 		c.Abort()
 		return
 	}
 
 	username, valid := validateSession(sessionID)
 	if !valid {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid session"})
+		errorResponse(c, http.StatusUnauthorized, "invalid_session", "Invalid session")
 		c.Abort()
 		return
 	}
 
 	user, exists := getUser(username)
 	if !exists {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "User not found"})
+		errorResponse(c, http.StatusUnauthorized, "user_not_found", "User not found")
 		c.Abort()
 		return
 	}
@@ -481,20 +481,20 @@ func requireRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	return func(c *gin.Context) {
 		role, exists := c.Get("role")
 		if !exists {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Role information missing"})
+			errorResponse(c, http.StatusForbidden, "role_missing", "Role information missing")
 			c.Abort()
 			return
 		}
 
 		userRole, ok := role.(string)
 		if !ok {
-			c.JSON(http.StatusForbidden, gin.H{"error": "Invalid role format"})
+			errorResponse(c, http.StatusForbidden, "role_invalid", "Invalid role format")
 			c.Abort()
 			return
 		}
 
 		if userRole != requiredRole && userRole != "admin" { // Admin can access everything
-			c.JSON(http.StatusForbidden, gin.H{"error": "Insufficient permissions"})
+			errorResponse(c, http.StatusForbidden, "insufficient_permissions", "Insufficient permissions")
 			c.Abort()
 			return
 		}
@@ -570,7 +570,7 @@ func rateLimitMiddleware(c *gin.Context) {
 				"ip":       ip,
 				"username": username,
 			}).Warn("Rate limit exceeded (Redis)")
-			c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
+			errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 			c.Abort()
 			return
 		}
@@ -599,7 +599,7 @@ func rateLimitMiddleware(c *gin.Context) {
 	rateLimitCount[ip]++
 	if rateLimitCount[ip] > perIPLimit {
 		log.WithField("ip", ip).Warn("Rate limit exceeded (in-memory)")
-		c.JSON(http.StatusTooManyRequests, gin.H{"error": "Too many requests"})
+		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 		c.Abort()
 		return
 	}
@@ -912,28 +912,28 @@ func loginHandler(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&loginReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
 		return
 	}
 
 	loginReq.Username = strings.TrimSpace(loginReq.Username)
 	if len(loginReq.Username) < 3 || len(loginReq.Username) > 64 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_username", "Username must be between 3 and 64 characters")
 		return
 	}
 	usernamePattern := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 	if !usernamePattern.MatchString(loginReq.Username) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username may only contain letters, numbers, dots, dashes, and underscores"})
+		errorResponse(c, http.StatusBadRequest, "invalid_username", "Username may only contain letters, numbers, dots, dashes, and underscores")
 		return
 	}
 	if len(loginReq.Password) < 6 || len(loginReq.Password) > 128 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 6 and 128 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_password", "Password must be between 6 and 128 characters")
 		return
 	}
 
 	user, authenticated := authenticateUser(loginReq.Username, loginReq.Password)
 	if !authenticated {
-		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
+		errorResponse(c, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
 		log.WithField("username", loginReq.Username).Warn("Failed login attempt")
 		return
 	}
@@ -941,14 +941,14 @@ func loginHandler(c *gin.Context) {
 	sessionID, err := createSession(loginReq.Username)
 	if err != nil {
 		log.WithError(err).Error("Failed to create session")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create session"})
+		errorResponse(c, http.StatusInternalServerError, "session_creation_failed", "Failed to create session")
 		return
 	}
 
 	csrfToken, err := createOrUpdateCSRFToken(sessionID)
 	if err != nil {
 		log.WithError(err).Error("Failed to create CSRF token")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create CSRF token"})
+		errorResponse(c, http.StatusInternalServerError, "csrf_creation_failed", "Failed to create CSRF token")
 		return
 	}
 
@@ -1007,13 +1007,13 @@ func csrfMiddleware(c *gin.Context) {
 
 	providedToken := c.GetHeader("X-CSRF-Token")
 	if providedToken == "" {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF token missing"})
+		abortErrorResponse(c, http.StatusForbidden, "csrf_token_missing", "CSRF token missing")
 		return
 	}
 
 	expectedToken, _ := getCSRFTokenForSession(sessionID)
 	if expectedToken == "" || !secureCompare(providedToken, expectedToken) {
-		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid CSRF token"})
+		abortErrorResponse(c, http.StatusForbidden, "csrf_token_invalid", "Invalid CSRF token")
 		return
 	}
 
@@ -1037,34 +1037,34 @@ func registerHandler(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&registerReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
 		return
 	}
 
 	// Basic validation
 	registerReq.Username = strings.TrimSpace(registerReq.Username)
 	if len(registerReq.Username) < 3 || len(registerReq.Username) > 64 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_username", "Username must be between 3 and 64 characters")
 		return
 	}
 	usernamePattern := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
 	if !usernamePattern.MatchString(registerReq.Username) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username may only contain letters, numbers, dots, dashes, and underscores"})
+		errorResponse(c, http.StatusBadRequest, "invalid_username", "Username may only contain letters, numbers, dots, dashes, and underscores")
 		return
 	}
 	if !isStrongPassword(registerReq.Password) {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be 8-128 characters and include at least one letter and one digit"})
+		errorResponse(c, http.StatusBadRequest, "invalid_password", "Password must be 8-128 characters and include at least one letter and one digit")
 		return
 	}
 	if registerReq.Email != "" {
 		registerReq.Email = strings.TrimSpace(registerReq.Email)
 		if len(registerReq.Email) > 254 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Email must be at most 254 characters"})
+			errorResponse(c, http.StatusBadRequest, "invalid_email", "Email must be at most 254 characters")
 			return
 		}
 		emailPattern := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 		if !emailPattern.MatchString(registerReq.Email) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+			errorResponse(c, http.StatusBadRequest, "invalid_email", "Invalid email format")
 			return
 		}
 	}
@@ -1073,10 +1073,10 @@ func registerHandler(c *gin.Context) {
 	err := createUser(registerReq.Username, registerReq.Password, "user")
 	if err != nil {
 		if err.Error() == "user already exists" {
-			c.JSON(http.StatusConflict, gin.H{"error": "Username already exists"})
+			errorResponse(c, http.StatusConflict, "username_taken", "Username already exists")
 		} else {
 			log.WithError(err).Error("Failed to create user")
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create user"})
+			errorResponse(c, http.StatusInternalServerError, "user_creation_failed", "Failed to create user")
 		}
 		return
 	}
@@ -1096,7 +1096,7 @@ func feedbackHandler(c *gin.Context) {
 	}
 
 	if err := c.ShouldBindJSON(&feedbackReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
 		return
 	}
 
@@ -1105,22 +1105,22 @@ func feedbackHandler(c *gin.Context) {
 	feedbackReq.Message = strings.TrimSpace(feedbackReq.Message)
 
 	if len(feedbackReq.Name) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Name must be at most 100 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_name", "Name must be at most 100 characters")
 		return
 	}
 	if feedbackReq.Email != "" {
 		if len(feedbackReq.Email) > 254 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Email must be at most 254 characters"})
+			errorResponse(c, http.StatusBadRequest, "invalid_email", "Email must be at most 254 characters")
 			return
 		}
 		emailPattern := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
 		if !emailPattern.MatchString(feedbackReq.Email) {
-			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+			errorResponse(c, http.StatusBadRequest, "invalid_email", "Invalid email format")
 			return
 		}
 	}
 	if len(feedbackReq.Message) < 5 || len(feedbackReq.Message) > 1000 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Message must be between 5 and 1000 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_message", "Message must be between 5 and 1000 characters")
 		return
 	}
 
@@ -1137,14 +1137,14 @@ func feedbackHandler(c *gin.Context) {
 	jsonData, err := json.Marshal(feedbackData)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal feedback data")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to process feedback"})
+		errorResponse(c, http.StatusInternalServerError, "feedback_processing_failed", "Failed to process feedback")
 		return
 	}
 
 	err = rdb.Set(ctx, feedbackKey, jsonData, 30*24*time.Hour).Err() // Store for 30 days
 	if err != nil {
 		log.WithError(err).Error("Failed to store feedback in Redis")
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save feedback"})
+		errorResponse(c, http.StatusInternalServerError, "feedback_save_failed", "Failed to save feedback")
 		return
 	}
 
@@ -1215,7 +1215,7 @@ func adminCacheHandler(c *gin.Context) {
 		// Clear all cache keys
 		keys, err := rdb.Keys(ctx, "*").Result()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cache keys"})
+			errorResponse(c, http.StatusInternalServerError, "cache_keys_failed", "Failed to get cache keys")
 			return
 		}
 
@@ -1229,7 +1229,7 @@ func adminCacheHandler(c *gin.Context) {
 	case "stats":
 		keys, err := rdb.Keys(ctx, "*").Result()
 		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to get cache stats"})
+			errorResponse(c, http.StatusInternalServerError, "cache_stats_failed", "Failed to get cache stats")
 			return
 		}
 
@@ -1239,7 +1239,7 @@ func adminCacheHandler(c *gin.Context) {
 		})
 
 	default:
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid action. Use 'clear' or 'stats'"})
+		errorResponse(c, http.StatusBadRequest, "invalid_action", "Invalid action. Use 'clear' or 'stats'")
 	}
 }
 
@@ -1251,7 +1251,7 @@ func listPortfoliosHandler(c *gin.Context) {
 
 	keys, err := rdb.Keys(ctx, "portfolio:"+username.(string)+":*").Result()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to fetch portfolios"})
+		errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to fetch portfolios")
 		return
 	}
 
@@ -1276,22 +1276,22 @@ func createPortfolioHandler(c *gin.Context) {
 
 	var p Portfolio
 	if err := c.ShouldBindJSON(&p); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
 		return
 	}
 
 	p.Name = strings.TrimSpace(p.Name)
 	p.Description = strings.TrimSpace(p.Description)
 	if p.Name == "" || len(p.Name) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio name must be between 1 and 100 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_name", "Portfolio name must be between 1 and 100 characters")
 		return
 	}
 	if len(p.Description) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio description must be at most 500 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_description", "Portfolio description must be at most 500 characters")
 		return
 	}
 	if len(p.Items) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio cannot contain more than 100 items"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_items", "Portfolio cannot contain more than 100 items")
 		return
 	}
 	for i, item := range p.Items {
@@ -1299,18 +1299,18 @@ func createPortfolioHandler(c *gin.Context) {
 		item.Label = strings.TrimSpace(item.Label)
 		item.Address = strings.TrimSpace(item.Address)
 		if item.Label == "" || len(item.Label) > 100 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_label", fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1))
 			return
 		}
 		if item.Address == "" || len(item.Address) > 256 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_address", fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1))
 			return
 		}
 		switch strings.ToLower(item.Type) {
 		case "stock", "crypto", "bond", "commodity":
 			// allowed
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_type", fmt.Sprintf("Item %d has invalid type", i+1))
 			return
 		}
 		item.Label = sanitizeText(item.Label, 100)
@@ -1329,7 +1329,7 @@ func createPortfolioHandler(c *gin.Context) {
 	data, _ := json.Marshal(p)
 	err := rdb.Set(ctx, "portfolio:"+p.Username+":"+p.ID, data, 0).Err()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to save portfolio"})
+		errorResponse(c, http.StatusInternalServerError, "portfolio_save_failed", "Failed to save portfolio")
 		return
 	}
 
@@ -1343,22 +1343,22 @@ func updatePortfolioHandler(c *gin.Context) {
 
 	var updateReq Portfolio
 	if err := c.ShouldBindJSON(&updateReq); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
 		return
 	}
 
 	updateReq.Name = strings.TrimSpace(updateReq.Name)
 	updateReq.Description = strings.TrimSpace(updateReq.Description)
 	if updateReq.Name == "" || len(updateReq.Name) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio name must be between 1 and 100 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_name", "Portfolio name must be between 1 and 100 characters")
 		return
 	}
 	if len(updateReq.Description) > 500 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio description must be at most 500 characters"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_description", "Portfolio description must be at most 500 characters")
 		return
 	}
 	if len(updateReq.Items) > 100 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio cannot contain more than 100 items"})
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_items", "Portfolio cannot contain more than 100 items")
 		return
 	}
 	for i, item := range updateReq.Items {
@@ -1366,18 +1366,18 @@ func updatePortfolioHandler(c *gin.Context) {
 		item.Label = strings.TrimSpace(item.Label)
 		item.Address = strings.TrimSpace(item.Address)
 		if item.Label == "" || len(item.Label) > 100 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_label", fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1))
 			return
 		}
 		if item.Address == "" || len(item.Address) > 256 {
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_address", fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1))
 			return
 		}
 		switch strings.ToLower(item.Type) {
 		case "stock", "crypto", "bond", "commodity":
 			// allowed
 		default:
-			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
+			errorResponse(c, http.StatusBadRequest, "invalid_item_type", fmt.Sprintf("Item %d has invalid type", i+1))
 			return
 		}
 		item.Label = sanitizeText(item.Label, 100)
@@ -1388,7 +1388,7 @@ func updatePortfolioHandler(c *gin.Context) {
 	key := "portfolio:" + username.(string) + ":" + portfolioID
 	data, err := rdb.Get(ctx, key).Result()
 	if err != nil {
-		c.JSON(http.StatusNotFound, gin.H{"error": "Portfolio not found"})
+		errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
 		return
 	}
 
@@ -1415,7 +1415,7 @@ func deletePortfolioHandler(c *gin.Context) {
 	key := "portfolio:" + username.(string) + ":" + portfolioID
 	err := rdb.Del(ctx, key).Err()
 	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to delete portfolio"})
+		errorResponse(c, http.StatusInternalServerError, "portfolio_delete_failed", "Failed to delete portfolio")
 		return
 	}
 
@@ -1472,21 +1472,21 @@ func searchHandler(c *gin.Context) {
 	log.WithField("query", query).Info("Search request received")
 	if query == "" {
 		log.Warn("Search request with empty query")
-		c.JSON(400, gin.H{"error": "Missing query parameter"})
+		errorResponse(c, http.StatusBadRequest, "missing_query", "Missing query parameter")
 		return
 	}
 	if len(query) > 100 {
 		log.WithField("query", query).Warn("Search request query too long")
-		c.JSON(400, gin.H{"error": "Query too long"})
+		errorResponse(c, http.StatusBadRequest, "query_too_long", "Query too long")
 		return
 	}
 	resultType, result, err := searchBlockchain(query)
 	if err != nil {
 		log.WithFields(log.Fields{"query": query, "error": err}).Error("Search failed")
 		if err == ErrNotFound {
-			c.JSON(404, gin.H{"error": "Not found"})
+			errorResponse(c, http.StatusNotFound, "not_found", "Not found")
 		} else {
-			c.JSON(500, gin.H{"error": err.Error()})
+			errorResponse(c, http.StatusInternalServerError, "internal_error", err.Error())
 		}
 		return
 	}
@@ -1494,7 +1494,7 @@ func searchHandler(c *gin.Context) {
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
 		log.WithError(err).Error("Failed to marshal search response")
-		c.JSON(500, gin.H{"error": "Failed to marshal response"})
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
 		return
 	}
 	etag := fmt.Sprintf("\"%x\"", sha256.Sum256(jsonBytes))
@@ -2105,6 +2105,12 @@ var (
 	appConfig *config.Config
 )
 
+// APIError represents a standardized error payload returned by the API.
+type APIError struct {
+	Code    string `json:"code"`
+	Message string `json:"message"`
+}
+
 // SetHTTPClient allows tests or other packages to replace the internal HTTP client used for API calls.
 func SetHTTPClient(c *resty.Client) {
 	if c != nil {
@@ -2122,10 +2128,47 @@ func SetPricingClient(c pricing.Client) {
 	pricingClient = c
 }
 
-// handleError standardizes error responses
+// defaultErrorCode derives a generic error code from an HTTP status code.
+func defaultErrorCode(status int) string {
+	switch status {
+	case http.StatusBadRequest:
+		return "bad_request"
+	case http.StatusUnauthorized:
+		return "unauthorized"
+	case http.StatusForbidden:
+		return "forbidden"
+	case http.StatusNotFound:
+		return "not_found"
+	case http.StatusTooManyRequests:
+		return "rate_limited"
+	default:
+		if status >= 500 {
+			return "internal_error"
+		}
+		return "error"
+	}
+}
+
+// errorResponse writes a structured error response.
+func errorResponse(c *gin.Context, status int, code, message string) {
+	c.JSON(status, gin.H{"error": APIError{
+		Code:    code,
+		Message: message,
+	}})
+}
+
+// abortErrorResponse aborts the request with a structured error response.
+func abortErrorResponse(c *gin.Context, status int, code, message string) {
+	c.AbortWithStatusJSON(status, gin.H{"error": APIError{
+		Code:    code,
+		Message: message,
+	}})
+}
+
+// handleError captures an error with Sentry and returns a standardized payload.
 func handleError(c *gin.Context, err error, status int) {
 	sentry.CaptureException(err)
-	c.JSON(status, gin.H{"error": err.Error()})
+	errorResponse(c, status, defaultErrorCode(status), err.Error())
 }
 
 func isValidAddress(address string) bool {
