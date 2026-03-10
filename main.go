@@ -464,6 +464,11 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
 
+	// Ensure required GetBlock configuration is present for production use.
+	if baseURL == "" || apiKey == "" {
+		log.Fatal("missing required environment variables GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN")
+	}
+
 	pong, err := rdb.Ping(context.Background()).Result()
 	if err != nil {
 		log.WithField("redis", "ping").Warnf("Redis ping failed: %v", err)
@@ -1531,9 +1536,12 @@ func ratesHandler(c *gin.Context) {
 }
 
 var (
-	baseURL = getEnvWithDefault("GETBLOCK_BASE_URL", "https://go.getblock.io/eb8cb69423354abb8d5e489adfc54742")
-	apiKey  = getEnvWithDefault("GETBLOCK_ACCESS_TOKEN", "eb8cb69423354abb8d5e489adfc54742")
-	// httpClient is injectable for tests; production code uses a default resty client
+	// baseURL and apiKey are loaded strictly from environment variables.
+	// For production, they must be set via GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN.
+	// Tests may override these globals directly.
+	baseURL = os.Getenv("GETBLOCK_BASE_URL")
+	apiKey  = os.Getenv("GETBLOCK_ACCESS_TOKEN")
+	// httpClient is injectable for tests; production code uses a default resty client.
 	httpClient = resty.New().
 			SetTimeout(10 * time.Second).
 			SetRetryCount(3)
