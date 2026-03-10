@@ -279,6 +279,17 @@ func getAppEnv() string {
 	return strings.ToLower(env)
 }
 
+// useSecureCookies determines whether cookies should be marked Secure.
+// Priority:
+// - If SECURE_COOKIES is set to a truthy value, always use secure cookies.
+// - Otherwise, use secure cookies for any non-development APP_ENV.
+func useSecureCookies() bool {
+	if val := strings.ToLower(os.Getenv("SECURE_COOKIES")); val != "" {
+		return val == "1" || val == "true" || val == "yes"
+	}
+	return getAppEnv() != "development"
+}
+
 // initializeDefaultAdmin creates the default admin user if it doesn't exist.
 // In non-development environments, ADMIN_USERNAME and ADMIN_PASSWORD must be provided.
 // In development, sensible but insecure defaults are allowed for convenience.
@@ -765,7 +776,7 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("session_id", sessionID, 86400, "/", "", false, true) // 24 hours
+	c.SetCookie("session_id", sessionID, 86400, "/", "", useSecureCookies(), true) // 24 hours
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "Login successful",
 		"username":  loginReq.Username,
@@ -785,7 +796,7 @@ func logoutHandler(c *gin.Context) {
 		destroySession(sessionID)
 	}
 
-	c.SetCookie("session_id", "", -1, "/", "", false, true)
+	c.SetCookie("session_id", "", -1, "/", "", useSecureCookies(), true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 }
 
