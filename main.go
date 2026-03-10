@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
@@ -1267,7 +1268,63 @@ func listPortfoliosHandler(c *gin.Context) {
 		}
 	}
 
-	c.JSON(http.StatusOK, portfolios)
+	// Apply sorting on created or updated timestamps
+	sortParams := apiutil.ParseSort(c, "created", "desc", map[string]bool{
+		"created": true,
+		"updated": true,
+	})
+
+	switch sortParams.Field {
+	case "updated":
+		// sort by Updated desc/asc
+		for i := 0; i < len(portfolios)-1; i++ {
+			for j := 0; j < len(portfolios)-i-1; j++ {
+				swap := portfolios[j].Updated.Before(portfolios[j+1].Updated)
+				if sortParams.Direction == "asc" {
+					swap = !swap
+				}
+				if swap {
+					portfolios[j], portfolios[j+1] = portfolios[j+1], portfolios[j]
+				}
+			}
+		}
+	default:
+		// sort by Created desc/asc
+		for i := 0; i < len(portfolios)-1; i++ {
+			for j := 0; j < len(portfolios)-i-1; j++ {
+				swap := portfolios[j].Created.Before(portfolios[j+1].Created)
+				if sortParams.Direction == "asc" {
+					swap = !swap
+				}
+				if swap {
+					portfolios[j], portfolios[j+1] = portfolios[j+1], portfolios[j]
+				}
+			}
+		}
+	}
+
+	// Apply pagination using shared primitive
+	pagination := apiutil.ParsePagination(c, 20, 100)
+	total := len(portfolios)
+	start := pagination.Offset
+	end := start + pagination.PageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	paginated := portfolios[start:end]
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": paginated,
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+	})
 }
 
 // createPortfolioHandler creates a new portfolio
@@ -1636,27 +1693,16 @@ func parseSearchFilters(c *gin.Context) SearchFilters {
 
 // parseSortOptions parses sorting parameters from the request
 func parseSortOptions(c *gin.Context) SortOptions {
-	sort := SortOptions{
-		Field:     c.DefaultQuery("sort_by", "rank"),
-		Direction: c.DefaultQuery("sort_dir", "asc"),
-	}
-
-	// Validate sort field
 	validFields := map[string]bool{
 		"symbol": true, "name": true, "type": true, "category": true,
 		"market_cap": true, "price": true, "volume_24h": true,
 		"change_24h": true, "rank": true, "listed_since": true,
 	}
-	if !validFields[sort.Field] {
-		sort.Field = "rank"
+	s := apiutil.ParseSort(c, "rank", "asc", validFields)
+	return SortOptions{
+		Field:     s.Field,
+		Direction: s.Direction,
 	}
-
-	// Validate direction
-	if sort.Direction != "asc" && sort.Direction != "desc" {
-		sort.Direction = "asc"
-	}
-
-	return sort
 }
 
 // matchesFilters checks if a symbol matches the given filters
@@ -1764,15 +1810,8 @@ func advancedSearchHandler(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	log.WithField("query", query).Info("Advanced search request received")
 
-	// Parse pagination
-	page, _ := strconv.Atoi(c.DefaultQuery("page", "1"))
-	if page < 1 {
-		page = 1
-	}
-	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", "20"))
-	if pageSize < 1 || pageSize > 100 {
-		pageSize = 20
-	}
+	// Parse pagination (reused primitive)
+	pagination := apiutil.ParsePagination(c, 20, 100)
 
 	// Parse filters and sort options
 	filters := parseSearchFilters(c)
@@ -1803,8 +1842,8 @@ func advancedSearchHandler(c *gin.Context) {
 
 	// Pagination
 	total := len(results)
-	start := (page - 1) * pageSize
-	end := start + pageSize
+	start := pagination.Offset
+	end := start + pagination.PageSize
 	if start > total {
 		start = total
 	}
@@ -1837,7 +1876,7 @@ func advancedSearchHandler(c *gin.Context) {
 		"query":      query,
 		"results":    len(paginatedResults),
 		"total":      total,
-		"page":       page,
+		"page":       pagination.Page,
 		"sort_by":    sort.Field,
 		"sort_dir":   sort.Direction,
 	}).Info("Advanced search completed")
@@ -1845,10 +1884,10 @@ func advancedSearchHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"data":       paginatedResults,
 		"pagination": gin.H{
-			"page":       page,
-			"page_size":  pageSize,
+			"page":       pagination.Page,
+			"page_size":  pagination.PageSize,
 			"total":      total,
-			"total_pages": (total + pageSize - 1) / pageSize,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
 		},
 		"filters_applied": gin.H{
 			"types":          filters.Types,

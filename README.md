@@ -130,9 +130,22 @@ For detailed API documentation, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md)
 
 Base URL (versioned): `http://localhost:8080/api/v1`
 
+#### Common query parameters
+
+Many list-style endpoints accept standardized pagination and sorting parameters:
+
+- **`page`**: 1-based page index (default: `1`, minimum: `1`).
+- **`page_size`**: number of items per page (default: `20`, maximum: `100`).
+- **`sort_by`** / **`sort_dir`**:
+  - For advanced search: `sort_by` in `{symbol,name,type,category,market_cap,price,volume_24h,change_24h,rank,listed_since}`, `sort_dir` in `{asc,desc}`.
+  - For portfolio listing: `sort_by` in `{created,updated}`, `sort_dir` in `{asc,desc}`.
+  - Invalid or unsupported values fall back to the documented defaults.
+
+All endpoints that can return large lists **cap `page_size` at 100** to protect the service and ensure predictable performance.
+
 #### Search Endpoints
 - `GET /api/v1/search?q={query}` - Search blocks, transactions, or addresses
-- `GET /api/v1/search/advanced` - Advanced symbol search with filters/sorting
+- `GET /api/v1/search/advanced` - Advanced symbol search with filters/sorting/pagination
 - `GET /api/v1/search/categories` - Retrieve available symbol categories
 
 #### Response Format
