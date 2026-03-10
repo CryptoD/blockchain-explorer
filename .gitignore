@@ -1,10 +1,18 @@
 # Git ignore for blockchain-explorer project
 
-# Environment files
+################################
+# Environment / secrets        #
+################################
+
+# Local env files (do not commit real secrets)
 .env
 .env.*
+secrets/
 
-# Go build / binary files
+################################
+# Go build artifacts           #
+################################
+
 /bin/
 *.exe
 *.exe~
@@ -14,71 +22,67 @@
 *.test
 *.out
 
-# Go modules cache and vendor
-vendor/
+################################
+# Dependencies / caches        #
+################################
 
-# Archive / installer files
+vendor/
+node_modules/
+package-lock.json
+
+################################
+# Archives / installers        #
+################################
+
 *.tar.gz
 *.zip
 
-# Docker
+################################
+# Docker / data volumes        #
+################################
+
 docker-compose.override.yml
 **/db-data/
 **/redis-data/
 
-# Logs
+################################
+# Logs / coverage              #
+################################
+
 *.log
 logs/
+coverage.out
 
-# IDE / editor
+################################
+# OS / editor junk             #
+################################
+
+.DS_Store
 .vscode/
 .idea/
 *.swp
 
-# Ignore all by default, then explicitly un-ignore tracked/project files
-*
+################################
+# Build artifacts / dist       #
+################################
 
-# macOS
-.DS_Store
-
-# Node
-node_modules/
-package-lock.json
-
-# Coverage
-coverage.out
-
-# Misc
-API_TEST_RESULTS.md
-
-# Ignore local build artifacts
 dist/
 build/
 
-# Secrets
-secrets/
+################################
+# Large or binary assets       #
+################################
 
-# Images or large assets that shouldn't be committed
 *.jpg
 *.jpeg
 *.png
 *.gif
 
-# Keep README, env example, docs, and source files tracked explicitly
-!.env.example
-!readme.md
-!README.md
-!main.go
-!go.mod
-!go.sum
-!Dockerfile
-!docker-compose.yml
-!package.json
-!tailwind.config.js
-!postcss.config.js
-!src/
-!dist/
-!images/
-!k8s/
-!terraform/
-!.github/
+################################
+# Misc project-specific        #
+################################
+
+# API test results (currently tracked intentionally)
+# Uncomment the next line if you prefer to keep them local-only.
+# API_TEST_RESULTS.md
+
