@@ -1,10 +1,61 @@
 package config
 
 import (
+	"fmt"
 	"os"
 	"strconv"
 	"strings"
 )
+
+// Config holds all application configuration derived from environment variables.
+type Config struct {
+	AppEnv string
+
+	// Core infrastructure
+	RedisHost string
+
+	// External providers
+	GetBlockBaseURL    string
+	GetBlockAccessToken string
+	SentryDSN          string
+
+	// Security / cookies
+	SecureCookies bool
+
+	// Rate limiting
+	RateLimitWindowSeconds int
+	RateLimitPerIP         int
+	RateLimitPerUser       int
+
+	// Readiness / health
+	ReadyCheckExternal bool
+}
+
+// Load parses environment variables into a Config struct and validates
+// required settings. It is intended to be called once at startup.
+func Load() (*Config, error) {
+	appEnv := GetAppEnv()
+
+	cfg := &Config{
+		AppEnv:                appEnv,
+		RedisHost:             GetEnvWithDefault("REDIS_HOST", "localhost"),
+		GetBlockBaseURL:       strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
+		GetBlockAccessToken:   strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
+		SentryDSN:             strings.TrimSpace(os.Getenv("SENTRY_DSN")),
+		SecureCookies:         UseSecureCookies(),
+		RateLimitWindowSeconds: GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitPerIP:         GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
+		RateLimitPerUser:       GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
+		ReadyCheckExternal:     strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
+	}
+
+	// Required in all environments: GetBlock configuration for core blockchain operations.
+	if cfg.GetBlockBaseURL == "" || cfg.GetBlockAccessToken == "" {
+		return nil, fmt.Errorf("missing required environment variables GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN")
+	}
+
+	return cfg, nil
+}
 
 // GetEnvWithDefault returns the value of the environment variable named by key,
 // or defaultValue if the variable is not set or empty.

@@ -511,10 +511,21 @@ func rateLimitMiddleware(c *gin.Context) {
 	usernameVal, _ := c.Get("username")
 	username, _ := usernameVal.(string)
 
-	// Configurable limits via environment variables
-	windowSeconds := config.GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60)
-	perIPLimit := config.GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10)
-	perUserLimit := config.GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10)
+	// Configurable limits via configuration (with sane defaults if config is nil)
+	windowSeconds := 60
+	perIPLimit := 10
+	perUserLimit := 10
+	if appConfig != nil {
+		if appConfig.RateLimitWindowSeconds > 0 {
+			windowSeconds = appConfig.RateLimitWindowSeconds
+		}
+		if appConfig.RateLimitPerIP > 0 {
+			perIPLimit = appConfig.RateLimitPerIP
+		}
+		if appConfig.RateLimitPerUser > 0 {
+			perUserLimit = appConfig.RateLimitPerUser
+		}
+	}
 	window := time.Duration(windowSeconds) * time.Second
 
 	// Prefer Redis-backed rate limiting when available
@@ -652,13 +663,19 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
 
-	appEnv := config.GetAppEnv()
+	// Load and validate configuration
+	cfg, err := config.Load()
+	if err != nil {
+		log.WithError(err).Fatal("Failed to load configuration")
+	}
+	appConfig = cfg
+
+	appEnv := cfg.AppEnv
 	log.WithField("env", appEnv).Info("Starting Bitcoin Explorer server")
 
-	// Ensure required GetBlock configuration is present for production use.
-	if baseURL == "" || apiKey == "" {
-		log.Fatal("missing required environment variables GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN")
-	}
+	// Initialize GetBlock settings from configuration.
+	baseURL = cfg.GetBlockBaseURL
+	apiKey = cfg.GetBlockAccessToken
 
 	pong, err := rdb.Ping(context.Background()).Result()
 	if err != nil {
@@ -667,10 +684,9 @@ func main() {
 
 	// Initialize Sentry
 	_ = pong
-	sentryDSN := config.GetEnvWithDefault("SENTRY_DSN", "")
-	if sentryDSN != "" {
+	if cfg.SentryDSN != "" {
 		if initErr := sentry.Init(sentry.ClientOptions{
-			Dsn: sentryDSN,
+			Dsn: cfg.SentryDSN,
 			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
 			TracesSampleRate: 1.0,
 		}); initErr != nil {
@@ -691,9 +707,8 @@ func main() {
 	log.Info("Starting Bitcoin Explorer server")
 
 	// Initialize Redis client
-	redisHost := config.GetEnvWithDefault("REDIS_HOST", "localhost")
 	rdb = redis.NewClient(&redis.Options{
-		Addr: redisHost + ":6379",
+		Addr: cfg.RedisHost + ":6379",
 	})
 
 	// Configure Redis for LRU eviction
@@ -2038,8 +2053,8 @@ func readinessHandler(c *gin.Context) {
 		return
 	}
 
-	// Optional shallow external API check, controlled via env
-	checkExternal := strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true"
+	// Optional shallow external API check, controlled via configuration
+	checkExternal := appConfig != nil && appConfig.ReadyCheckExternal
 	if checkExternal {
 		if baseURL == "" || apiKey == "" {
 			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "missing GETBLOCK_* env for external readiness check"})
@@ -2076,8 +2091,8 @@ var (
 	// baseURL and apiKey are loaded strictly from environment variables.
 	// For production, they must be set via GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN.
 	// Tests may override these globals directly.
-	baseURL = os.Getenv("GETBLOCK_BASE_URL")
-	apiKey  = os.Getenv("GETBLOCK_ACCESS_TOKEN")
+	baseURL string
+	apiKey  string
 	// httpClient is injectable for tests; production code uses a default resty client.
 	httpClient = resty.New().
 			SetTimeout(10 * time.Second).
@@ -2086,6 +2101,8 @@ var (
 	blockchainClient blockchain.RPCClient
 	// pricingClient is the pluggable pricing/FX provider.
 	pricingClient pricing.Client
+	// appConfig holds the parsed application configuration.
+	appConfig *config.Config
 )
 
 // SetHTTPClient allows tests or other packages to replace the internal HTTP client used for API calls.
