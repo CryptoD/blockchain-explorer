@@ -1,3 +1,38 @@
+        // CSRF helpers
+        const CSRF_HEADER_NAME = 'X-CSRF-Token';
+        let csrfToken = null;
+
+        function setCSRFToken(token) {
+            if (!token) return;
+            csrfToken = token;
+            try {
+                localStorage.setItem('csrfToken', token);
+            } catch (e) {
+                // ignore storage errors
+            }
+        }
+
+        function getCSRFToken() {
+            if (csrfToken) return csrfToken;
+            try {
+                const stored = localStorage.getItem('csrfToken');
+                csrfToken = stored;
+                return stored;
+            } catch (e) {
+                return null;
+            }
+        }
+
+        async function authFetch(url, options = {}) {
+            const token = getCSRFToken();
+            const opts = { ...options };
+            opts.headers = opts.headers ? { ...opts.headers } : {};
+            if (token) {
+                opts.headers[CSRF_HEADER_NAME] = token;
+            }
+            return fetch(url, opts);
+        }
+
         // Theme management
         function setTheme(theme) {
             document.documentElement.setAttribute('data-theme', theme);
@@ -1178,6 +1213,9 @@
             const data = await response.json();
 
             if (response.ok) {
+                if (data.csrfToken) {
+                    setCSRFToken(data.csrfToken);
+                }
                 document.getElementById('login-section').classList.add('hidden');
                 document.getElementById('dashboard-section').classList.remove('hidden');
                 document.getElementById('user-info').classList.remove('hidden');
@@ -1196,7 +1234,7 @@
 
     async function handleLogout() {
         try {
-            await fetch('/api/logout', { method: 'POST' });
+            await authFetch('/api/logout', { method: 'POST' });
         } catch (error) {
             console.error('Logout error:', error);
         }
@@ -1211,7 +1249,7 @@
 
     async function checkAuthStatus() {
         try {
-            const response = await fetch('/api/admin/status');
+            const response = await authFetch('/api/admin/status');
             if (response.ok) {
                 const data = await response.json();
                 document.getElementById('login-section').classList.add('hidden');
@@ -1227,7 +1265,7 @@
 
     async function loadSystemStatus() {
         try {
-            const response = await fetch('/api/admin/status');
+            const response = await authFetch('/api/admin/status');
             const data = await response.json();
 
             const statusDiv = document.getElementById('system-status');
@@ -1252,7 +1290,7 @@
 
     async function loadCacheStats() {
         try {
-            const response = await fetch('/api/admin/cache?action=stats');
+            const response = await authFetch('/api/admin/cache?action=stats');
             const data = await response.json();
 
             const statsDiv = document.getElementById('cache-stats');
@@ -1280,7 +1318,7 @@
         }
 
         try {
-            const response = await fetch('/api/admin/cache?action=clear', { method: 'GET' });
+            const response = await authFetch('/api/admin/cache?action=clear', { method: 'GET' });
             const data = await response.json();
 
             const resultDiv = document.getElementById('cache-result');
@@ -1361,6 +1399,9 @@
             const data = await response.json();
 
             if (response.ok) {
+                if (data.csrfToken) {
+                    setCSRFToken(data.csrfToken);
+                }
                 document.getElementById('auth-forms').classList.add('hidden');
                 document.getElementById('auth-buttons').classList.add('hidden');
                 document.getElementById('user-info').classList.remove('hidden');
@@ -1416,7 +1457,7 @@
 
     async function handleLogout() {
         try {
-            await fetch('/api/logout', { method: 'POST' });
+            await authFetch('/api/logout', { method: 'POST' });
         } catch (error) {
             console.error('Logout error:', error);
         }

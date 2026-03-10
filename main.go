@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"crypto/subtle"
 	"encoding/base64"
 	"encoding/json"
 	"errors"
@@ -118,6 +119,9 @@ var (
 	// In-memory session store as a fallback
 	sessionStore = make(map[string]string)
 	sessionMutex sync.RWMutex
+	// In-memory CSRF token store as a fallback
+	csrfStore = make(map[string]string)
+	csrfMutex sync.RWMutex
 )
 
 // generateSessionID creates a random session ID
@@ -171,9 +175,51 @@ func destroySession(sessionID string) {
 	delete(sessionStore, sessionID)
 	sessionMutex.Unlock()
 
+	csrfMutex.Lock()
+	delete(csrfStore, sessionID)
+	csrfMutex.Unlock()
+
 	if rdb != nil {
 		_ = rdb.Del(ctx, "session:"+sessionID).Err()
+		_ = rdb.Del(ctx, "csrf:"+sessionID).Err()
 	}
+}
+
+// createOrUpdateCSRFToken generates and stores a CSRF token associated with a session.
+func createOrUpdateCSRFToken(sessionID string) (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	token := base64.URLEncoding.EncodeToString(bytes)
+
+	csrfMutex.Lock()
+	csrfStore[sessionID] = token
+	csrfMutex.Unlock()
+
+	if rdb != nil {
+		if err := rdb.Set(ctx, "csrf:"+sessionID, token, 24*time.Hour).Err(); err != nil {
+			log.WithError(err).Warn("Failed to store CSRF token in Redis")
+		}
+	}
+
+	return token, nil
+}
+
+// getCSRFTokenForSession retrieves the CSRF token associated with a session.
+func getCSRFTokenForSession(sessionID string) (string, error) {
+	if rdb != nil {
+		if val, err := rdb.Get(ctx, "csrf:"+sessionID).Result(); err == nil && val != "" {
+			return val, nil
+		}
+	}
+
+	csrfMutex.RLock()
+	defer csrfMutex.RUnlock()
+	if token, ok := csrfStore[sessionID]; ok {
+		return token, nil
+	}
+	return "", nil
 }
 
 // loadUsersFromRedis loads all users from Redis
@@ -532,6 +578,7 @@ func main() {
 
 	r.Use(sentrygin.New(sentrygin.Options{}))
 	r.Use(rateLimitMiddleware)
+	r.Use(csrfMiddleware)
 
 	log.Info("Starting Bitcoin Explorer server")
 
@@ -711,11 +758,19 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
+	csrfToken, err := createOrUpdateCSRFToken(sessionID)
+	if err != nil {
+		log.WithError(err).Error("Failed to create CSRF token")
+		c.JSON(http.StatusInternalServerError, gin.H{"error": "Failed to create CSRF token"})
+		return
+	}
+
 	c.SetCookie("session_id", sessionID, 86400, "/", "", false, true) // 24 hours
 	c.JSON(http.StatusOK, gin.H{
-		"message":  "Login successful",
-		"username": loginReq.Username,
-		"role":     user.Role,
+		"message":   "Login successful",
+		"username":  loginReq.Username,
+		"role":      user.Role,
+		"csrfToken": csrfToken,
 	})
 	log.WithFields(log.Fields{
 		"username": loginReq.Username,
@@ -732,6 +787,58 @@ func logoutHandler(c *gin.Context) {
 
 	c.SetCookie("session_id", "", -1, "/", "", false, true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
+}
+
+// csrfMiddleware enforces CSRF protection for state-changing and admin endpoints
+// when cookie-based authentication is in use.
+func csrfMiddleware(c *gin.Context) {
+	path := c.FullPath()
+	method := c.Request.Method
+
+	// Skip CSRF checks for login and registration endpoints
+	if path == "/api/login" || path == "/api/register" {
+		c.Next()
+		return
+	}
+
+	// Determine if this request should be protected
+	isAdmin := strings.HasPrefix(path, "/api/admin")
+	isStateChanging := method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete || method == http.MethodPatch
+
+	// Only enforce on state-changing endpoints or any admin endpoint
+	if !isAdmin && !isStateChanging {
+		c.Next()
+		return
+	}
+
+	// Only apply CSRF protection when cookie-based auth is in use
+	sessionID, err := c.Cookie("session_id")
+	if err != nil || sessionID == "" {
+		c.Next()
+		return
+	}
+
+	providedToken := c.GetHeader("X-CSRF-Token")
+	if providedToken == "" {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "CSRF token missing"})
+		return
+	}
+
+	expectedToken, _ := getCSRFTokenForSession(sessionID)
+	if expectedToken == "" || !secureCompare(providedToken, expectedToken) {
+		c.AbortWithStatusJSON(http.StatusForbidden, gin.H{"error": "Invalid CSRF token"})
+		return
+	}
+
+	c.Next()
+}
+
+// secureCompare performs a constant-time comparison of two strings.
+func secureCompare(a, b string) bool {
+	if len(a) != len(b) {
+		return false
+	}
+	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
 // registerHandler handles user registration
