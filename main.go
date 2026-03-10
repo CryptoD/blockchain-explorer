@@ -743,6 +743,47 @@ func main() {
 	r.StaticFile("/dashboard", "dashboard.html")
 	r.StaticFile("/symbols", "symbols.html")
 
+	// Versioned API (v1)
+	apiV1 := r.Group("/api/v1")
+	{
+		apiV1.GET("/search", searchHandler)
+		apiV1.GET("/search/advanced", advancedSearchHandler)
+		apiV1.GET("/search/categories", getSymbolCategoriesHandler)
+		apiV1.GET("/autocomplete", autocompleteHandler)
+		apiV1.GET("/metrics", metricsHandler)
+		apiV1.GET("/network-status", networkStatusHandler)
+		apiV1.GET("/rates", ratesHandler)
+		apiV1.GET("/price-history", priceHistoryHandler)
+		apiV1.POST("/feedback", feedbackHandler)
+
+		// Authentication routes
+		apiV1.POST("/login", loginHandler)
+		apiV1.POST("/logout", logoutHandler)
+		apiV1.POST("/register", registerHandler)
+
+		// User routes (require authentication)
+		userV1 := apiV1.Group("/user")
+		userV1.Use(authMiddleware)
+		{
+			userV1.GET("/profile", userProfileHandler)
+			userV1.GET("/portfolios", listPortfoliosHandler)
+			userV1.POST("/portfolios", createPortfolioHandler)
+			userV1.PUT("/portfolios/:id", updatePortfolioHandler)
+			userV1.DELETE("/portfolios/:id", deletePortfolioHandler)
+		}
+
+		// Admin routes (require authentication and admin role)
+		adminV1 := apiV1.Group("/admin")
+		adminV1.Use(authMiddleware)
+		adminV1.Use(requireRoleMiddleware("admin"))
+		{
+			adminV1.GET("/status", adminStatusHandler)
+			adminV1.GET("/cache", adminCacheHandler)
+		}
+	}
+
+	// Legacy non-versioned API routes for backward compatibility.
+	// These may be removed in a future major release.
 	r.GET("/api/search", searchHandler)
 
 	// Enhanced search with filters and sorting
@@ -949,13 +990,13 @@ func csrfMiddleware(c *gin.Context) {
 	method := c.Request.Method
 
 	// Skip CSRF checks for login and registration endpoints
-	if path == "/api/login" || path == "/api/register" {
+	if path == "/api/login" || path == "/api/register" || path == "/api/v1/login" || path == "/api/v1/register" {
 		c.Next()
 		return
 	}
 
 	// Determine if this request should be protected
-	isAdmin := strings.HasPrefix(path, "/api/admin")
+	isAdmin := strings.HasPrefix(path, "/api/admin") || strings.HasPrefix(path, "/api/v1/admin")
 	isStateChanging := method == http.MethodPost || method == http.MethodPut || method == http.MethodDelete || method == http.MethodPatch
 
 	// Only enforce on state-changing endpoints or any admin endpoint

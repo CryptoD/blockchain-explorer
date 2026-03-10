@@ -442,7 +442,7 @@
         const formData = new FormData(loginForm);
         const data = Object.fromEntries(formData.entries());
         try {
-            const res = await fetch('/api/login', {
+            const res = await fetch('/api/v1/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -465,7 +465,7 @@
         const formData = new FormData(registerForm);
         const data = Object.fromEntries(formData.entries());
         try {
-            const res = await fetch('/api/register', {
+            const res = await fetch('/api/v1/register', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
                 body: JSON.stringify(data)
@@ -482,14 +482,14 @@
     });
 
     if (logoutBtn) logoutBtn.addEventListener('click', async () => {
-        await fetch('/api/logout', { method: 'POST' });
+        await fetch('/api/v1/logout', { method: 'POST' });
         checkAuth();
         location.reload();
     });
 
     async function checkAuth() {
         try {
-            const res = await fetch('/api/user/profile');
+            const res = await fetch('/api/v1/user/profile');
             if (res.ok) {
                 const user = await res.json();
                 usernameDisplay.textContent = user.username;
@@ -586,7 +586,7 @@
             };
 
             try {
-                const response = await fetch('/api/feedback', {
+                const response = await fetch('/api/v1/feedback', {
                     method: 'POST',
                     headers: {
                         'Content-Type': 'application/json',
@@ -658,7 +658,7 @@
 
     async function loadPortfolios() {
         try {
-            const res = await fetch('/api/user/portfolios');
+            const res = await fetch('/api/v1/user/portfolios');
             const portfolios = await res.json();
             portfolioList.innerHTML = portfolios.map(p => `
                 <div class="bg-bg-secondary p-6 rounded-lg shadow-sm border border-border">
@@ -727,7 +727,7 @@
             }));
 
             const method = id ? 'PUT' : 'POST';
-            const url = id ? `/api/user/portfolios/${id}` : '/api/user/portfolios';
+            const url = id ? `/api/v1/user/portfolios/${id}` : '/api/v1/user/portfolios';
 
             try {
                 await authFetch(url, {
@@ -744,7 +744,7 @@
     }
 
     window.editPortfolio = async (id) => {
-        const res = await fetch('/api/user/portfolios');
+        const res = await fetch('/api/v1/user/portfolios');
         const portfolios = await res.json();
         const p = portfolios.find(p => p.id === id);
 

@@ -1,3 +1,5 @@
+        const API_BASE = '/api/v1';
+
         // CSRF helpers
         const CSRF_HEADER_NAME = 'X-CSRF-Token';
         let csrfToken = null;
@@ -554,7 +556,7 @@
             autocompleteController = new AbortController();
             const signal = autocompleteController.signal;
 
-            fetch(`/api/autocomplete?q=${encodeURIComponent(query)}`, { signal })
+            fetch(`${API_BASE}/autocomplete?q=${encodeURIComponent(query)}`, { signal })
                 .then(resp => {
                     if (!resp.ok) return { suggestions: [] };
                     return resp.json();
@@ -684,7 +686,7 @@
 
             showLoading('Loading data...');
 
-            fetch(`/api/search?q=${encodeURIComponent(query)}`, { signal })
+            fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, { signal })
                 .then(response => {
                     clearTimeout(timeoutId);
                     if (!response.ok) {
@@ -1002,7 +1004,7 @@
         }
 
         function loadNetworkStatus() {
-            fetch('/api/network-status')
+            fetch(`${API_BASE}/network-status`)
                 .then(response => response.json())
                 .then(data => {
                     document.getElementById('network-block-height').textContent = data.block_height || 'N/A';
@@ -1063,7 +1065,7 @@
         renderHistory();
 
     function loadCharts() {
-        fetch('/api/metrics')
+        fetch(`${API_BASE}/metrics`)
             .then(response => response.json())
             .then(data => {
                 renderMempoolChart(data.mempool_size);
@@ -1202,7 +1204,7 @@
         const errorDiv = document.getElementById('login-error');
 
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1234,7 +1236,7 @@
 
     async function handleLogout() {
         try {
-            await authFetch('/api/logout', { method: 'POST' });
+            await authFetch(`${API_BASE}/logout`, { method: 'POST' });
         } catch (error) {
             console.error('Logout error:', error);
         }
@@ -1249,7 +1251,7 @@
 
     async function checkAuthStatus() {
         try {
-            const response = await authFetch('/api/admin/status');
+            const response = await authFetch(`${API_BASE}/admin/status`);
             if (response.ok) {
                 const data = await response.json();
                 document.getElementById('login-section').classList.add('hidden');
@@ -1265,7 +1267,7 @@
 
     async function loadSystemStatus() {
         try {
-            const response = await authFetch('/api/admin/status');
+            const response = await authFetch(`${API_BASE}/admin/status`);
             const data = await response.json();
 
             const statusDiv = document.getElementById('system-status');
@@ -1290,7 +1292,7 @@
 
     async function loadCacheStats() {
         try {
-            const response = await authFetch('/api/admin/cache?action=stats');
+            const response = await authFetch(`${API_BASE}/admin/cache?action=stats`);
             const data = await response.json();
 
             const statsDiv = document.getElementById('cache-stats');
@@ -1318,7 +1320,7 @@
         }
 
         try {
-            const response = await authFetch('/api/admin/cache?action=clear', { method: 'GET' });
+            const response = await authFetch(`${API_BASE}/admin/cache?action=clear`, { method: 'GET' });
             const data = await response.json();
 
             const resultDiv = document.getElementById('cache-result');
@@ -1388,7 +1390,7 @@
         const errorDiv = document.getElementById('login-error');
 
         try {
-            const response = await fetch('/api/login', {
+            const response = await fetch(`${API_BASE}/login`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1430,7 +1432,7 @@
         const errorDiv = document.getElementById('register-error');
 
         try {
-            const response = await fetch('/api/register', {
+            const response = await fetch(`${API_BASE}/register`, {
                 method: 'POST',
                 headers: {
                     'Content-Type': 'application/json',
@@ -1457,7 +1459,7 @@
 
     async function handleLogout() {
         try {
-            await authFetch('/api/logout', { method: 'POST' });
+            await authFetch(`${API_BASE}/logout`, { method: 'POST' });
         } catch (error) {
             console.error('Logout error:', error);
         }
@@ -1470,7 +1472,7 @@
 
     async function checkAuthStatus() {
         try {
-            const response = await fetch('/api/user/profile');
+            const response = await fetch(`${API_BASE}/user/profile`);
             if (response.ok) {
                 const data = await response.json();
                 document.getElementById('auth-buttons').classList.add('hidden');

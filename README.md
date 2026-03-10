@@ -128,13 +128,12 @@ For detailed API documentation, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md)
 
 ### Quick API Reference
 
-Base URL: `http://localhost:8080/api`
+Base URL (versioned): `http://localhost:8080/api/v1`
 
 #### Search Endpoints
-- `GET /api/search?q={query}` - Search blocks, transactions, or addresses
-- `GET /api/blocks/{hash_or_height}` - Get block details
-- `GET /api/transactions/{txid}` - Get transaction details
-- `GET /api/addresses/{address}` - Get address details
+- `GET /api/v1/search?q={query}` - Search blocks, transactions, or addresses
+- `GET /api/v1/search/advanced` - Advanced symbol search with filters/sorting
+- `GET /api/v1/search/categories` - Retrieve available symbol categories
 
 #### Response Format
 All responses are in JSON format:
