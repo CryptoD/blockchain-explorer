@@ -755,6 +755,16 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
+	loginReq.Username = strings.TrimSpace(loginReq.Username)
+	if len(loginReq.Username) < 3 || len(loginReq.Username) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
+		return
+	}
+	if len(loginReq.Password) < 6 || len(loginReq.Password) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 6 and 128 characters"})
+		return
+	}
+
 	user, authenticated := authenticateUser(loginReq.Username, loginReq.Password)
 	if !authenticated {
 		c.JSON(http.StatusUnauthorized, gin.H{"error": "Invalid credentials"})
@@ -866,13 +876,26 @@ func registerHandler(c *gin.Context) {
 	}
 
 	// Basic validation
-	if len(registerReq.Username) < 3 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be at least 3 characters"})
+	registerReq.Username = strings.TrimSpace(registerReq.Username)
+	if len(registerReq.Username) < 3 || len(registerReq.Username) > 64 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
 		return
 	}
-	if len(registerReq.Password) < 6 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be at least 6 characters"})
+	if len(registerReq.Password) < 6 || len(registerReq.Password) > 128 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 6 and 128 characters"})
 		return
+	}
+	if registerReq.Email != "" {
+		registerReq.Email = strings.TrimSpace(registerReq.Email)
+		if len(registerReq.Email) > 254 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Email must be at most 254 characters"})
+			return
+		}
+		emailPattern := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+		if !emailPattern.MatchString(registerReq.Email) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+			return
+		}
 	}
 
 	// Create user with default "user" role
@@ -903,6 +926,30 @@ func feedbackHandler(c *gin.Context) {
 
 	if err := c.ShouldBindJSON(&feedbackReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
+		return
+	}
+
+	feedbackReq.Name = strings.TrimSpace(feedbackReq.Name)
+	feedbackReq.Email = strings.TrimSpace(feedbackReq.Email)
+	feedbackReq.Message = strings.TrimSpace(feedbackReq.Message)
+
+	if len(feedbackReq.Name) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Name must be at most 100 characters"})
+		return
+	}
+	if feedbackReq.Email != "" {
+		if len(feedbackReq.Email) > 254 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Email must be at most 254 characters"})
+			return
+		}
+		emailPattern := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+		if !emailPattern.MatchString(feedbackReq.Email) {
+			c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid email format"})
+			return
+		}
+	}
+	if len(feedbackReq.Message) < 5 || len(feedbackReq.Message) > 2000 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Message must be between 5 and 2000 characters"})
 		return
 	}
 
@@ -1042,6 +1089,42 @@ func createPortfolioHandler(c *gin.Context) {
 		return
 	}
 
+	p.Name = strings.TrimSpace(p.Name)
+	p.Description = strings.TrimSpace(p.Description)
+	if p.Name == "" || len(p.Name) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio name must be between 1 and 100 characters"})
+		return
+	}
+	if len(p.Description) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio description must be at most 500 characters"})
+		return
+	}
+	if len(p.Items) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio cannot contain more than 100 items"})
+		return
+	}
+	for i, item := range p.Items {
+		item.Type = strings.TrimSpace(item.Type)
+		item.Label = strings.TrimSpace(item.Label)
+		item.Address = strings.TrimSpace(item.Address)
+		if item.Label == "" || len(item.Label) > 100 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1)})
+			return
+		}
+		if item.Address == "" || len(item.Address) > 256 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1)})
+			return
+		}
+		switch strings.ToLower(item.Type) {
+		case "stock", "crypto", "bond", "commodity":
+			// allowed
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
+			return
+		}
+		p.Items[i] = item
+	}
+
 	p.ID = fmt.Sprintf("%d", time.Now().UnixNano())
 	p.Username = username.(string)
 	p.Created = time.Now()
@@ -1066,6 +1149,42 @@ func updatePortfolioHandler(c *gin.Context) {
 	if err := c.ShouldBindJSON(&updateReq); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Invalid request format"})
 		return
+	}
+
+	updateReq.Name = strings.TrimSpace(updateReq.Name)
+	updateReq.Description = strings.TrimSpace(updateReq.Description)
+	if updateReq.Name == "" || len(updateReq.Name) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio name must be between 1 and 100 characters"})
+		return
+	}
+	if len(updateReq.Description) > 500 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio description must be at most 500 characters"})
+		return
+	}
+	if len(updateReq.Items) > 100 {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Portfolio cannot contain more than 100 items"})
+		return
+	}
+	for i, item := range updateReq.Items {
+		item.Type = strings.TrimSpace(item.Type)
+		item.Label = strings.TrimSpace(item.Label)
+		item.Address = strings.TrimSpace(item.Address)
+		if item.Label == "" || len(item.Label) > 100 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d label must be between 1 and 100 characters", i+1)})
+			return
+		}
+		if item.Address == "" || len(item.Address) > 256 {
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d address must be between 1 and 256 characters", i+1)})
+			return
+		}
+		switch strings.ToLower(item.Type) {
+		case "stock", "crypto", "bond", "commodity":
+			// allowed
+		default:
+			c.JSON(http.StatusBadRequest, gin.H{"error": fmt.Sprintf("Item %d has invalid type", i+1)})
+			return
+		}
+		updateReq.Items[i] = item
 	}
 
 	key := "portfolio:" + username.(string) + ":" + portfolioID
