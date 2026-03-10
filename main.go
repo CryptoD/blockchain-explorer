@@ -17,6 +17,7 @@ import (
 	"strings"
 	"sync"
 	"time"
+	"unicode"
 
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -324,6 +325,28 @@ func getEnvIntWithDefault(key string, defaultValue int) int {
 	return defaultValue
 }
 
+// isStrongPassword enforces a basic password policy:
+// - length between 8 and 128 characters
+// - must contain at least one letter and one digit.
+func isStrongPassword(pw string) bool {
+	if len(pw) < 8 || len(pw) > 128 {
+		return false
+	}
+	var hasLetter, hasDigit bool
+	for _, r := range pw {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+		} else if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+	return false
+}
+
+
 // initializeDefaultAdmin creates the default admin user if it doesn't exist.
 // In non-development environments, ADMIN_USERNAME and ADMIN_PASSWORD must be provided.
 // In development, sensible but insecure defaults are allowed for convenience.
@@ -351,6 +374,9 @@ func initializeDefaultAdmin() {
 	} else {
 		if adminUsername == "" || adminPassword == "" {
 			log.Fatal("ADMIN_USERNAME and ADMIN_PASSWORD must be set in non-development environments")
+		}
+		if !isStrongPassword(adminPassword) {
+			log.Fatal("ADMIN_PASSWORD must be 8-128 characters and include at least one letter and one digit in non-development environments")
 		}
 	}
 
@@ -861,6 +887,11 @@ func loginHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
 		return
 	}
+	usernamePattern := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+	if !usernamePattern.MatchString(loginReq.Username) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username may only contain letters, numbers, dots, dashes, and underscores"})
+		return
+	}
 	if len(loginReq.Password) < 6 || len(loginReq.Password) > 128 {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 6 and 128 characters"})
 		return
@@ -982,8 +1013,13 @@ func registerHandler(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"error": "Username must be between 3 and 64 characters"})
 		return
 	}
-	if len(registerReq.Password) < 6 || len(registerReq.Password) > 128 {
-		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be between 6 and 128 characters"})
+	usernamePattern := regexp.MustCompile(`^[a-zA-Z0-9_.-]+$`)
+	if !usernamePattern.MatchString(registerReq.Username) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Username may only contain letters, numbers, dots, dashes, and underscores"})
+		return
+	}
+	if !isStrongPassword(registerReq.Password) {
+		c.JSON(http.StatusBadRequest, gin.H{"error": "Password must be 8-128 characters and include at least one letter and one digit"})
 		return
 	}
 	if registerReq.Email != "" {
