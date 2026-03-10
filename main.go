@@ -19,6 +19,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
@@ -68,7 +69,7 @@ var ErrNotFound = errors.New("not found")
 var ctx = context.Background()
 
 var rdb = redis.NewClient(&redis.Options{
-	Addr: getEnvWithDefault("REDIS_HOST", "localhost") + ":6379",
+	Addr: config.GetEnvWithDefault("REDIS_HOST", "localhost") + ":6379",
 	DB:   0, // use default DB
 })
 
@@ -272,15 +273,6 @@ func saveUserToRedis(user User) error {
 	return rdb.Set(ctx, "user:"+user.Username, data, 0).Err() // No expiration
 }
 
-// getAppEnv returns the current application environment, defaulting to "development".
-func getAppEnv() string {
-	env := os.Getenv("APP_ENV")
-	if env == "" {
-		return "development"
-	}
-	return strings.ToLower(env)
-}
-
 // sanitizeText trims, truncates, strips control characters (except basic
 // whitespace), and HTML-escapes user-supplied text before storage or rendering.
 func sanitizeText(input string, maxLen int) string {
@@ -299,30 +291,6 @@ func sanitizeText(input string, maxLen int) string {
 	}
 	cleaned := b.String()
 	return html.EscapeString(cleaned)
-}
-
-// useSecureCookies determines whether cookies should be marked Secure.
-// Priority:
-// - If SECURE_COOKIES is set to a truthy value, always use secure cookies.
-// - Otherwise, use secure cookies for any non-development APP_ENV.
-func useSecureCookies() bool {
-	if val := strings.ToLower(os.Getenv("SECURE_COOKIES")); val != "" {
-		return val == "1" || val == "true" || val == "yes"
-	}
-	return getAppEnv() != "development"
-}
-
-// getEnvIntWithDefault reads an environment variable and parses it as int,
-// returning defaultValue if unset or invalid.
-func getEnvIntWithDefault(key string, defaultValue int) int {
-	valStr := os.Getenv(key)
-	if valStr == "" {
-		return defaultValue
-	}
-	if v, err := strconv.Atoi(valStr); err == nil {
-		return v
-	}
-	return defaultValue
 }
 
 // isStrongPassword enforces a basic password policy:
@@ -356,7 +324,7 @@ func initializeDefaultAdmin() {
 		log.WithError(err).Warn("Failed to load users from Redis")
 	}
 
-	appEnv := getAppEnv()
+	appEnv := config.GetAppEnv()
 
 	userMutex.Lock()
 	defer userMutex.Unlock()
@@ -542,9 +510,9 @@ func rateLimitMiddleware(c *gin.Context) {
 	username, _ := usernameVal.(string)
 
 	// Configurable limits via environment variables
-	windowSeconds := getEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60)
-	perIPLimit := getEnvIntWithDefault("RATE_LIMIT_PER_IP", 10)
-	perUserLimit := getEnvIntWithDefault("RATE_LIMIT_PER_USER", 10)
+	windowSeconds := config.GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60)
+	perIPLimit := config.GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10)
+	perUserLimit := config.GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10)
 	window := time.Duration(windowSeconds) * time.Second
 
 	// Prefer Redis-backed rate limiting when available
@@ -682,7 +650,7 @@ func main() {
 	log.SetFormatter(&log.JSONFormatter{})
 	log.SetLevel(log.InfoLevel)
 
-	appEnv := getAppEnv()
+	appEnv := config.GetAppEnv()
 	log.WithField("env", appEnv).Info("Starting Bitcoin Explorer server")
 
 	// Ensure required GetBlock configuration is present for production use.
@@ -697,7 +665,7 @@ func main() {
 
 	// Initialize Sentry
 	_ = pong
-	sentryDSN := getEnvWithDefault("SENTRY_DSN", "")
+	sentryDSN := config.GetEnvWithDefault("SENTRY_DSN", "")
 	if sentryDSN != "" {
 		if initErr := sentry.Init(sentry.ClientOptions{
 			Dsn: sentryDSN,
@@ -721,7 +689,7 @@ func main() {
 	log.Info("Starting Bitcoin Explorer server")
 
 	// Initialize Redis client
-	redisHost := getEnvWithDefault("REDIS_HOST", "localhost")
+	redisHost := config.GetEnvWithDefault("REDIS_HOST", "localhost")
 	rdb = redis.NewClient(&redis.Options{
 		Addr: redisHost + ":6379",
 	})
@@ -963,7 +931,7 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
-	c.SetCookie("session_id", sessionID, 86400, "/", "", useSecureCookies(), true) // 24 hours
+	c.SetCookie("session_id", sessionID, 86400, "/", "", config.UseSecureCookies(), true) // 24 hours
 	c.JSON(http.StatusOK, gin.H{
 		"message":   "Login successful",
 		"username":  loginReq.Username,
@@ -983,7 +951,7 @@ func logoutHandler(c *gin.Context) {
 		destroySession(sessionID)
 	}
 
-	c.SetCookie("session_id", "", -1, "/", "", useSecureCookies(), true)
+	c.SetCookie("session_id", "", -1, "/", "", config.UseSecureCookies(), true)
 	c.JSON(http.StatusOK, gin.H{"message": "Logout successful"})
 }
 
@@ -2046,7 +2014,7 @@ func healthHandler(c *gin.Context) {
 		"status":     status,
 		"details":    details,
 		"timestamp":  time.Now().Unix(),
-		"app_env":    getAppEnv(),
+		"app_env":    config.GetAppEnv(),
 		"version":    "v1",
 		"api_prefix": "/api/v1",
 	})
@@ -2118,14 +2086,6 @@ func SetHTTPClient(c *resty.Client) {
 	if c != nil {
 		httpClient = c
 	}
-}
-
-func getEnvWithDefault(key, defaultValue string) string {
-	value := os.Getenv(key)
-	if value == "" {
-		return defaultValue
-	}
-	return value
 }
 
 // handleError standardizes error responses
