@@ -743,6 +743,10 @@ func main() {
 	r.StaticFile("/dashboard", "dashboard.html")
 	r.StaticFile("/symbols", "symbols.html")
 
+	// Health and readiness endpoints
+	r.GET("/healthz", healthHandler)
+	r.GET("/readyz", readinessHandler)
+
 	// Versioned API (v1)
 	apiV1 := r.Group("/api/v1")
 	{
@@ -2012,6 +2016,89 @@ func ratesHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, rates)
+}
+
+// healthHandler is a simple liveness probe. It reports basic process health
+// and whether core configuration is present, but does not force external
+// dependency checks to succeed.
+func healthHandler(c *gin.Context) {
+	status := "ok"
+	details := gin.H{}
+
+	// Basic Redis check (non-fatal)
+	if rdb != nil {
+		if err := rdb.Ping(ctx).Err(); err != nil {
+			status = "degraded"
+			details["redis_error"] = err.Error()
+		}
+	} else {
+		status = "degraded"
+		details["redis_error"] = "redis client not initialized"
+	}
+
+	// Configuration check
+	if baseURL == "" || apiKey == "" {
+		status = "degraded"
+		details["config_error"] = "GETBLOCK_BASE_URL or GETBLOCK_ACCESS_TOKEN not set"
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"status":     status,
+		"details":    details,
+		"timestamp":  time.Now().Unix(),
+		"app_env":    getAppEnv(),
+		"version":    "v1",
+		"api_prefix": "/api/v1",
+	})
+}
+
+// readinessHandler is a readiness probe. It checks core dependencies such as
+// Redis and (optionally) the external GetBlock API. If these checks fail, the
+// endpoint returns 503 so orchestrators can avoid routing traffic.
+func readinessHandler(c *gin.Context) {
+	if rdb == nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "redis client not initialized"})
+		return
+	}
+
+	// Redis must be reachable
+	if err := rdb.Ping(ctx).Err(); err != nil {
+		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": fmt.Sprintf("redis ping failed: %v", err)})
+		return
+	}
+
+	// Optional shallow external API check, controlled via env
+	checkExternal := strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true"
+	if checkExternal {
+		if baseURL == "" || apiKey == "" {
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "missing GETBLOCK_* env for external readiness check"})
+			return
+		}
+		// Perform a lightweight external call with a short timeout
+		client := resty.New().SetTimeout(3 * time.Second).SetRetryCount(0)
+		resp, err := client.R().
+			SetHeader("Content-Type", "application/json").
+			SetHeader("x-api-key", apiKey).
+			SetBody(map[string]interface{}{
+				"jsonrpc": "2.0",
+				"id":      "readiness",
+				"method":  "getblockcount",
+				"params":  []interface{}{},
+			}).
+			Post(baseURL)
+		if err != nil || resp.StatusCode() >= 400 {
+			msg := "external API readiness check failed"
+			if err != nil {
+				msg = fmt.Sprintf("%s: %v", msg, err)
+			} else {
+				msg = fmt.Sprintf("%s: %s", msg, resp.Status())
+			}
+			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": msg})
+			return
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{"status": "ready", "timestamp": time.Now().Unix()})
 }
 
 var (
