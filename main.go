@@ -84,6 +84,135 @@ var rateLimitCount = make(map[string]int)
 var rateLimitReset = make(map[string]time.Time)
 var rateLimitMutex sync.Mutex
 
+// Export-specific rate limiting (stricter; separate from general API limits)
+var exportRateLimitCount = make(map[string]int)
+var exportRateLimitReset = make(map[string]time.Time)
+var exportRateLimitMutex sync.Mutex
+
+// checkExportRateLimit enforces per-IP and per-user limits for export endpoints.
+// If heavy is true, stricter limits apply (e.g. for transactions CSV).
+// Aborts with 429 and returns false when exceeded; returns true otherwise.
+func checkExportRateLimit(c *gin.Context, heavy bool) bool {
+	ip := c.ClientIP()
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+
+	windowSeconds := 60
+	perIP := 5
+	perUser := 20
+	if heavy {
+		perIP = 2
+		perUser = 5
+	}
+	if appConfig != nil {
+		if appConfig.ExportRateLimitPerIP > 0 && !heavy {
+			perIP = appConfig.ExportRateLimitPerIP
+		}
+		if appConfig.ExportRateLimitPerUser > 0 && !heavy {
+			perUser = appConfig.ExportRateLimitPerUser
+		}
+		if heavy && appConfig.ExportRateLimitHeavyPerIP > 0 {
+			perIP = appConfig.ExportRateLimitHeavyPerIP
+		}
+		if heavy && appConfig.ExportRateLimitHeavyPerUser > 0 {
+			perUser = appConfig.ExportRateLimitHeavyPerUser
+		}
+	}
+	window := time.Duration(windowSeconds) * time.Second
+	prefix := "export"
+	if heavy {
+		prefix = "export:heavy"
+	}
+
+	if rdb != nil {
+		ctx := context.Background()
+		ipKey := fmt.Sprintf("rate:%s:ip:%s", prefix, ip)
+		ipCount, err := rdb.Incr(ctx, ipKey).Result()
+		if err == nil {
+			if ipCount == 1 {
+				_ = rdb.Expire(ctx, ipKey, window).Err()
+			}
+			if ipCount > int64(perIP) {
+				log.WithFields(log.Fields{"ip": ip, "export": prefix}).Warn("Export rate limit exceeded (IP)")
+				errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
+				c.Abort()
+				return false
+			}
+		}
+		if username != "" {
+			userKey := fmt.Sprintf("rate:%s:user:%s", prefix, username)
+			userCount, err := rdb.Incr(ctx, userKey).Result()
+			if err == nil {
+				if userCount == 1 {
+					_ = rdb.Expire(ctx, userKey, window).Err()
+				}
+				if userCount > int64(perUser) {
+					log.WithFields(log.Fields{"username": username, "export": prefix}).Warn("Export rate limit exceeded (user)")
+					errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
+					c.Abort()
+					return false
+				}
+			}
+		}
+		return true
+	}
+
+	// In-memory fallback
+	exportRateLimitMutex.Lock()
+	defer exportRateLimitMutex.Unlock()
+	now := time.Now()
+	ipKey := prefix + ":ip:" + ip
+	if reset, ok := exportRateLimitReset[ipKey]; ok && now.After(reset) {
+		exportRateLimitCount[ipKey] = 0
+		exportRateLimitReset[ipKey] = now.Add(window)
+	}
+	if _, ok := exportRateLimitReset[ipKey]; !ok {
+		exportRateLimitCount[ipKey] = 0
+		exportRateLimitReset[ipKey] = now.Add(window)
+	}
+	exportRateLimitCount[ipKey]++
+	if exportRateLimitCount[ipKey] > perIP {
+		log.WithFields(log.Fields{"ip": ip, "export": prefix}).Warn("Export rate limit exceeded (in-memory)")
+		errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
+		c.Abort()
+		return false
+	}
+	if username != "" {
+		userKey := prefix + ":user:" + username
+		if reset, ok := exportRateLimitReset[userKey]; ok && now.After(reset) {
+			exportRateLimitCount[userKey] = 0
+			exportRateLimitReset[userKey] = now.Add(window)
+		}
+		if _, ok := exportRateLimitReset[userKey]; !ok {
+			exportRateLimitCount[userKey] = 0
+			exportRateLimitReset[userKey] = now.Add(window)
+		}
+		exportRateLimitCount[userKey]++
+		if exportRateLimitCount[userKey] > perUser {
+			log.WithFields(log.Fields{"username": username, "export": prefix}).Warn("Export rate limit exceeded (in-memory)")
+			errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
+			c.Abort()
+			return false
+		}
+	}
+	return true
+}
+
+// logLargeExport logs when an export request is large or resource-intensive (for monitoring/abuse detection).
+func logLargeExport(c *gin.Context, endpoint string, details map[string]interface{}) {
+	fields := log.Fields{
+		"endpoint": endpoint,
+		"ip":       c.ClientIP(),
+	}
+	if u, ok := c.Get("username"); ok {
+		fields["username"] = u
+	}
+	for k, v := range details {
+		fields[k] = v
+	}
+	log.WithFields(fields).Info("Large or intensive export request")
+}
+
 // User struct definition
 type User struct {
 	Username string    `json:"username"`
@@ -1498,6 +1627,9 @@ func deletePortfolioHandler(c *gin.Context) {
 // exportPortfolioCSVHandler streams a single portfolio's holdings as CSV.
 // Requires authentication. Sets Content-Type and Content-Disposition for browser download.
 func exportPortfolioCSVHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	username, _ := c.Get("username")
 	portfolioID := c.Param("id")
 	key := "portfolio:" + username.(string) + ":" + portfolioID
@@ -1532,6 +1664,9 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 		filename = "portfolio-" + portfolioID + ".csv"
 	}
 
+	if len(p.Items) > 20 {
+		logLargeExport(c, "portfolios/:id/export/csv", map[string]interface{}{"portfolio_id": portfolioID, "item_count": len(p.Items)})
+	}
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 
@@ -1671,6 +1806,9 @@ func formatFloat(f float64) string {
 
 // exportPortfolioPDFHandler generates and streams a portfolio summary report as PDF. Requires authentication.
 func exportPortfolioPDFHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	username, _ := c.Get("username")
 	portfolioID := c.Param("id")
 	key := "portfolio:" + username.(string) + ":" + portfolioID
@@ -1683,6 +1821,9 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 	if err := json.Unmarshal([]byte(data), &p); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to load portfolio")
 		return
+	}
+	if len(p.Items) > 20 {
+		logLargeExport(c, "portfolios/:id/export/pdf", map[string]interface{}{"portfolio_id": portfolioID, "item_count": len(p.Items)})
 	}
 	var b strings.Builder
 	for _, r := range p.Name {
@@ -1727,6 +1868,9 @@ const (
 // Query params: start_height, end_height (required), limit (optional, default 500, max 2000).
 // Range is capped at maxBlockRangeExport blocks.
 func exportBlocksCSVHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	startStr := c.Query("start_height")
 	endStr := c.Query("end_height")
 	if startStr == "" || endStr == "" {
@@ -1769,7 +1913,9 @@ func exportBlocksCSVHandler(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "invalid_range", fmt.Sprintf("end_height cannot exceed current chain height %d", best))
 		return
 	}
-
+	if rangeSize >= 100 || limit >= 1000 {
+		logLargeExport(c, "blocks/export/csv", map[string]interface{}{"start_height": start, "end_height": end, "range_size": rangeSize, "limit": limit})
+	}
 	filename := fmt.Sprintf("blocks-%d-%d.csv", start, end)
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
@@ -1821,7 +1967,11 @@ func exportBlocksCSVHandler(c *gin.Context) {
 
 // exportTransactionsCSVHandler streams transactions from blocks in a height range as CSV.
 // One block at a time, then one tx at a time per block. Query params: start_height, end_height (required), limit (optional, default 1000, max 5000).
+// Uses stricter (heavy) export rate limit due to RPC load.
 func exportTransactionsCSVHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, true) {
+		return
+	}
 	startStr := c.Query("start_height")
 	endStr := c.Query("end_height")
 	if startStr == "" || endStr == "" {
@@ -1864,7 +2014,9 @@ func exportTransactionsCSVHandler(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "invalid_range", fmt.Sprintf("end_height cannot exceed current chain height %d", best))
 		return
 	}
-
+	if rangeSize >= 50 || limit >= 2000 {
+		logLargeExport(c, "transactions/export/csv", map[string]interface{}{"start_height": start, "end_height": end, "range_size": rangeSize, "limit": limit})
+	}
 	filename := fmt.Sprintf("transactions-%d-%d.csv", start, end)
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
@@ -1952,6 +2104,9 @@ func stringOrEmpty(v interface{}) string {
 // exportPortfoliosHandler returns portfolios as machine-friendly JSON for archival or analysis.
 // Requires authentication. Respects pagination (page, page_size) and sort (sort_by, sort_dir).
 func exportPortfoliosHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	username, _ := c.Get("username")
 
 	keys, err := rdb.Keys(ctx, "portfolio:"+username.(string)+":*").Result()
@@ -2015,7 +2170,9 @@ func exportPortfoliosHandler(c *gin.Context) {
 		end = total
 	}
 	paginated := portfolios[start:end]
-
+	if total >= 50 || pagination.PageSize >= 50 {
+		logLargeExport(c, "portfolios/export", map[string]interface{}{"total": total, "page_size": pagination.PageSize})
+	}
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
@@ -2123,6 +2280,9 @@ func searchHandler(c *gin.Context) {
 // exportSearchHandler returns blockchain search results as machine-friendly JSON for archival or analysis.
 // Same parameters as GET /api/search (q required). Public endpoint; no auth required.
 func exportSearchHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	query := strings.TrimSpace(c.Query("q"))
 	if query == "" {
 		errorResponse(c, http.StatusBadRequest, "missing_query", "Missing query parameter")
@@ -2502,6 +2662,9 @@ func advancedSearchHandler(c *gin.Context) {
 // Same parameters as GET /api/search/advanced (q, types, categories, min_price, max_price, page, page_size, sort_by, sort_dir).
 // Public endpoint; no auth required.
 func exportAdvancedSearchHandler(c *gin.Context) {
+	if !checkExportRateLimit(c, false) {
+		return
+	}
 	query := strings.TrimSpace(c.Query("q"))
 	pagination := apiutil.ParsePagination(c, 20, 100)
 	filters := parseSearchFilters(c)
@@ -2535,7 +2698,9 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 		end = total
 	}
 	paginatedResults := results[start:end]
-
+	if total >= 50 || pagination.PageSize >= 50 {
+		logLargeExport(c, "search/advanced/export", map[string]interface{}{"total": total, "page_size": pagination.PageSize, "query": query})
+	}
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{

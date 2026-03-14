@@ -27,6 +27,12 @@ type Config struct {
 	RateLimitPerIP         int
 	RateLimitPerUser       int
 
+	// Export-specific rate limiting (stricter to prevent abuse)
+	ExportRateLimitPerIP   int // per window; default 5
+	ExportRateLimitPerUser int // per window when authenticated; default 20
+	ExportRateLimitHeavyPerIP   int // for heavy exports (e.g. transactions CSV); default 2
+	ExportRateLimitHeavyPerUser int // when authenticated; default 5
+
 	// Readiness / health
 	ReadyCheckExternal bool
 }
@@ -43,10 +49,14 @@ func Load() (*Config, error) {
 		GetBlockAccessToken:   strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
 		SentryDSN:             strings.TrimSpace(os.Getenv("SENTRY_DSN")),
 		SecureCookies:         UseSecureCookies(),
-		RateLimitWindowSeconds: GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
-		RateLimitPerIP:         GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
-		RateLimitPerUser:       GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
-		ReadyCheckExternal:     strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
+		RateLimitWindowSeconds:     GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitPerIP:             GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
+		RateLimitPerUser:           GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
+		ExportRateLimitPerIP:       GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_IP", 5),
+		ExportRateLimitPerUser:     GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
+		ExportRateLimitHeavyPerIP:  GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
+		ExportRateLimitHeavyPerUser: GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
+		ReadyCheckExternal:         strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
 	}
 
 	// Required in all environments: GetBlock configuration for core blockchain operations.

@@ -748,6 +748,15 @@ Rate limits are enforced per IP address and per authenticated user:
 
 - **Anonymous users**: 100 requests per minute
 - **Authenticated users**: 500 requests per minute
+
+### Export endpoint limits
+
+Export endpoints use **stricter per-minute limits** to prevent abuse and reduce server/RPC load:
+
+- **Standard exports** (portfolios CSV/JSON/PDF, blocks CSV, search export, advanced search export): 5 requests per minute per IP; 20 per minute per authenticated user. Configurable via `EXPORT_RATE_LIMIT_PER_IP` and `EXPORT_RATE_LIMIT_PER_USER`.
+- **Heavy exports** (transactions CSV, which triggers many RPC calls): 2 requests per minute per IP; 5 per minute per authenticated user. Configurable via `EXPORT_RATE_LIMIT_HEAVY_PER_IP` and `EXPORT_RATE_LIMIT_HEAVY_PER_USER`.
+
+When exceeded, the API returns `429 Too Many Requests` with code `export_rate_limited`. Large or intensive export requests are logged for monitoring.
 - **Admin users**: 1000 requests per minute
 
 Rate limit information is included in response headers:
