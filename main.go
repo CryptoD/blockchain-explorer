@@ -1512,8 +1512,32 @@ func listPortfoliosHandler(c *gin.Context) {
 	}
 	paginated := portfolios[start:end]
 
+	// Valuation in user's preferred fiat (fallback to usd)
+	valuationCurrency := "usd"
+	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
+		valuationCurrency = strings.ToLower(u.PreferredCurrency)
+	}
+	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+
+	dataWithValuation := make([]PortfolioWithValuation, 0, len(paginated))
+	for i := range paginated {
+		p := &paginated[i]
+		totalFiat, itemsWithVal := computePortfolioValuation(p, btcRate, rateOk)
+		dataWithValuation = append(dataWithValuation, PortfolioWithValuation{
+			ID:                p.ID,
+			Username:          p.Username,
+			Name:              p.Name,
+			Description:       p.Description,
+			Created:           p.Created,
+			Updated:           p.Updated,
+			ValuationCurrency: valuationCurrency,
+			TotalValueFiat:    totalFiat,
+			Items:             itemsWithVal,
+		})
+	}
+
 	c.JSON(http.StatusOK, gin.H{
-		"data": paginated,
+		"data": dataWithValuation,
 		"pagination": gin.H{
 			"page":        pagination.Page,
 			"page_size":   pagination.PageSize,
@@ -1718,21 +1742,31 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	if len(p.Items) > 20 {
 		logLargeExport(c, "portfolios/:id/export/csv", map[string]interface{}{"portfolio_id": portfolioID, "item_count": len(p.Items)})
 	}
+	valuationCurrency := "usd"
+	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
+		valuationCurrency = strings.ToLower(u.PreferredCurrency)
+	}
+	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 
 	w := csv.NewWriter(c.Writer)
-	_ = w.Write([]string{"symbol", "type", "address", "amount", "value", "portfolio_created", "portfolio_updated"})
+	_ = w.Write([]string{"symbol", "type", "address", "amount", "value_" + valuationCurrency, "portfolio_created", "portfolio_updated"})
 	createdStr := p.Created.UTC().Format(time.RFC3339)
 	updatedStr := p.Updated.UTC().Format(time.RFC3339)
 	for _, item := range p.Items {
 		amountStr := strconv.FormatFloat(item.Amount, 'f', -1, 64)
+		valueStr := ""
+		if rateOk && strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
+			valueStr = strconv.FormatFloat(item.Amount*btcRate, 'f', 2, 64)
+		}
 		_ = w.Write([]string{
 			item.Label,
 			item.Type,
 			item.Address,
 			amountStr,
-			amountStr, // value (quantity; replace with amount*price if pricing available)
+			valueStr,
 			createdStr,
 			updatedStr,
 		})
@@ -1744,7 +1778,8 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 }
 
 // generatePortfolioPDF writes a short portfolio summary report (overall value, allocations by type, positions table) to w.
-func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
+// If valuationCurrency is set and rateOk is true, fiat values are shown; otherwise only quantities.
+func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, btcRate float64, rateOk bool) error {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(15, 15, 15)
 	pdf.SetAutoPageBreak(true, 15)
@@ -1756,22 +1791,34 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
 	pdf.CellFormat(0, 6, "Portfolio Report — Generated "+time.Now().UTC().Format("2006-01-02 15:04 MST"), "", 0, "L", false, 0, "")
 	pdf.Ln(10)
 
-	// Overall value (sum of amounts) and meta
-	var total float64
+	// Overall value: quantity and optionally total fiat
+	var totalQty float64
 	for _, item := range p.Items {
-		total += item.Amount
+		totalQty += item.Amount
+	}
+	totalFiat := 0.0
+	if rateOk && valuationCurrency != "" {
+		for _, item := range p.Items {
+			if strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
+				totalFiat += item.Amount * btcRate
+			}
+		}
 	}
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.CellFormat(0, 8, "Summary", "", 0, "L", false, 0, "")
 	pdf.Ln(6)
 	pdf.SetFont("Helvetica", "", 10)
-	pdf.CellFormat(0, 6, fmt.Sprintf("Total (quantity): %s  |  Positions: %d  |  Created: %s  |  Updated: %s",
-		formatFloat(total), len(p.Items),
+	summaryLine := fmt.Sprintf("Total (quantity): %s  |  Positions: %d  |  Created: %s  |  Updated: %s",
+		formatFloat(totalQty), len(p.Items),
 		p.Created.UTC().Format("2006-01-02"),
-		p.Updated.UTC().Format("2006-01-02")), "", 0, "L", false, 0, "")
+		p.Updated.UTC().Format("2006-01-02"))
+	if rateOk && valuationCurrency != "" && totalFiat > 0 {
+		summaryLine += fmt.Sprintf("  |  Total value (%s): %s", strings.ToUpper(valuationCurrency), formatFloat(totalFiat))
+	}
+	pdf.CellFormat(0, 6, summaryLine, "", 0, "L", false, 0, "")
 	pdf.Ln(12)
 
-	// Allocations by asset type
+	// Allocations by asset type (by quantity)
 	typeAlloc := make(map[string]float64)
 	for _, item := range p.Items {
 		t := strings.ToLower(strings.TrimSpace(item.Type))
@@ -1790,15 +1837,16 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
 		pdf.CellFormat(colW[i], 7, h, "1", 0, "L", true, 0, "")
 	}
 	pdf.Ln(-1)
-	if total == 0 {
-		total = 1
+	totalForPct := totalQty
+	if totalForPct == 0 {
+		totalForPct = 1
 	}
 	for _, t := range []string{"crypto", "stock", "bond", "commodity", "other"} {
 		amt, ok := typeAlloc[t]
 		if !ok || amt == 0 {
 			continue
 		}
-		pct := amt / total * 100
+		pct := amt / totalForPct * 100
 		pdf.CellFormat(colW[0], 6, t, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(colW[1], 6, formatFloat(amt), "1", 0, "R", false, 0, "")
 		pdf.CellFormat(colW[2], 6, formatFloat(pct)+"%", "1", 0, "R", false, 0, "")
@@ -1812,13 +1860,17 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
 	}
 	pdf.Ln(8)
 
-	// Positions table
+	// Positions table: add Value (fiat) column when rate available
+	posColW := []float64{45, 25, 70, 35, 40}
+	posHeaders := []string{"Label", "Type", "Address", "Amount", "Value (" + strings.ToUpper(valuationCurrency) + ")"}
+	if !rateOk || valuationCurrency == "" {
+		posColW = []float64{45, 25, 70, 35}
+		posHeaders = []string{"Label", "Type", "Address", "Amount"}
+	}
 	pdf.SetFont("Helvetica", "B", 11)
 	pdf.CellFormat(0, 8, "Positions", "", 0, "L", false, 0, "")
 	pdf.Ln(6)
 	pdf.SetFont("Helvetica", "", 9)
-	posColW := []float64{45, 25, 70, 35}
-	posHeaders := []string{"Label", "Type", "Address", "Amount"}
 	for i, h := range posHeaders {
 		pdf.CellFormat(posColW[i], 7, h, "1", 0, "L", true, 0, "")
 	}
@@ -1836,11 +1888,24 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
 		pdf.CellFormat(posColW[1], 6, item.Type, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(posColW[2], 6, addr, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(posColW[3], 6, formatFloat(item.Amount), "1", 0, "R", false, 0, "")
+		if rateOk && valuationCurrency != "" && len(posColW) > 4 {
+			valStr := ""
+			if strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
+				valStr = formatFloat(item.Amount * btcRate)
+			}
+			pdf.CellFormat(posColW[4], 6, valStr, "1", 0, "R", false, 0, "")
+		}
 		pdf.Ln(-1)
 	}
 	pdf.Ln(8)
 	pdf.SetFont("Helvetica", "I", 8)
-	pdf.CellFormat(0, 5, "Performance history is not available in this report. Value above is total quantity (amounts).", "", 0, "L", false, 0, "")
+	footer := "Performance history is not available in this report."
+	if rateOk && valuationCurrency != "" {
+		footer = "Values in " + strings.ToUpper(valuationCurrency) + " use current rate; missing rate data is shown blank."
+	} else {
+		footer += " Value above is total quantity (amounts)."
+	}
+	pdf.CellFormat(0, 5, footer, "", 0, "L", false, 0, "")
 
 	return pdf.Output(w)
 }
@@ -1894,9 +1959,15 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 	if len(filename) > 200 {
 		filename = "portfolio-" + portfolioID + ".pdf"
 	}
+	valuationCurrency := "usd"
+	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
+		valuationCurrency = strings.ToLower(u.PreferredCurrency)
+	}
+	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	if err := generatePortfolioPDF(&p, c.Writer); err != nil {
+	if err := generatePortfolioPDF(&p, c.Writer, valuationCurrency, btcRate, rateOk); err != nil {
 		log.WithError(err).Error("portfolio PDF export failed")
 		errorResponse(c, http.StatusInternalServerError, "pdf_generation_failed", "Failed to generate PDF")
 		return
@@ -2224,12 +2295,35 @@ func exportPortfoliosHandler(c *gin.Context) {
 	if total >= 50 || pagination.PageSize >= 50 {
 		logLargeExport(c, "portfolios/export", map[string]interface{}{"total": total, "page_size": pagination.PageSize})
 	}
+	valuationCurrency := "usd"
+	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
+		valuationCurrency = strings.ToLower(u.PreferredCurrency)
+	}
+	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+	dataWithValuation := make([]PortfolioWithValuation, 0, len(paginated))
+	for i := range paginated {
+		p := &paginated[i]
+		totalFiat, itemsWithVal := computePortfolioValuation(p, btcRate, rateOk)
+		dataWithValuation = append(dataWithValuation, PortfolioWithValuation{
+			ID:                p.ID,
+			Username:          p.Username,
+			Name:              p.Name,
+			Description:       p.Description,
+			Created:           p.Created,
+			Updated:           p.Updated,
+			ValuationCurrency: valuationCurrency,
+			TotalValueFiat:    totalFiat,
+			Items:             itemsWithVal,
+		})
+	}
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
-			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
-			"export_version":   exportVersion,
-			"endpoint":         "portfolios",
+			"export_timestamp":     time.Now().UTC().Format(time.RFC3339),
+			"export_version":        exportVersion,
+			"endpoint":              "portfolios",
+			"valuation_currency":   valuationCurrency,
+			"rate_data_available":  rateOk,
 		},
 		"pagination": gin.H{
 			"page":        pagination.Page,
@@ -2237,7 +2331,7 @@ func exportPortfoliosHandler(c *gin.Context) {
 			"total":       total,
 			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
 		},
-		"data": paginated,
+		"data": dataWithValuation,
 	})
 }
 
@@ -2970,6 +3064,80 @@ func filterRatesByCurrencies(rates map[string]interface{}, want []string) map[st
 		}
 	}
 	return out
+}
+
+// getBTCPriceInFiat returns the BTC price in the given fiat code (e.g. "usd", "eur").
+// Uses the rates service; returns (0, false) if pricing is unavailable or currency unsupported.
+func getBTCPriceInFiat(ctx context.Context, fiatCode string) (float64, bool) {
+	fiatCode = strings.ToLower(strings.TrimSpace(fiatCode))
+	if fiatCode == "" || !pricing.SupportedFiatCurrencies[fiatCode] {
+		fiatCode = "usd"
+	}
+	if pricingClient == nil {
+		return 0, false
+	}
+	rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, []string{fiatCode})
+	if err != nil {
+		return 0, false
+	}
+	btc, ok := rates["bitcoin"].(map[string]interface{})
+	if !ok {
+		return 0, false
+	}
+	val, ok := btc[fiatCode]
+	if !ok {
+		return 0, false
+	}
+	switch v := val.(type) {
+	case float64:
+		return v, v > 0
+	case int:
+		return float64(v), v > 0
+	default:
+		return 0, false
+	}
+}
+
+// PortfolioItemWithValue adds value_fiat to a portfolio item for API responses.
+type PortfolioItemWithValue struct {
+	PortfolioItem
+	ValueFiat *float64 `json:"value_fiat,omitempty"` // nil when rate unavailable or non-crypto
+}
+
+// computePortfolioValuation enriches portfolio items with value_fiat (crypto type treated as BTC) and total.
+// Missing rate data: value_fiat is nil for that item; total is sum of known values only.
+func computePortfolioValuation(p *Portfolio, btcRate float64, rateOk bool) (total *float64, items []PortfolioItemWithValue) {
+	items = make([]PortfolioItemWithValue, 0, len(p.Items))
+	var sum float64
+	hasAny := false
+	for i := range p.Items {
+		it := p.Items[i]
+		withVal := PortfolioItemWithValue{PortfolioItem: it}
+		if rateOk && strings.ToLower(strings.TrimSpace(it.Type)) == "crypto" {
+			v := it.Amount * btcRate
+			withVal.ValueFiat = &v
+			sum += v
+			hasAny = true
+		}
+		items = append(items, withVal)
+	}
+	if hasAny {
+		total = &sum
+	}
+	return total, items
+}
+
+// PortfolioWithValuation is a portfolio plus valuation in user's preferred fiat for API responses.
+type PortfolioWithValuation struct {
+	ID                string                   `json:"id"`
+	Username          string                   `json:"username"`
+	Name              string                   `json:"name"`
+	Description       string                   `json:"description"`
+	Created           time.Time                `json:"created"`
+	Updated           time.Time                `json:"updated"`
+	ValuationCurrency string                   `json:"valuation_currency,omitempty"`
+	TotalValueFiat    *float64                 `json:"total_value_fiat,omitempty"`
+	Items             []PortfolioItemWithValue  `json:"items"`
 }
 
 // healthHandler is a simple liveness probe. It reports basic process health
