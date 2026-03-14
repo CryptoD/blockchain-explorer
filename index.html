@@ -658,24 +658,129 @@
 
     async function loadPortfolios() {
         try {
-            const res = await fetch('/api/v1/user/portfolios');
-            const portfolios = await res.json();
+            const res = await fetch('/api/v1/user/portfolios', { credentials: 'include' });
+            if (!res.ok) {
+                portfolioList.innerHTML = '<p class="text-text-secondary">Sign in to view and export your portfolios.</p>';
+                return;
+            }
+            const json = await res.json();
+            const portfolios = json.data || json;
+            if (!Array.isArray(portfolios)) {
+                portfolioList.innerHTML = '<p class="text-text-secondary">No portfolios found.</p>';
+                return;
+            }
             portfolioList.innerHTML = portfolios.map(p => `
                 <div class="bg-bg-secondary p-6 rounded-lg shadow-sm border border-border">
                     <h3 class="text-xl font-bold">${p.name}</h3>
                     <p class="text-text-secondary text-sm mb-4">${p.description || 'No description'}</p>
                     <div class="text-sm space-y-1 mb-4">
-                        ${p.items.map(item => `<div><span class="font-medium">[${(item.type || 'stock').toUpperCase()}] ${item.label}:</span> ${item.address}</div>`).join('')}
+                        ${(p.items || []).map(item => `<div><span class="font-medium">[${(item.type || 'stock').toUpperCase()}] ${item.label}:</span> ${item.address}</div>`).join('')}
                     </div>
-                    <div class="flex gap-2">
+                    <div class="flex flex-wrap gap-2 items-center">
                         <button onclick="editPortfolio('${p.id}')" class="text-primary hover:underline">Edit</button>
                         <button onclick="deletePortfolio('${p.id}')" class="text-red-600 hover:underline">Delete</button>
+                        <div class="relative inline-block export-dropdown" data-portfolio-id="${p.id}" data-portfolio-name="${(p.name || '').replace(/"/g, '&quot;')}">
+                            <button type="button" class="export-trigger px-3 py-1 border border-border rounded hover:bg-hover text-sm flex items-center gap-1" aria-haspopup="true" aria-expanded="false" aria-label="Export portfolio">
+                                <span class="export-label">Export</span>
+                                <span class="export-spinner hidden inline-block w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                                <span aria-hidden="true">▾</span>
+                            </button>
+                            <div class="export-menu hidden absolute left-0 mt-1 py-1 bg-bg-secondary border border-border rounded shadow z-10 min-w-[140px]">
+                                <button type="button" class="export-option w-full text-left px-4 py-2 text-sm hover:bg-hover" data-format="csv">Download CSV</button>
+                                <button type="button" class="export-option w-full text-left px-4 py-2 text-sm hover:bg-hover" data-format="json">Download JSON</button>
+                                <button type="button" class="export-option w-full text-left px-4 py-2 text-sm hover:bg-hover" data-format="pdf">Download PDF</button>
+                            </div>
+                        </div>
+                        <p class="export-error hidden text-red-600 text-sm" role="alert"></p>
                     </div>
                 </div>
             `).join('');
+            bindPortfolioExportHandlers();
         } catch (err) {
             console.error('Failed to load portfolios', err);
+            portfolioList.innerHTML = '<p class="text-red-600">Failed to load portfolios. Sign in and try again.</p>';
         }
+    }
+
+    function bindPortfolioExportHandlers() {
+        document.querySelectorAll('.export-dropdown').forEach(wrap => {
+            const trigger = wrap.querySelector('.export-trigger');
+            const menu = wrap.querySelector('.export-menu');
+            const spinner = wrap.querySelector('.export-spinner');
+            const label = wrap.querySelector('.export-label');
+            const id = wrap.getAttribute('data-portfolio-id');
+            const name = wrap.getAttribute('data-portfolio-name');
+            const errEl = wrap.closest('.flex').querySelector('.export-error');
+
+            const closeMenu = () => {
+                menu.classList.add('hidden');
+                trigger.setAttribute('aria-expanded', 'false');
+            };
+
+            trigger.addEventListener('click', (e) => {
+                e.stopPropagation();
+                if (spinner.classList.contains('hidden')) {
+                    const open = !menu.classList.contains('hidden');
+                    document.querySelectorAll('.export-menu').forEach(m => m.classList.add('hidden'));
+                    if (!open) {
+                        menu.classList.remove('hidden');
+                        trigger.setAttribute('aria-expanded', 'true');
+                    }
+                }
+            });
+
+            wrap.querySelectorAll('.export-option').forEach(btn => {
+                btn.addEventListener('click', async (e) => {
+                    e.stopPropagation();
+                    const format = btn.getAttribute('data-format');
+                    closeMenu();
+                    if (errEl) errEl.classList.add('hidden');
+                    spinner.classList.remove('hidden');
+                    label.textContent = 'Exporting…';
+                    try {
+                        if (format === 'json') {
+                            const res = await fetch('/api/v1/user/portfolios', { credentials: 'include' });
+                            if (!res.ok) throw new Error('Export failed');
+                            const data = await res.json();
+                            const list = data.data || data;
+                            const one = Array.isArray(list) ? list.find(p => p.id === id) : null;
+                            if (!one) throw new Error('Portfolio not found');
+                            const blob = new Blob([JSON.stringify(one, null, 2)], { type: 'application/json' });
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = 'portfolio-' + id + '.json';
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                        } else {
+                            const url = format === 'csv' ? `/api/v1/user/portfolios/${id}/export/csv` : `/api/v1/user/portfolios/${id}/export/pdf`;
+                            const res = await fetch(url, { credentials: 'include' });
+                            if (!res.ok) {
+                                const errBody = await res.json().catch(() => ({}));
+                                throw new Error(errBody.error || errBody.code || 'Export failed');
+                            }
+                            const blob = await res.blob();
+                            const a = document.createElement('a');
+                            a.href = URL.createObjectURL(blob);
+                            a.download = 'portfolio-' + id + (format === 'pdf' ? '.pdf' : '.csv');
+                            a.click();
+                            URL.revokeObjectURL(a.href);
+                        }
+                    } catch (err) {
+                        if (errEl) {
+                            errEl.textContent = err.message || 'Export failed. Sign in and try again.';
+                            errEl.classList.remove('hidden');
+                        }
+                    } finally {
+                        spinner.classList.add('hidden');
+                        label.textContent = 'Export';
+                    }
+                });
+            });
+        });
+        document.addEventListener('click', function() {
+            document.querySelectorAll('.export-menu').forEach(function(m) { m.classList.add('hidden'); });
+            document.querySelectorAll('.export-trigger').forEach(function(t) { t.setAttribute('aria-expanded', 'false'); });
+        });
     }
 
     if (addAddressBtn) {

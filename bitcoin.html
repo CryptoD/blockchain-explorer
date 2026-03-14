@@ -52,6 +52,15 @@
 
             <!-- Content -->
             <div id="content" class="hidden">
+                <!-- Export bar (shown when result is displayed) -->
+                <div class="flex flex-wrap items-center gap-3 mb-4 p-3 bg-white dark:bg-gray-800 rounded-lg shadow border border-gray-200 dark:border-gray-700">
+                    <span class="text-sm font-medium text-slate-700 dark:text-slate-300">Export this result:</span>
+                    <button type="button" id="export-search-json" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                        <span id="export-search-json-label">Download as JSON</span>
+                        <span id="export-search-json-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    </button>
+                    <p id="export-search-error" class="hidden text-red-600 dark:text-red-400 text-sm" role="alert"></p>
+                </div>
                 <!-- Address Details -->
                 <section id="address-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
@@ -224,5 +233,49 @@
 
     <script src="https://cdn.jsdelivr.net/npm/qrcode@1.5.3/build/qrcode.min.js"></script>
     <script src="script.js"></script>
+    <script>
+    (function() {
+        function getSearchQuery() {
+            const params = new URLSearchParams(window.location.search);
+            return params.get('q') || '';
+        }
+        const btn = document.getElementById('export-search-json');
+        const label = document.getElementById('export-search-json-label');
+        const spinner = document.getElementById('export-search-json-spinner');
+        const errEl = document.getElementById('export-search-error');
+        if (!btn) return;
+        btn.addEventListener('click', async function() {
+            const q = getSearchQuery();
+            if (!q.trim()) {
+                if (errEl) { errEl.textContent = 'No search query to export.'; errEl.classList.remove('hidden'); }
+                return;
+            }
+            if (errEl) errEl.classList.add('hidden');
+            spinner.classList.remove('hidden');
+            label.textContent = 'Exporting…';
+            try {
+                const res = await fetch('/api/search/export?q=' + encodeURIComponent(q));
+                if (!res.ok) {
+                    const data = await res.json().catch(function() { return {}; });
+                    throw new Error(data.error || data.code || 'Export failed');
+                }
+                const blob = await res.blob();
+                var a = document.createElement('a');
+                a.href = URL.createObjectURL(blob);
+                a.download = 'search-result.json';
+                a.click();
+                URL.revokeObjectURL(a.href);
+            } catch (err) {
+                if (errEl) {
+                    errEl.textContent = err.message || 'Export failed.';
+                    errEl.classList.remove('hidden');
+                }
+            } finally {
+                spinner.classList.add('hidden');
+                label.textContent = 'Download as JSON';
+            }
+        });
+    })();
+    </script>
 </body>
 </html>

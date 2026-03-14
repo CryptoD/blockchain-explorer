@@ -1,0 +1,505 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Symbol Search - Blockchain Explorer</title>
+    <link rel="stylesheet" href="/dist/styles.css" />
+</head>
+<body class="min-h-screen bg-gray-50 text-slate-900 dark:bg-gray-900 dark:text-slate-100">
+    <!-- Header -->
+    <header class="w-full bg-white shadow dark:bg-gray-800">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
+                <span class="font-semibold text-lg">Blockchain Explorer</span>
+            </a>
+            <div class="flex items-center gap-4">
+                <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700 dark:text-slate-300" role="navigation" aria-label="Main navigation">
+                    <a href="/" class="hover:text-primary">Home</a>
+                    <a href="/blocks" class="hover:text-primary">Blocks</a>
+                    <a href="/transactions" class="hover:text-primary">Transactions</a>
+                    <a href="/addresses" class="hover:text-primary">Addresses</a>
+                    <a href="/symbols" class="hover:text-primary font-semibold text-primary">Symbols</a>
+                </nav>
+                <!-- Theme selector -->
+                <div class="flex items-center gap-2">
+                    <label for="theme-select" class="sr-only">Select theme</label>
+                    <select id="theme-select" class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                        <option value="blue">Blue</option>
+                        <option value="green">Green</option>
+                        <option value="purple">Purple</option>
+                        <option value="orange">Orange</option>
+                    </select>
+                </div>
+            </div>
+        </div>
+    </header>
+
+    <!-- Main content -->
+    <main class="flex-1 px-4 py-8">
+        <div class="max-w-7xl mx-auto">
+            <div class="mb-8">
+                <h1 class="text-3xl font-bold mb-2">Symbol Search</h1>
+                <p class="text-slate-600 dark:text-slate-400">Search and filter cryptocurrency symbols with advanced options</p>
+            </div>
+
+            <!-- Search and Filters Section -->
+            <div class="bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
+                <!-- Search Input -->
+                <div class="mb-6">
+                    <label for="symbol-search" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Search Symbols</label>
+                    <div class="flex gap-2">
+                        <input
+                            type="search"
+                            id="symbol-search"
+                            placeholder="Search by symbol or name (e.g., BTC, Bitcoin)..."
+                            class="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                        />
+                        <button id="search-btn" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors">
+                            Search
+                        </button>
+                        <button id="reset-btn" class="bg-gray-200 dark:bg-gray-600 text-slate-700 dark:text-slate-300 px-6 py-3 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
+                            Reset
+                        </button>
+                    </div>
+                </div>
+
+                <!-- Filters -->
+                <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+                    <!-- Type Filter -->
+                    <div>
+                        <label for="filter-type" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Type</label>
+                        <select id="filter-type" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100">
+                            <option value="">All Types</option>
+                            <option value="crypto">Cryptocurrency</option>
+                            <option value="stock">Stock</option>
+                            <option value="commodity">Commodity</option>
+                            <option value="forex">Forex</option>
+                        </select>
+                    </div>
+
+                    <!-- Category Filter -->
+                    <div>
+                        <label for="filter-category" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Category</label>
+                        <select id="filter-category" class="w-full p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100">
+                            <option value="">All Categories</option>
+                            <option value="layer1">Layer 1</option>
+                            <option value="layer2">Layer 2</option>
+                            <option value="defi">DeFi</option>
+                            <option value="nft">NFT</option>
+                            <option value="stablecoin">Stablecoin</option>
+                            <option value="payment">Payment</option>
+                            <option value="exchange">Exchange</option>
+                            <option value="meme">Meme</option>
+                            <option value="privacy">Privacy</option>
+                            <option value="infrastructure">Infrastructure</option>
+                        </select>
+                    </div>
+
+                    <!-- Price Range -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Price Range</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="min-price" placeholder="Min" class="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100" />
+                            <input type="number" id="max-price" placeholder="Max" class="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100" />
+                        </div>
+                    </div>
+
+                    <!-- Market Cap Range -->
+                    <div>
+                        <label class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Market Cap Range</label>
+                        <div class="flex gap-2">
+                            <input type="number" id="min-mcap" placeholder="Min" class="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100" />
+                            <input type="number" id="max-mcap" placeholder="Max" class="w-1/2 p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100" />
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Sort Options -->
+                <div class="flex flex-wrap gap-4 items-center">
+                    <div class="flex items-center gap-2">
+                        <label for="sort-by" class="text-sm font-medium text-slate-700 dark:text-slate-300">Sort by:</label>
+                        <select id="sort-by" class="p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100">
+                            <option value="rank">Rank</option>
+                            <option value="symbol">Symbol</option>
+                            <option value="name">Name</option>
+                            <option value="price">Price</option>
+                            <option value="market_cap">Market Cap</option>
+                            <option value="volume_24h">Volume (24h)</option>
+                            <option value="change_24h">Change (24h)</option>
+                            <option value="listed_since">Listed Date</option>
+                        </select>
+                    </div>
+                    <div class="flex items-center gap-2">
+                        <label for="sort-dir" class="text-sm font-medium text-slate-700 dark:text-slate-300">Direction:</label>
+                        <select id="sort-dir" class="p-2 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100">
+                            <option value="asc">Ascending</option>
+                            <option value="desc">Descending</option>
+                        </select>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Loading -->
+            <div id="loading" class="hidden flex items-center justify-center py-8">
+                <div class="text-center">
+                    <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary mx-auto"></div>
+                    <p class="mt-4 text-slate-600 dark:text-slate-400">Loading symbols...</p>
+                </div>
+            </div>
+
+            <!-- Error -->
+            <div id="error" class="hidden bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded-lg p-4 mb-6" role="alert"></div>
+
+            <!-- Results Summary -->
+            <div id="results-summary" class="hidden mb-4 flex flex-wrap justify-between items-center gap-3">
+                <p class="text-slate-600 dark:text-slate-400">
+                    Showing <span id="showing-start">0</span>-<span id="showing-end">0</span> of <span id="total-results">0</span> results
+                </p>
+                <div class="flex items-center gap-2">
+                    <button type="button" id="export-symbols-json" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                        <span id="export-symbols-json-label">Export results (JSON)</span>
+                        <span id="export-symbols-json-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
+                    </button>
+                    <p id="export-symbols-error" class="hidden text-red-600 dark:text-red-400 text-sm" role="alert"></p>
+                </div>
+            </div>
+
+            <!-- Results Table -->
+            <div id="results-container" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow overflow-hidden">
+                <div class="overflow-x-auto">
+                    <table class="w-full">
+                        <thead class="bg-gray-50 dark:bg-gray-700">
+                            <tr>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Rank</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Symbol</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Name</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Type</th>
+                                <th class="px-6 py-3 text-left text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Category</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Price</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Market Cap</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Volume (24h)</th>
+                                <th class="px-6 py-3 text-right text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wider">Change (24h)</th>
+                            </tr>
+                        </thead>
+                        <tbody id="results-body" class="divide-y divide-gray-200 dark:divide-gray-600">
+                            <!-- Results will be inserted here -->
+                        </tbody>
+                    </table>
+                </div>
+
+                <!-- Pagination -->
+                <div id="pagination" class="hidden px-6 py-4 bg-gray-50 dark:bg-gray-700 border-t border-gray-200 dark:border-gray-600 flex justify-between items-center">
+                    <button id="prev-page" class="bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        Previous
+                    </button>
+                    <span id="page-info" class="text-slate-600 dark:text-slate-400">Page 1 of 1</span>
+                    <button id="next-page" class="bg-white dark:bg-gray-600 border border-gray-300 dark:border-gray-500 text-slate-700 dark:text-slate-200 px-4 py-2 rounded-lg hover:bg-gray-50 dark:hover:bg-gray-500 disabled:opacity-50 disabled:cursor-not-allowed transition-colors">
+                        Next
+                    </button>
+                </div>
+            </div>
+
+            <!-- No Results -->
+            <div id="no-results" class="hidden text-center py-12">
+                <p class="text-slate-600 dark:text-slate-400 text-lg">No symbols found matching your criteria</p>
+                <button id="clear-filters" class="mt-4 text-primary hover:text-primary-dark underline">Clear all filters</button>
+            </div>
+        </div>
+    </main>
+
+    <script src="/script.js"></script>
+    <script>
+        // Symbol Search Module
+        (function() {
+            let currentPage = 1;
+            let totalPages = 1;
+            let currentQuery = '';
+
+            // DOM Elements
+            const searchInput = document.getElementById('symbol-search');
+            const searchBtn = document.getElementById('search-btn');
+            const resetBtn = document.getElementById('reset-btn');
+            const filterType = document.getElementById('filter-type');
+            const filterCategory = document.getElementById('filter-category');
+            const minPrice = document.getElementById('min-price');
+            const maxPrice = document.getElementById('max-price');
+            const minMcap = document.getElementById('min-mcap');
+            const maxMcap = document.getElementById('max-mcap');
+            const sortBy = document.getElementById('sort-by');
+            const sortDir = document.getElementById('sort-dir');
+            const loadingEl = document.getElementById('loading');
+            const errorEl = document.getElementById('error');
+            const resultsContainer = document.getElementById('results-container');
+            const resultsBody = document.getElementById('results-body');
+            const resultsSummary = document.getElementById('results-summary');
+            const noResults = document.getElementById('no-results');
+            const pagination = document.getElementById('pagination');
+            const prevBtn = document.getElementById('prev-page');
+            const nextBtn = document.getElementById('next-page');
+            const pageInfo = document.getElementById('page-info');
+            const clearFiltersBtn = document.getElementById('clear-filters');
+
+            // Format currency
+            function formatCurrency(value) {
+                if (value >= 1e12) return '$' + (value / 1e12).toFixed(2) + 'T';
+                if (value >= 1e9) return '$' + (value / 1e9).toFixed(2) + 'B';
+                if (value >= 1e6) return '$' + (value / 1e6).toFixed(2) + 'M';
+                if (value >= 1e3) return '$' + (value / 1e3).toFixed(2) + 'K';
+                return '$' + value.toFixed(2);
+            }
+
+            // Format price
+            function formatPrice(value) {
+                if (value < 0.01) return '$' + value.toFixed(6);
+                if (value < 1) return '$' + value.toFixed(4);
+                return '$' + value.toFixed(2);
+            }
+
+            // Format percentage
+            function formatPercentage(value) {
+                const sign = value >= 0 ? '+' : '';
+                const color = value >= 0 ? 'text-green-600' : 'text-red-600';
+                return `<span class="${color}">${sign}${value.toFixed(2)}%</span>`;
+            }
+
+            // Show loading
+            function showLoading() {
+                loadingEl.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                noResults.classList.add('hidden');
+                errorEl.classList.add('hidden');
+            }
+
+            // Hide loading
+            function hideLoading() {
+                loadingEl.classList.add('hidden');
+            }
+
+            // Show error
+            function showError(message) {
+                errorEl.textContent = message;
+                errorEl.classList.remove('hidden');
+                resultsContainer.classList.add('hidden');
+                noResults.classList.add('hidden');
+            }
+
+            // Build query parameters (for list view)
+            function buildQueryParams() {
+                const params = new URLSearchParams();
+                
+                if (currentQuery) params.append('q', currentQuery);
+                if (filterType.value) params.append('types', filterType.value);
+                if (filterCategory.value) params.append('categories', filterCategory.value);
+                if (minPrice.value) params.append('min_price', minPrice.value);
+                if (maxPrice.value) params.append('max_price', maxPrice.value);
+                if (minMcap.value) params.append('min_market_cap', minMcap.value);
+                if (maxMcap.value) params.append('max_market_cap', maxMcap.value);
+                params.append('sort_by', sortBy.value);
+                params.append('sort_dir', sortDir.value);
+                params.append('page', currentPage.toString());
+                params.append('page_size', '20');
+                
+                return params.toString();
+            }
+
+            // Build query parameters for export (same filters, larger page size)
+            function buildExportQueryParams() {
+                const params = new URLSearchParams();
+                if (currentQuery) params.append('q', currentQuery);
+                if (filterType.value) params.append('types', filterType.value);
+                if (filterCategory.value) params.append('categories', filterCategory.value);
+                if (minPrice.value) params.append('min_price', minPrice.value);
+                if (maxPrice.value) params.append('max_price', maxPrice.value);
+                if (minMcap.value) params.append('min_market_cap', minMcap.value);
+                if (maxMcap.value) params.append('max_market_cap', maxMcap.value);
+                params.append('sort_by', sortBy.value);
+                params.append('sort_dir', sortDir.value);
+                params.append('page', '1');
+                params.append('page_size', '100');
+                return params.toString();
+            }
+
+            // Fetch symbols
+            async function fetchSymbols() {
+                showLoading();
+                
+                try {
+                    const response = await fetch(`/api/search/advanced?${buildQueryParams()}`);
+                    
+                    if (!response.ok) {
+                        throw new Error(`HTTP error! status: ${response.status}`);
+                    }
+                    
+                    const data = await response.json();
+                    displayResults(data);
+                } catch (error) {
+                    showError('Failed to fetch symbols: ' + error.message);
+                } finally {
+                    hideLoading();
+                }
+            }
+
+            // Display results
+            function displayResults(data) {
+                const { data: symbols, pagination: pag, filters_applied, sort_applied } = data;
+                
+                if (!symbols || symbols.length === 0) {
+                    resultsContainer.classList.add('hidden');
+                    resultsSummary.classList.add('hidden');
+                    noResults.classList.remove('hidden');
+                    return;
+                }
+
+                // Update summary
+                document.getElementById('showing-start').textContent = ((pag.page - 1) * pag.page_size) + 1;
+                document.getElementById('showing-end').textContent = Math.min(pag.page * pag.page_size, pag.total);
+                document.getElementById('total-results').textContent = pag.total;
+                resultsSummary.classList.remove('hidden');
+
+                // Render results
+                resultsBody.innerHTML = symbols.map(symbol => `
+                    <tr class="hover:bg-gray-50 dark:hover:bg-gray-700 transition-colors">
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-900 dark:text-slate-100">#${symbol.rank}</td>
+                        <td class="px-6 py-4 whitespace-nowrap">
+                            <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-primary/10 text-primary">
+                                ${symbol.symbol}
+                            </span>
+                        </td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-slate-900 dark:text-slate-100">${symbol.name}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400 capitalize">${symbol.type}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-slate-600 dark:text-slate-400 capitalize">${symbol.category}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-slate-900 dark:text-slate-100">${formatPrice(symbol.price)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-slate-900 dark:text-slate-100">${formatCurrency(symbol.market_cap)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right text-slate-900 dark:text-slate-100">${formatCurrency(symbol.volume_24h)}</td>
+                        <td class="px-6 py-4 whitespace-nowrap text-sm text-right">${formatPercentage(symbol.change_24h)}</td>
+                    </tr>
+                `).join('');
+
+                resultsContainer.classList.remove('hidden');
+                noResults.classList.add('hidden');
+
+                // Update pagination
+                totalPages = pag.total_pages;
+                currentPage = pag.page;
+                
+                if (totalPages > 1) {
+                    pagination.classList.remove('hidden');
+                    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                    prevBtn.disabled = currentPage <= 1;
+                    nextBtn.disabled = currentPage >= totalPages;
+                } else {
+                    pagination.classList.add('hidden');
+                }
+            }
+
+            // Event listeners
+            searchBtn.addEventListener('click', () => {
+                currentQuery = searchInput.value.trim();
+                currentPage = 1;
+                fetchSymbols();
+            });
+
+            searchInput.addEventListener('keypress', (e) => {
+                if (e.key === 'Enter') {
+                    currentQuery = searchInput.value.trim();
+                    currentPage = 1;
+                    fetchSymbols();
+                }
+            });
+
+            resetBtn.addEventListener('click', () => {
+                searchInput.value = '';
+                filterType.value = '';
+                filterCategory.value = '';
+                minPrice.value = '';
+                maxPrice.value = '';
+                minMcap.value = '';
+                maxMcap.value = '';
+                sortBy.value = 'rank';
+                sortDir.value = 'asc';
+                currentQuery = '';
+                currentPage = 1;
+                resultsContainer.classList.add('hidden');
+                resultsSummary.classList.add('hidden');
+                noResults.classList.add('hidden');
+            });
+
+            clearFiltersBtn.addEventListener('click', () => {
+                resetBtn.click();
+            });
+
+            prevBtn.addEventListener('click', () => {
+                if (currentPage > 1) {
+                    currentPage--;
+                    fetchSymbols();
+                }
+            });
+
+            nextBtn.addEventListener('click', () => {
+                if (currentPage < totalPages) {
+                    currentPage++;
+                    fetchSymbols();
+                }
+            });
+
+            // Auto-search on filter change
+            [filterType, filterCategory, sortBy, sortDir].forEach(el => {
+                el.addEventListener('change', () => {
+                    currentPage = 1;
+                    fetchSymbols();
+                });
+            });
+
+            // Debounced search on price/mcap input
+            let debounceTimer;
+            [minPrice, maxPrice, minMcap, maxMcap].forEach(el => {
+                el.addEventListener('input', () => {
+                    clearTimeout(debounceTimer);
+                    debounceTimer = setTimeout(() => {
+                        currentPage = 1;
+                        fetchSymbols();
+                    }, 500);
+                });
+            });
+
+            // Export results as JSON
+            const exportJsonBtn = document.getElementById('export-symbols-json');
+            const exportJsonLabel = document.getElementById('export-symbols-json-label');
+            const exportJsonSpinner = document.getElementById('export-symbols-json-spinner');
+            const exportJsonError = document.getElementById('export-symbols-error');
+            if (exportJsonBtn) {
+                exportJsonBtn.addEventListener('click', async function() {
+                    exportJsonError.classList.add('hidden');
+                    exportJsonSpinner.classList.remove('hidden');
+                    exportJsonLabel.textContent = 'Exporting…';
+                    try {
+                        const queryString = buildExportQueryParams();
+                        const res = await fetch('/api/search/advanced/export?' + queryString);
+                        if (!res.ok) {
+                            const data = await res.json().catch(function() { return {}; });
+                            throw new Error(data.error || data.code || 'Export failed');
+                        }
+                        const blob = await res.blob();
+                        const a = document.createElement('a');
+                        a.href = URL.createObjectURL(blob);
+                        a.download = 'symbol-search-results.json';
+                        a.click();
+                        URL.revokeObjectURL(a.href);
+                    } catch (err) {
+                        exportJsonError.textContent = err.message || 'Export failed.';
+                        exportJsonError.classList.remove('hidden');
+                    } finally {
+                        exportJsonSpinner.classList.add('hidden');
+                        exportJsonLabel.textContent = 'Export results (JSON)';
+                    }
+                });
+            }
+
+            // Initial load
+            fetchSymbols();
+        })();
+    </script>
+</body>
+</html>
