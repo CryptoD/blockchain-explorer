@@ -741,7 +741,9 @@ func main() {
 	apiV1 := r.Group("/api/v1")
 	{
 		apiV1.GET("/search", searchHandler)
+		apiV1.GET("/search/export", exportSearchHandler)
 		apiV1.GET("/search/advanced", advancedSearchHandler)
+		apiV1.GET("/search/advanced/export", exportAdvancedSearchHandler)
 		apiV1.GET("/search/categories", getSymbolCategoriesHandler)
 		apiV1.GET("/autocomplete", autocompleteHandler)
 		apiV1.GET("/metrics", metricsHandler)
@@ -761,6 +763,7 @@ func main() {
 		{
 			userV1.GET("/profile", userProfileHandler)
 			userV1.GET("/portfolios", listPortfoliosHandler)
+			userV1.GET("/portfolios/export", exportPortfoliosHandler)
 			userV1.POST("/portfolios", createPortfolioHandler)
 			userV1.PUT("/portfolios/:id", updatePortfolioHandler)
 			userV1.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -779,9 +782,10 @@ func main() {
 	// Legacy non-versioned API routes for backward compatibility.
 	// These may be removed in a future major release.
 	r.GET("/api/search", searchHandler)
-
+	r.GET("/api/search/export", exportSearchHandler)
 	// Enhanced search with filters and sorting
 	r.GET("/api/search/advanced", advancedSearchHandler)
+	r.GET("/api/search/advanced/export", exportAdvancedSearchHandler)
 	r.GET("/api/search/categories", getSymbolCategoriesHandler)
 
 	r.GET("/api/autocomplete", autocompleteHandler)
@@ -803,6 +807,7 @@ func main() {
 	{
 		user.GET("/profile", userProfileHandler)
 		user.GET("/portfolios", listPortfoliosHandler)
+		user.GET("/portfolios/export", exportPortfoliosHandler)
 		user.POST("/portfolios", createPortfolioHandler)
 		user.PUT("/portfolios/:id", updatePortfolioHandler)
 		user.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -1479,6 +1484,92 @@ func deletePortfolioHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Portfolio deleted successfully"})
 }
 
+const exportVersion = "1.0"
+
+// exportPortfoliosHandler returns portfolios as machine-friendly JSON for archival or analysis.
+// Requires authentication. Respects pagination (page, page_size) and sort (sort_by, sort_dir).
+func exportPortfoliosHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+
+	keys, err := rdb.Keys(ctx, "portfolio:"+username.(string)+":*").Result()
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to fetch portfolios")
+		return
+	}
+
+	portfolios := []Portfolio{}
+	for _, key := range keys {
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		var p Portfolio
+		if err := json.Unmarshal([]byte(data), &p); err == nil {
+			portfolios = append(portfolios, p)
+		}
+	}
+
+	sortParams := apiutil.ParseSort(c, "created", "desc", map[string]bool{
+		"created": true,
+		"updated": true,
+	})
+
+	switch sortParams.Field {
+	case "updated":
+		for i := 0; i < len(portfolios)-1; i++ {
+			for j := 0; j < len(portfolios)-i-1; j++ {
+				swap := portfolios[j].Updated.Before(portfolios[j+1].Updated)
+				if sortParams.Direction == "asc" {
+					swap = !swap
+				}
+				if swap {
+					portfolios[j], portfolios[j+1] = portfolios[j+1], portfolios[j]
+				}
+			}
+		}
+	default:
+		for i := 0; i < len(portfolios)-1; i++ {
+			for j := 0; j < len(portfolios)-i-1; j++ {
+				swap := portfolios[j].Created.Before(portfolios[j+1].Created)
+				if sortParams.Direction == "asc" {
+					swap = !swap
+				}
+				if swap {
+					portfolios[j], portfolios[j+1] = portfolios[j+1], portfolios[j]
+				}
+			}
+		}
+	}
+
+	pagination := apiutil.ParsePagination(c, 20, 100)
+	total := len(portfolios)
+	start := pagination.Offset
+	end := start + pagination.PageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	paginated := portfolios[start:end]
+
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.JSON(http.StatusOK, gin.H{
+		"export_meta": gin.H{
+			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
+			"export_version":   exportVersion,
+			"endpoint":         "portfolios",
+		},
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+		"data": paginated,
+	})
+}
+
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
 	query = strings.TrimSpace(query)
 
@@ -1564,6 +1655,42 @@ func searchHandler(c *gin.Context) {
 	}
 	log.WithFields(log.Fields{"query": query, "type": resultType}).Info("Search successful")
 	c.JSON(200, gin.H{"type": resultType, "result": result})
+}
+
+// exportSearchHandler returns blockchain search results as machine-friendly JSON for archival or analysis.
+// Same parameters as GET /api/search (q required). Public endpoint; no auth required.
+func exportSearchHandler(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	if query == "" {
+		errorResponse(c, http.StatusBadRequest, "missing_query", "Missing query parameter")
+		return
+	}
+	if len(query) > 100 {
+		errorResponse(c, http.StatusBadRequest, "query_too_long", "Query too long")
+		return
+	}
+	resultType, result, err := searchBlockchain(query)
+	if err != nil {
+		if err == ErrNotFound {
+			errorResponse(c, http.StatusNotFound, "not_found", "Not found")
+		} else {
+			errorResponse(c, http.StatusInternalServerError, "internal_error", err.Error())
+		}
+		return
+	}
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.JSON(http.StatusOK, gin.H{
+		"export_meta": gin.H{
+			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
+			"export_version":   exportVersion,
+			"endpoint":         "search",
+			"query":            query,
+		},
+		"data": gin.H{
+			"type":   resultType,
+			"result": result,
+		},
+	})
 }
 
 func autocompleteHandler(c *gin.Context) {
@@ -1905,6 +2032,74 @@ func advancedSearchHandler(c *gin.Context) {
 			"types":      typeList,
 			"categories": categoryList,
 		},
+	})
+}
+
+// exportAdvancedSearchHandler returns advanced symbol search results as machine-friendly JSON for archival or analysis.
+// Same parameters as GET /api/search/advanced (q, types, categories, min_price, max_price, page, page_size, sort_by, sort_dir).
+// Public endpoint; no auth required.
+func exportAdvancedSearchHandler(c *gin.Context) {
+	query := strings.TrimSpace(c.Query("q"))
+	pagination := apiutil.ParsePagination(c, 20, 100)
+	filters := parseSearchFilters(c)
+	sort := parseSortOptions(c)
+
+	symbolDBMutex.RLock()
+	var results []SymbolInfo
+	for _, symbol := range symbolDatabase {
+		if query != "" {
+			queryLower := strings.ToLower(query)
+			if !strings.Contains(strings.ToLower(symbol.Symbol), queryLower) &&
+				!strings.Contains(strings.ToLower(symbol.Name), queryLower) {
+				continue
+			}
+		}
+		if matchesFilters(symbol, filters) {
+			results = append(results, symbol)
+		}
+	}
+	symbolDBMutex.RUnlock()
+
+	sortSymbols(results, sort)
+
+	total := len(results)
+	start := pagination.Offset
+	end := start + pagination.PageSize
+	if start > total {
+		start = total
+	}
+	if end > total {
+		end = total
+	}
+	paginatedResults := results[start:end]
+
+	c.Header("Content-Type", "application/json; charset=utf-8")
+	c.JSON(http.StatusOK, gin.H{
+		"export_meta": gin.H{
+			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
+			"export_version":   exportVersion,
+			"endpoint":         "search/advanced",
+			"query":            query,
+			"filters_applied": gin.H{
+				"types":          filters.Types,
+				"categories":     filters.Categories,
+				"min_price":      filters.MinPrice,
+				"max_price":      filters.MaxPrice,
+				"min_market_cap": filters.MinMarketCap,
+				"max_market_cap": filters.MaxMarketCap,
+			},
+			"sort_applied": gin.H{
+				"field":     sort.Field,
+				"direction": sort.Direction,
+			},
+		},
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+		"data": paginatedResults,
 	})
 }
 
