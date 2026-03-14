@@ -31,7 +31,7 @@ require (
 	github.com/twitchyliquid64/golang-asm v0.15.1 // indirect
 	github.com/ugorji/go/codec v1.3.1 // indirect
 	golang.org/x/arch v0.23.0 // indirect
-	golang.org/x/crypto v0.43.0 // indirect
+	golang.org/x/crypto v0.43.0
 	golang.org/x/net v0.46.0 // indirect
 	golang.org/x/sys v0.38.0 // indirect
 	golang.org/x/text v0.30.0 // indirect
@@ -41,6 +41,7 @@ require (
 require (
 	github.com/getsentry/sentry-go v0.36.2
 	github.com/getsentry/sentry-go/gin v0.36.2
+	github.com/jung-kurt/gofpdf/v2 v2.17.3
 	github.com/redis/go-redis/v9 v9.16.0
 	github.com/sirupsen/logrus v1.9.3
 )

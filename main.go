@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"html"
+	"io"
 	"net/http"
 	"os"
 	"regexp"
@@ -28,6 +29,7 @@ import (
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
+	"github.com/jung-kurt/gofpdf/v2"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
@@ -768,6 +770,7 @@ func main() {
 			userV1.GET("/portfolios", listPortfoliosHandler)
 			userV1.GET("/portfolios/export", exportPortfoliosHandler)
 			userV1.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
+			userV1.GET("/portfolios/:id/export/pdf", exportPortfolioPDFHandler)
 			userV1.POST("/portfolios", createPortfolioHandler)
 			userV1.PUT("/portfolios/:id", updatePortfolioHandler)
 			userV1.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -815,6 +818,7 @@ func main() {
 		user.GET("/portfolios", listPortfoliosHandler)
 		user.GET("/portfolios/export", exportPortfoliosHandler)
 		user.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
+		user.GET("/portfolios/:id/export/pdf", exportPortfolioPDFHandler)
 		user.POST("/portfolios", createPortfolioHandler)
 		user.PUT("/portfolios/:id", updatePortfolioHandler)
 		user.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -1550,6 +1554,160 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	w.Flush()
 	if err := w.Error(); err != nil {
 		log.WithError(err).Error("CSV export write failed")
+	}
+}
+
+// generatePortfolioPDF writes a short portfolio summary report (overall value, allocations by type, positions table) to w.
+func generatePortfolioPDF(p *Portfolio, w io.Writer) error {
+	pdf := gofpdf.New("P", "mm", "A4", "")
+	pdf.SetMargins(15, 15, 15)
+	pdf.SetAutoPageBreak(true, 15)
+	pdf.AddPage()
+	pdf.SetFont("Helvetica", "B", 16)
+	pdf.CellFormat(0, 10, p.Name, "", 0, "L", false, 0, "")
+	pdf.Ln(12)
+	pdf.SetFont("Helvetica", "", 9)
+	pdf.CellFormat(0, 6, "Portfolio Report — Generated "+time.Now().UTC().Format("2006-01-02 15:04 MST"), "", 0, "L", false, 0, "")
+	pdf.Ln(10)
+
+	// Overall value (sum of amounts) and meta
+	var total float64
+	for _, item := range p.Items {
+		total += item.Amount
+	}
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 8, "Summary", "", 0, "L", false, 0, "")
+	pdf.Ln(6)
+	pdf.SetFont("Helvetica", "", 10)
+	pdf.CellFormat(0, 6, fmt.Sprintf("Total (quantity): %s  |  Positions: %d  |  Created: %s  |  Updated: %s",
+		formatFloat(total), len(p.Items),
+		p.Created.UTC().Format("2006-01-02"),
+		p.Updated.UTC().Format("2006-01-02")), "", 0, "L", false, 0, "")
+	pdf.Ln(12)
+
+	// Allocations by asset type
+	typeAlloc := make(map[string]float64)
+	for _, item := range p.Items {
+		t := strings.ToLower(strings.TrimSpace(item.Type))
+		if t == "" {
+			t = "other"
+		}
+		typeAlloc[t] += item.Amount
+	}
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 8, "Allocations by asset type", "", 0, "L", false, 0, "")
+	pdf.Ln(6)
+	pdf.SetFont("Helvetica", "", 9)
+	colW := []float64{35, 45, 25, 50}
+	headers := []string{"Type", "Amount", "%", "Bar"}
+	for i, h := range headers {
+		pdf.CellFormat(colW[i], 7, h, "1", 0, "L", true, 0, "")
+	}
+	pdf.Ln(-1)
+	if total == 0 {
+		total = 1
+	}
+	for _, t := range []string{"crypto", "stock", "bond", "commodity", "other"} {
+		amt, ok := typeAlloc[t]
+		if !ok || amt == 0 {
+			continue
+		}
+		pct := amt / total * 100
+		pdf.CellFormat(colW[0], 6, t, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(colW[1], 6, formatFloat(amt), "1", 0, "R", false, 0, "")
+		pdf.CellFormat(colW[2], 6, formatFloat(pct)+"%", "1", 0, "R", false, 0, "")
+		barX, barY := pdf.GetX(), pdf.GetY()
+		pdf.CellFormat(colW[3], 6, "", "1", 0, "L", false, 0, "")
+		barW := (colW[3] - 2) * (pct / 100)
+		if barW > 0.5 {
+			pdf.Rect(barX+1, barY+0.5, barW, 5, "F")
+		}
+		pdf.Ln(-1)
+	}
+	pdf.Ln(8)
+
+	// Positions table
+	pdf.SetFont("Helvetica", "B", 11)
+	pdf.CellFormat(0, 8, "Positions", "", 0, "L", false, 0, "")
+	pdf.Ln(6)
+	pdf.SetFont("Helvetica", "", 9)
+	posColW := []float64{45, 25, 70, 35}
+	posHeaders := []string{"Label", "Type", "Address", "Amount"}
+	for i, h := range posHeaders {
+		pdf.CellFormat(posColW[i], 7, h, "1", 0, "L", true, 0, "")
+	}
+	pdf.Ln(-1)
+	for _, item := range p.Items {
+		label := item.Label
+		if len(label) > 28 {
+			label = label[:25] + "..."
+		}
+		addr := item.Address
+		if len(addr) > 38 {
+			addr = addr[:35] + "..."
+		}
+		pdf.CellFormat(posColW[0], 6, label, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(posColW[1], 6, item.Type, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(posColW[2], 6, addr, "1", 0, "L", false, 0, "")
+		pdf.CellFormat(posColW[3], 6, formatFloat(item.Amount), "1", 0, "R", false, 0, "")
+		pdf.Ln(-1)
+	}
+	pdf.Ln(8)
+	pdf.SetFont("Helvetica", "I", 8)
+	pdf.CellFormat(0, 5, "Performance history is not available in this report. Value above is total quantity (amounts).", "", 0, "L", false, 0, "")
+
+	return pdf.Output(w)
+}
+
+func formatFloat(f float64) string {
+	if f == 0 {
+		return "0"
+	}
+	if f >= 1e6 || (f < 0.0001 && f > 0) {
+		return strconv.FormatFloat(f, 'e', 2, 64)
+	}
+	return strconv.FormatFloat(f, 'f', 2, 64)
+}
+
+// exportPortfolioPDFHandler generates and streams a portfolio summary report as PDF. Requires authentication.
+func exportPortfolioPDFHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+	portfolioID := c.Param("id")
+	key := "portfolio:" + username.(string) + ":" + portfolioID
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
+		return
+	}
+	var p Portfolio
+	if err := json.Unmarshal([]byte(data), &p); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to load portfolio")
+		return
+	}
+	var b strings.Builder
+	for _, r := range p.Name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == ' ' {
+			if r == ' ' {
+				b.WriteRune('_')
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	safeName := b.String()
+	if safeName == "" {
+		safeName = "portfolio"
+	}
+	filename := fmt.Sprintf("portfolio-%s-%s.pdf", portfolioID, safeName)
+	if len(filename) > 200 {
+		filename = "portfolio-" + portfolioID + ".pdf"
+	}
+	c.Header("Content-Type", "application/pdf")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+	if err := generatePortfolioPDF(&p, c.Writer); err != nil {
+		log.WithError(err).Error("portfolio PDF export failed")
+		errorResponse(c, http.StatusInternalServerError, "pdf_generation_failed", "Failed to generate PDF")
+		return
 	}
 }
 

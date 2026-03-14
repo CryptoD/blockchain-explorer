@@ -188,6 +188,29 @@ Stream a single portfolio's positions as CSV for download. **Requires authentica
 curl -b cookies.txt -o holdings.csv "http://localhost:8080/api/user/portfolios/abc123/export/csv"
 ```
 
+#### Export portfolio report (PDF)
+Generate a short portfolio summary report as PDF. **Requires authentication.** The report includes overall value (total quantity), allocations by asset type (table and bar), positions table, and report metadata.
+
+**Endpoint:** `GET /api/user/portfolios/:id/export/pdf`  
+**Versioned:** `GET /api/v1/user/portfolios/:id/export/pdf`
+
+**Parameters:**
+- `id` (path): Portfolio ID
+
+**Headers:**
+- Session cookie or `Authorization` as required for user endpoints
+
+**Response headers:**
+- `Content-Type: application/pdf`
+- `Content-Disposition: attachment; filename="portfolio-{id}-{name}.pdf"`
+
+**Report contents:** Summary (total quantity, position count, created/updated), allocations by asset type (table with bar chart), positions table (label, type, address, amount), and a note that performance history is not included.
+
+**Example Request:**
+```bash
+curl -b cookies.txt -o report.pdf "http://localhost:8080/api/user/portfolios/abc123/export/pdf"
+```
+
 #### Export blocks (CSV)
 Stream blocks in a height range as CSV. **Public.** Server-side streaming with one block fetched at a time; range and row limits prevent abuse.
 
