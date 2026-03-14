@@ -105,6 +105,16 @@
                     <p class="text-text-secondary mt-1">Track your portfolio performance and analytics</p>
                 </div>
                 <div class="flex flex-wrap gap-3 items-center">
+                    <label for="currency-selector" class="sr-only">Valuation currency</label>
+                    <select id="currency-selector" class="bg-bg-secondary border border-border rounded px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Valuation currency">
+                        <option value="usd">USD</option>
+                        <option value="eur">EUR</option>
+                        <option value="gbp">GBP</option>
+                        <option value="jpy">JPY</option>
+                        <option value="cad">CAD</option>
+                        <option value="aud">AUD</option>
+                        <option value="chf">CHF</option>
+                    </select>
                     <select id="portfolio-selector" class="bg-bg-secondary border border-border rounded px-4 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="">All Portfolios</option>
                     </select>
@@ -136,8 +146,8 @@
                 <div class="bg-bg-secondary p-6 rounded-lg shadow border border-border">
                     <div class="flex items-center justify-between">
                         <div>
-                            <p class="text-text-secondary text-sm">Total Portfolio Value</p>
-                            <p id="total-value" class="text-2xl font-bold mt-1">$0.00</p>
+                            <p class="text-text-secondary text-sm">Total Portfolio Value <span id="total-value-currency" class="font-normal">(USD)</span></p>
+                            <p id="total-value" class="text-2xl font-bold mt-1">0.00</p>
                         </div>
                         <div class="bg-primary/10 p-3 rounded-full">
                             <svg class="w-6 h-6 text-primary" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -200,6 +210,35 @@
                     </div>
                     <div class="mt-4 flex items-center">
                         <span class="text-text-secondary text-sm">All time activity</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Breakdown by asset class (in selected fiat) -->
+            <div id="breakdown-by-class" class="mb-8 bg-bg-secondary p-6 rounded-lg shadow border border-border">
+                <h3 class="text-lg font-semibold mb-4">Valuation by asset class</h3>
+                <p id="breakdown-currency-note" class="text-text-secondary text-sm mb-3">Values in <span id="breakdown-currency">USD</span>.</p>
+                <div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+                    <div class="flex items-center gap-3 p-3 rounded-lg border border-border">
+                        <div class="w-10 h-10 rounded-full bg-orange-500/20 flex items-center justify-center"><span class="text-orange-500 font-bold text-sm">C</span></div>
+                        <div>
+                            <p class="text-text-secondary text-xs">Crypto</p>
+                            <p id="breakdown-crypto" class="font-semibold">—</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border border-border">
+                        <div class="w-10 h-10 rounded-full bg-amber-500/20 flex items-center justify-center"><span class="text-amber-600 font-bold text-sm">M</span></div>
+                        <div>
+                            <p class="text-text-secondary text-xs">Commodity</p>
+                            <p id="breakdown-commodity" class="font-semibold">—</p>
+                        </div>
+                    </div>
+                    <div class="flex items-center gap-3 p-3 rounded-lg border border-border">
+                        <div class="w-10 h-10 rounded-full bg-blue-500/20 flex items-center justify-center"><span class="text-blue-500 font-bold text-sm">B</span></div>
+                        <div>
+                            <p class="text-text-secondary text-xs">Bond</p>
+                            <p id="breakdown-bond" class="font-semibold">—</p>
+                        </div>
                     </div>
                 </div>
             </div>
@@ -333,20 +372,44 @@
     let currentTimeRange = '30d';
     let portfolios = [];
     let btcPrice = 0;
+    let currentCurrency = 'usd';
+
+    const CURRENCY_SYMBOLS = { usd: '$', eur: '€', gbp: '£', jpy: '¥', cad: 'C$', aud: 'A$', chf: 'CHF ' };
 
     // Initialize dashboard
     async function initDashboard() {
         await checkAuth();
+        await syncCurrencyFromProfile();
         await loadPortfolios();
         await fetchBTCPrice();
         initCharts();
         updateDashboard();
     }
 
+    // Sync currency selector from user profile (preferred_currency)
+    async function syncCurrencyFromProfile() {
+        try {
+            const res = await fetch('/api/user/profile', { credentials: 'include' });
+            if (res.ok) {
+                const user = await res.json();
+                if (user.preferred_currency && typeof user.preferred_currency === 'string') {
+                    const c = user.preferred_currency.toLowerCase().trim();
+                    const sel = document.getElementById('currency-selector');
+                    if (sel && sel.querySelector('option[value="' + c + '"]')) {
+                        sel.value = c;
+                        currentCurrency = c;
+                    }
+                }
+            }
+        } catch (err) {
+            console.error('Failed to sync currency from profile', err);
+        }
+    }
+
     // Check authentication
     async function checkAuth() {
         try {
-            const res = await fetch('/api/user/profile');
+            const res = await fetch('/api/user/profile', { credentials: 'include' });
             if (res.ok) {
                 const user = await res.json();
                 document.getElementById('username-display').textContent = user.username;
@@ -355,7 +418,6 @@
             } else {
                 document.getElementById('user-info').classList.add('hidden');
                 document.getElementById('auth-buttons').classList.remove('hidden');
-                // Redirect to login if not authenticated
                 window.location.href = '/?login=true';
             }
         } catch (err) {
@@ -363,10 +425,11 @@
         }
     }
 
-    // Load portfolios
+    // Load portfolios (with current currency for valuation)
     async function loadPortfolios() {
         try {
-            const res = await fetch('/api/user/portfolios', { credentials: 'include' });
+            const url = '/api/user/portfolios?currency=' + encodeURIComponent(currentCurrency);
+            const res = await fetch(url, { credentials: 'include' });
             if (res.ok) {
                 const json = await res.json();
                 portfolios = json.data || json;
@@ -376,6 +439,11 @@
         } catch (err) {
             console.error('Failed to load portfolios', err);
         }
+    }
+
+    function formatFiat(value, currency) {
+        const sym = CURRENCY_SYMBOLS[currency] || currency.toUpperCase() + ' ';
+        return sym + (value == null || isNaN(value) ? '0.00' : Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 }));
     }
 
     // Populate portfolio selector
@@ -510,36 +578,62 @@
     async function updateDashboard() {
         const selectedPortfolio = portfolios.find(p => p.id === currentPortfolio);
         const relevantPortfolios = selectedPortfolio ? [selectedPortfolio] : portfolios;
+        const currency = (relevantPortfolios[0] && relevantPortfolios[0].valuation_currency) || currentCurrency;
 
-        // Calculate metrics
+        // Total value from API (sum of total_value_fiat across displayed portfolios)
+        let totalValueFiat = 0;
+        relevantPortfolios.forEach(p => {
+            if (p.total_value_fiat != null && !isNaN(p.total_value_fiat)) totalValueFiat += p.total_value_fiat;
+        });
+
+        // Breakdown by asset class (from items with value_fiat)
+        const byClass = { crypto: 0, commodity: 0, bond: 0 };
+        relevantPortfolios.forEach(p => {
+            (p.items || []).forEach(item => {
+                const v = item.value_fiat;
+                if (v != null && !isNaN(v)) {
+                    const t = (item.type || '').toLowerCase();
+                    if (t === 'crypto') byClass.crypto += v;
+                    else if (t === 'commodity') byClass.commodity += v;
+                    else if (t === 'bond') byClass.bond += v;
+                }
+            });
+        });
+
         let totalBtc = 0;
         let totalAddresses = 0;
         let allAddresses = [];
-
         relevantPortfolios.forEach(p => {
             if (p.items) {
                 p.items.forEach(item => {
                     if (item.type === 'crypto' || !item.type) {
                         totalAddresses++;
+                        const amt = item.amount != null ? item.amount : 0;
+                        totalBtc += amt;
                         allAddresses.push({
                             address: item.address,
                             label: item.label,
-                            balance: Math.random() * 2 // Mock balance for demo
+                            balance: amt
                         });
                     }
                 });
             }
         });
 
-        // Mock total BTC (in production, fetch from blockchain API)
-        totalBtc = allAddresses.reduce((sum, addr) => sum + addr.balance, 0);
-        const totalValue = totalBtc * btcPrice;
+        const displayTotal = totalValueFiat > 0 ? totalValueFiat : (totalBtc * btcPrice);
 
         // Update metric cards
-        document.getElementById('total-value').textContent = '$' + totalValue.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+        document.getElementById('total-value-currency').textContent = '(' + currency.toUpperCase() + ')';
+        document.getElementById('total-value').textContent = formatFiat(displayTotal, currency);
         document.getElementById('btc-holdings').textContent = totalBtc.toFixed(8) + ' BTC';
         document.getElementById('address-count').textContent = totalAddresses;
-        document.getElementById('tx-count').textContent = Math.floor(Math.random() * 1000); // Mock tx count
+        document.getElementById('tx-count').textContent = Math.floor(Math.random() * 1000);
+
+        // Breakdown by asset class
+        document.getElementById('breakdown-currency').textContent = currency.toUpperCase();
+        document.getElementById('breakdown-crypto').textContent = formatFiat(byClass.crypto, currency);
+        document.getElementById('breakdown-commodity').textContent = formatFiat(byClass.commodity, currency);
+        document.getElementById('breakdown-bond').textContent = formatFiat(byClass.bond, currency);
 
         // Update change indicators (mock data)
         const valueChange = (Math.random() * 20 - 5).toFixed(2);
@@ -707,6 +801,12 @@
     }
 
     // Event listeners
+    document.getElementById('currency-selector').addEventListener('change', async (e) => {
+        currentCurrency = e.target.value;
+        await loadPortfolios();
+        updateDashboard();
+    });
+
     document.getElementById('portfolio-selector').addEventListener('change', (e) => {
         currentPortfolio = e.target.value;
         updateDashboard();

@@ -1519,9 +1519,11 @@ func listPortfoliosHandler(c *gin.Context) {
 	}
 	paginated := portfolios[start:end]
 
-	// Valuation in user's preferred fiat (fallback to usd)
+	// Valuation currency: optional query override, else user's preferred fiat (fallback to usd)
 	valuationCurrency := "usd"
-	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
+	if q := strings.ToLower(strings.TrimSpace(c.Query("currency"))); q != "" && pricing.SupportedFiatCurrencies[q] {
+		valuationCurrency = q
+	} else if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
 		valuationCurrency = strings.ToLower(u.PreferredCurrency)
 	}
 	usdPerFiat := 1.0

@@ -107,9 +107,21 @@
 
         <!-- Portfolio Management Section -->
         <div id="portfolio-section" class="hidden w-full max-w-4xl mx-auto">
-            <div class="flex justify-between items-center mb-6">
+            <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
                 <h1 class="text-2xl font-bold">Your Portfolios</h1>
-                <button id="create-portfolio-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark">Create New Portfolio</button>
+                <div class="flex flex-wrap gap-3 items-center">
+                    <label for="portfolio-currency-selector" class="text-sm text-text-secondary">Value in</label>
+                    <select id="portfolio-currency-selector" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Valuation currency">
+                        <option value="usd">USD</option>
+                        <option value="eur">EUR</option>
+                        <option value="gbp">GBP</option>
+                        <option value="jpy">JPY</option>
+                        <option value="cad">CAD</option>
+                        <option value="aud">AUD</option>
+                        <option value="chf">CHF</option>
+                    </select>
+                    <button id="create-portfolio-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark">Create New Portfolio</button>
+                </div>
             </div>
             <div id="portfolio-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
                 <!-- Portfolios will be loaded here -->
@@ -628,7 +640,33 @@
     function showPortfolios() {
         searchSection.classList.add('hidden');
         portfolioSection.classList.remove('hidden');
+        syncPortfolioCurrencyFromProfile();
         loadPortfolios();
+    }
+
+    async function syncPortfolioCurrencyFromProfile() {
+        try {
+            const res = await fetch('/api/user/profile', { credentials: 'include' });
+            if (res.ok) {
+                const user = await res.json();
+                if (user.preferred_currency && typeof user.preferred_currency === 'string') {
+                    const c = user.preferred_currency.toLowerCase().trim();
+                    const sel = document.getElementById('portfolio-currency-selector');
+                    if (sel && sel.querySelector('option[value="' + c + '"]')) {
+                        sel.value = c;
+                        portfolioCurrency = c;
+                    }
+                }
+            }
+        } catch (e) {}
+    }
+
+    const portfolioCurrencyEl = document.getElementById('portfolio-currency-selector');
+    if (portfolioCurrencyEl) {
+        portfolioCurrencyEl.addEventListener('change', function() {
+            portfolioCurrency = this.value;
+            loadPortfolios();
+        });
     }
 
     if (portfoliosNav) {
@@ -656,9 +694,19 @@
         return fetch(url, opts);
     }
 
+    const CURRENCY_SYMBOLS = { usd: '$', eur: '€', gbp: '£', jpy: '¥', cad: 'C$', aud: 'A$', chf: 'CHF ' };
+    let portfolioCurrency = 'usd';
+
+    function formatPortfolioFiat(value, currency) {
+        if (value == null || isNaN(value)) return '—';
+        const sym = CURRENCY_SYMBOLS[currency] || currency.toUpperCase() + ' ';
+        return sym + Number(value).toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    }
+
     async function loadPortfolios() {
         try {
-            const res = await fetch('/api/v1/user/portfolios', { credentials: 'include' });
+            const url = '/api/v1/user/portfolios?currency=' + encodeURIComponent(portfolioCurrency);
+            const res = await fetch(url, { credentials: 'include' });
             if (!res.ok) {
                 portfolioList.innerHTML = '<p class="text-text-secondary">Sign in to view and export your portfolios.</p>';
                 return;
@@ -669,12 +717,16 @@
                 portfolioList.innerHTML = '<p class="text-text-secondary">No portfolios found.</p>';
                 return;
             }
-            portfolioList.innerHTML = portfolios.map(p => `
+            const cur = (portfolios[0] && portfolios[0].valuation_currency) || portfolioCurrency;
+            portfolioList.innerHTML = portfolios.map(p => {
+                const totalVal = p.total_value_fiat != null ? formatPortfolioFiat(p.total_value_fiat, p.valuation_currency || cur) : '—';
+                return `
                 <div class="bg-bg-secondary p-6 rounded-lg shadow-sm border border-border">
                     <h3 class="text-xl font-bold">${p.name}</h3>
-                    <p class="text-text-secondary text-sm mb-4">${p.description || 'No description'}</p>
+                    <p class="text-text-secondary text-sm mb-2">${p.description || 'No description'}</p>
+                    <p class="text-sm font-semibold mb-3">Total value: ${totalVal}</p>
                     <div class="text-sm space-y-1 mb-4">
-                        ${(p.items || []).map(item => `<div><span class="font-medium">[${(item.type || 'stock').toUpperCase()}] ${item.label}:</span> ${item.address}</div>`).join('')}
+                        ${(p.items || []).map(item => `<div><span class="font-medium">[${(item.type || 'stock').toUpperCase()}] ${item.label}:</span> ${item.address}${item.value_fiat != null ? ' — ' + formatPortfolioFiat(item.value_fiat, p.valuation_currency || cur) : ''}</div>`).join('')}
                     </div>
                     <div class="flex flex-wrap gap-2 items-center">
                         <button onclick="editPortfolio('${p.id}')" class="text-primary hover:underline">Edit</button>
@@ -694,7 +746,8 @@
                         <p class="export-error hidden text-red-600 text-sm" role="alert"></p>
                     </div>
                 </div>
-            `).join('');
+            `;
+            }).join('');
             bindPortfolioExportHandlers();
         } catch (err) {
             console.error('Failed to load portfolios', err);
