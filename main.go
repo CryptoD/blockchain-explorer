@@ -3129,10 +3129,9 @@ func getNetworkStatus() (map[string]interface{}, error) {
 		"hash_rate":    hashRate,
 	}
 	resultJSON, _ := json.Marshal(result)
-	fmt.Println("Setting cache for", cacheKey)
 	err = rdb.Set(context.Background(), cacheKey, resultJSON, 1*time.Minute).Err()
 	if err != nil {
-		fmt.Println("Redis set error:", err)
+		log.WithError(err).WithField("cache_key", cacheKey).Warn("Redis set error in getNetworkStatus")
 	}
 	return result, nil
 }
