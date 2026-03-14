@@ -35,6 +35,9 @@ type Config struct {
 
 	// Readiness / health
 	ReadyCheckExternal bool
+
+	// Rates (multi-currency): cache TTL and effective update interval in seconds
+	RatesCacheTTLSeconds int // Redis key TTL for rate data; default 60
 }
 
 // Load parses environment variables into a Config struct and validates
@@ -57,6 +60,7 @@ func Load() (*Config, error) {
 		ExportRateLimitHeavyPerIP:  GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
 		ExportRateLimitHeavyPerUser: GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
 		ReadyCheckExternal:         strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
+		RatesCacheTTLSeconds:       GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
 	}
 
 	// Required in all environments: GetBlock configuration for core blockchain operations.

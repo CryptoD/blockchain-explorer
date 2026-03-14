@@ -2827,43 +2827,98 @@ func priceHistoryHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, result)
 }
 
+// Redis key for BTC multi-currency rates. TTL set by RATES_CACHE_TTL_SECONDS (default 60s).
+const ratesRedisKeyBTC = "rates:btc"
+
+// ratesCacheTTL returns the TTL for rates cache from config or default 60s.
+func ratesCacheTTL() time.Duration {
+	if appConfig != nil && appConfig.RatesCacheTTLSeconds > 0 {
+		return time.Duration(appConfig.RatesCacheTTLSeconds) * time.Second
+	}
+	return 60 * time.Second
+}
+
 func ratesHandler(c *gin.Context) {
-	cacheKey := "btc:rates"
 	ctx := context.Background()
 
-	// Try cache first
-	if rdb != nil {
-		cached, err := rdb.Get(ctx, cacheKey).Result()
-		if err == nil && cached != "" {
-			var data map[string]interface{}
-			if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
-				c.JSON(http.StatusOK, data)
-				return
+	// Optional: filter by user-requested fiat currencies (comma-separated, e.g. currency=usd,eur)
+	var wantCurrencies []string
+	if q := strings.TrimSpace(c.Query("currency")); q != "" {
+		for _, code := range strings.Split(q, ",") {
+			code = strings.ToLower(strings.TrimSpace(code))
+			if code != "" && pricing.SupportedFiatCurrencies[code] {
+				wantCurrencies = append(wantCurrencies, code)
 			}
-			// If unmarshalling fails, fall through to fetch fresh data
 		}
 	}
 
-	// Fetch from pricing provider
+	// Try cache first (we store the default set under rates:btc)
+	if rdb != nil {
+		cached, err := rdb.Get(ctx, ratesRedisKeyBTC).Result()
+		if err == nil && cached != "" {
+			var data map[string]interface{}
+			if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
+				rates := filterRatesByCurrencies(data, wantCurrencies)
+				c.JSON(http.StatusOK, rates)
+				return
+			}
+		}
+	}
+
 	if pricingClient == nil {
 		handleError(c, errors.New("pricing client not initialized"), http.StatusInternalServerError)
 		return
 	}
 
-	rates, err := pricingClient.GetMultiCurrencyRates(ctx)
+	// Always fetch the default currency set so we can cache one canonical entry under rates:btc
+	rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, nil)
 	if err != nil {
 		handleError(c, err, http.StatusInternalServerError)
 		return
 	}
 
-	// Cache for 5 minutes if Redis is available
+	// Store in Redis with clear key naming and configured TTL
 	if rdb != nil {
 		if ratesJSON, err := json.Marshal(rates); err == nil {
-			_ = rdb.Set(ctx, cacheKey, ratesJSON, 5*time.Minute).Err()
+			_ = rdb.Set(ctx, ratesRedisKeyBTC, ratesJSON, ratesCacheTTL()).Err()
 		}
 	}
 
-	c.JSON(http.StatusOK, rates)
+	out := filterRatesByCurrencies(rates, wantCurrencies)
+	ttl := ratesCacheTTL()
+	c.Header("X-Rates-Cache-TTL-Seconds", strconv.Itoa(int(ttl.Seconds())))
+	c.Header("X-Rates-Updated-At", time.Now().UTC().Format(time.RFC3339))
+	c.JSON(http.StatusOK, out)
+}
+
+// filterRatesByCurrencies returns a copy of the rates map containing only the requested currencies.
+// CoinGecko response shape: {"bitcoin": {"usd": 123, "eur": 100}}. If want is empty, return as-is.
+func filterRatesByCurrencies(rates map[string]interface{}, want []string) map[string]interface{} {
+	if len(want) == 0 {
+		return rates
+	}
+	wantSet := make(map[string]bool)
+	for _, c := range want {
+		wantSet[c] = true
+	}
+	out := make(map[string]interface{})
+	for asset, v := range rates {
+		vm, ok := v.(map[string]interface{})
+		if !ok {
+			out[asset] = v
+			continue
+		}
+		filtered := make(map[string]interface{})
+		for k, val := range vm {
+			if wantSet[k] {
+				filtered[k] = val
+			}
+		}
+		if len(filtered) > 0 {
+			out[asset] = filtered
+		}
+	}
+	return out
 }
 
 // healthHandler is a simple liveness probe. It reports basic process health

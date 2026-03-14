@@ -228,10 +228,31 @@ paths:
   /api/v1/rates:
     get:
       tags: [Market Data]
-      summary: Bitcoin spot price in multiple fiat currencies
+      summary: Bitcoin spot price in user-selectable fiat currencies
+      description: |
+        Returns BTC (and other asset) prices in multiple fiat currencies. Rates are stored in Redis
+        under key `rates:btc` with configurable TTL (RATES_CACHE_TTL_SECONDS, default 60). Update
+        interval matches cache TTL when data is refreshed on cache miss.
+      parameters:
+        - name: currency
+          in: query
+          required: false
+          schema:
+            type: string
+          description: Comma-separated fiat codes (e.g. usd,eur,gbp). If omitted, returns default set (usd, eur, gbp, jpy, cad, aud, chf). Invalid codes are ignored.
       responses:
         '200':
-          description: Current price map keyed by asset and currency
+          description: Current price map keyed by asset and currency (e.g. bitcoin.usd, bitcoin.eur)
+          headers:
+            X-Rates-Cache-TTL-Seconds:
+              description: Cache TTL in seconds for this rate data
+              schema:
+                type: integer
+            X-Rates-Updated-At:
+              description: ISO 8601 timestamp of response generation
+              schema:
+                type: string
+                format: date-time
           content:
             application/json:
               schema:
