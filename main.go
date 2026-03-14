@@ -15,6 +15,7 @@ import (
 	"net/http"
 	"os"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -269,6 +270,29 @@ type PriceAlert struct {
 	IsActive    bool       `json:"is_active"`
 	TriggeredAt *time.Time `json:"triggered_at"`
 	Created     time.Time  `json:"created"`
+}
+
+// WatchlistEntry is a single item in a watchlist (symbol or address with optional tags/notes and group).
+// Exactly one of Symbol or Address should be set; Type indicates which ("symbol" or "address").
+// Group is optional and used for grouping display (e.g. "Crypto", "High risk", or custom).
+type WatchlistEntry struct {
+	Type    string   `json:"type"`              // "symbol" or "address"
+	Symbol  string   `json:"symbol,omitempty"`  // e.g. "bitcoin", "ethereum"; used when Type == "symbol"
+	Address string   `json:"address,omitempty"` // blockchain address; used when Type == "address"
+	Tags    []string `json:"tags,omitempty"`    // optional labels (max 10, each max 50 chars)
+	Notes   string   `json:"notes,omitempty"`   // optional free text (max 500 chars)
+	Group   string   `json:"group,omitempty"`   // optional group label for grouping (e.g. by asset type, risk, custom); max 50 chars
+}
+
+// Watchlist is keyed by user and watchlist ID. Stored in Redis at watchlist:{username}:{id}.
+// No TTL: watchlists are persistent user data (same strategy as portfolios).
+type Watchlist struct {
+	ID       string           `json:"id"`
+	Username string           `json:"username"`
+	Name     string           `json:"name"` // optional display name
+	Entries  []WatchlistEntry `json:"entries"`
+	Created  time.Time        `json:"created"`
+	Updated  time.Time        `json:"updated"`
 }
 
 // User authentication variables
@@ -973,6 +997,7 @@ func main() {
 	r.StaticFile("/", "index.html")
 	r.StaticFile("/admin", "admin.html")
 	r.StaticFile("/dashboard", "dashboard.html")
+	r.StaticFile("/profile", "profile.html")
 	r.StaticFile("/symbols", "symbols.html")
 
 	// Health and readiness endpoints
@@ -1014,6 +1039,14 @@ func main() {
 			userV1.POST("/portfolios", createPortfolioHandler)
 			userV1.PUT("/portfolios/:id", updatePortfolioHandler)
 			userV1.DELETE("/portfolios/:id", deletePortfolioHandler)
+			userV1.GET("/watchlists", listWatchlistsHandler)
+			userV1.GET("/watchlists/:id", getWatchlistHandler)
+			userV1.POST("/watchlists", createWatchlistHandler)
+			userV1.PUT("/watchlists/:id", updateWatchlistHandler)
+			userV1.DELETE("/watchlists/:id", deleteWatchlistHandler)
+			userV1.POST("/watchlists/:id/entries", addWatchlistEntryHandler)
+			userV1.PUT("/watchlists/:id/entries/:index", updateWatchlistEntryHandler)
+			userV1.DELETE("/watchlists/:id/entries/:index", deleteWatchlistEntryHandler)
 		}
 
 		// Admin routes (require authentication and admin role)
@@ -1063,6 +1096,14 @@ func main() {
 		user.POST("/portfolios", createPortfolioHandler)
 		user.PUT("/portfolios/:id", updatePortfolioHandler)
 		user.DELETE("/portfolios/:id", deletePortfolioHandler)
+		user.GET("/watchlists", listWatchlistsHandler)
+		user.GET("/watchlists/:id", getWatchlistHandler)
+		user.POST("/watchlists", createWatchlistHandler)
+		user.PUT("/watchlists/:id", updateWatchlistHandler)
+		user.DELETE("/watchlists/:id", deleteWatchlistHandler)
+		user.POST("/watchlists/:id/entries", addWatchlistEntryHandler)
+		user.PUT("/watchlists/:id/entries/:index", updateWatchlistEntryHandler)
+		user.DELETE("/watchlists/:id/entries/:index", deleteWatchlistEntryHandler)
 	}
 
 	// Admin routes (require authentication and admin role)
@@ -1765,6 +1806,436 @@ func deletePortfolioHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{"message": "Portfolio deleted successfully"})
+}
+
+// Redis key convention for watchlists: watchlist:{username}:{id}
+// TTL: none (0) — watchlists are persistent user data like portfolios.
+const watchlistKeyPrefix = "watchlist:"
+
+func watchlistKey(username, id string) string {
+	return watchlistKeyPrefix + username + ":" + id
+}
+
+const (
+	maxWatchlistsPerUser = 20   // quota: max watchlists per user to avoid unbounded storage
+	maxWatchlistEntries  = 100
+	maxWatchlistNameLen  = 100
+	maxEntrySymbolLen    = 128
+	maxEntryAddressLen   = 256
+	maxEntryNotesLen     = 500
+	maxEntryTags         = 10
+	maxTagLen            = 50
+	maxEntryGroupLen     = 50
+)
+
+func validateWatchlistEntry(i int, e *WatchlistEntry) error {
+	e.Type = strings.ToLower(strings.TrimSpace(e.Type))
+	if e.Type != "symbol" && e.Type != "address" {
+		return fmt.Errorf("entry %d: type must be symbol or address", i+1)
+	}
+	e.Symbol = strings.TrimSpace(e.Symbol)
+	e.Address = strings.TrimSpace(e.Address)
+	if e.Type == "symbol" {
+		if e.Symbol == "" || len(e.Symbol) > maxEntrySymbolLen {
+			return fmt.Errorf("entry %d: symbol must be 1-%d characters", i+1, maxEntrySymbolLen)
+		}
+		e.Symbol = sanitizeText(e.Symbol, maxEntrySymbolLen)
+	} else {
+		if e.Address == "" || len(e.Address) > maxEntryAddressLen {
+			return fmt.Errorf("entry %d: address must be 1-%d characters", i+1, maxEntryAddressLen)
+		}
+		e.Address = sanitizeText(e.Address, maxEntryAddressLen)
+	}
+	e.Notes = sanitizeText(strings.TrimSpace(e.Notes), maxEntryNotesLen)
+	if len(e.Tags) > maxEntryTags {
+		return fmt.Errorf("entry %d: at most %d tags allowed", i+1, maxEntryTags)
+	}
+	for j, t := range e.Tags {
+		t = strings.TrimSpace(t)
+		if len(t) > maxTagLen {
+			return fmt.Errorf("entry %d tag %d: tag max %d characters", i+1, j+1, maxTagLen)
+		}
+		e.Tags[j] = sanitizeText(t, maxTagLen)
+	}
+	e.Group = strings.TrimSpace(e.Group)
+	if len(e.Group) > maxEntryGroupLen {
+		return fmt.Errorf("entry %d: group must be at most %d characters", i+1, maxEntryGroupLen)
+	}
+	e.Group = sanitizeText(e.Group, maxEntryGroupLen)
+	return nil
+}
+
+// getWatchlistCount returns the number of watchlists for a user (for quota enforcement).
+func getWatchlistCount(ctx context.Context, username string) (int, error) {
+	if rdb == nil {
+		return 0, errors.New("redis unavailable")
+	}
+	keys, err := rdb.Keys(ctx, watchlistKey(username, "*")).Result()
+	if err != nil {
+		return 0, err
+	}
+	return len(keys), nil
+}
+
+// listWatchlistsHandler returns all watchlists for the authenticated user.
+func listWatchlistsHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	keys, err := rdb.Keys(ctx, watchlistKey(uname, "*")).Result()
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to fetch watchlists")
+		return
+	}
+	watchlists := []Watchlist{}
+	for _, key := range keys {
+		data, err := rdb.Get(ctx, key).Result()
+		if err != nil {
+			continue
+		}
+		var w Watchlist
+		if err := json.Unmarshal([]byte(data), &w); err == nil {
+			watchlists = append(watchlists, w)
+		}
+	}
+	sort.Slice(watchlists, func(i, j int) bool {
+		return watchlists[i].Updated.After(watchlists[j].Updated)
+	})
+	c.JSON(http.StatusOK, gin.H{"data": watchlists})
+}
+
+// createWatchlistHandler creates a new watchlist. Enforces per-user watchlist quota.
+func createWatchlistHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	count, err := getWatchlistCount(ctx, uname)
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to check watchlist count")
+		return
+	}
+	if count >= maxWatchlistsPerUser {
+		errorResponse(c, http.StatusTooManyRequests, "watchlist_quota_exceeded", fmt.Sprintf("Maximum %d watchlists per user", maxWatchlistsPerUser))
+		return
+	}
+	var w Watchlist
+	if err := c.ShouldBindJSON(&w); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
+		return
+	}
+	w.Name = strings.TrimSpace(w.Name)
+	if len(w.Name) > maxWatchlistNameLen {
+		errorResponse(c, http.StatusBadRequest, "invalid_watchlist_name", "Watchlist name must be at most 100 characters")
+		return
+	}
+	w.Name = sanitizeText(w.Name, maxWatchlistNameLen)
+	if len(w.Entries) > maxWatchlistEntries {
+		errorResponse(c, http.StatusBadRequest, "invalid_watchlist_entries", "Watchlist cannot contain more than 100 entries")
+		return
+	}
+	for i := range w.Entries {
+		if err := validateWatchlistEntry(i, &w.Entries[i]); err != nil {
+			errorResponse(c, http.StatusBadRequest, "invalid_entry", err.Error())
+			return
+		}
+	}
+	w.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	w.Username = uname
+	w.Created = time.Now()
+	w.Updated = time.Now()
+	data, _ := json.Marshal(w)
+	key := watchlistKey(uname, w.ID)
+	if err := rdb.Set(ctx, key, data, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_save_failed", "Failed to save watchlist")
+		return
+	}
+	c.JSON(http.StatusCreated, w)
+}
+
+// getWatchlistHandler returns a single watchlist by ID.
+func getWatchlistHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	if id == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	key := watchlistKey(uname, id)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "watchlist_not_found", "Watchlist not found")
+		return
+	}
+	var w Watchlist
+	if err := json.Unmarshal([]byte(data), &w); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to load watchlist")
+		return
+	}
+	c.JSON(http.StatusOK, w)
+}
+
+// updateWatchlistHandler updates an existing watchlist. Enforces entry count quota.
+func updateWatchlistHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	if id == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	var w Watchlist
+	if err := c.ShouldBindJSON(&w); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
+		return
+	}
+	w.Name = strings.TrimSpace(w.Name)
+	if len(w.Name) > maxWatchlistNameLen {
+		errorResponse(c, http.StatusBadRequest, "invalid_watchlist_name", "Watchlist name must be at most 100 characters")
+		return
+	}
+	w.Name = sanitizeText(w.Name, maxWatchlistNameLen)
+	if len(w.Entries) > maxWatchlistEntries {
+		errorResponse(c, http.StatusBadRequest, "invalid_watchlist_entries", "Watchlist cannot contain more than 100 entries")
+		return
+	}
+	for i := range w.Entries {
+		if err := validateWatchlistEntry(i, &w.Entries[i]); err != nil {
+			errorResponse(c, http.StatusBadRequest, "invalid_entry", err.Error())
+			return
+		}
+	}
+	key := watchlistKey(uname, id)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "watchlist_not_found", "Watchlist not found")
+		return
+	}
+	var existing Watchlist
+	if err := json.Unmarshal([]byte(data), &existing); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to load watchlist")
+		return
+	}
+	existing.Name = w.Name
+	existing.Entries = w.Entries
+	existing.Updated = time.Now()
+	newData, _ := json.Marshal(existing)
+	if err := rdb.Set(ctx, key, newData, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_save_failed", "Failed to save watchlist")
+		return
+	}
+	c.JSON(http.StatusOK, existing)
+}
+
+// deleteWatchlistHandler deletes a watchlist.
+func deleteWatchlistHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	if id == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	key := watchlistKey(uname, id)
+	if err := rdb.Del(ctx, key).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_delete_failed", "Failed to delete watchlist")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"message": "Watchlist deleted successfully"})
+}
+
+// addWatchlistEntryHandler appends one entry to a watchlist. Enforces per-watchlist entry quota.
+func addWatchlistEntryHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	if id == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	var e WatchlistEntry
+	if err := c.ShouldBindJSON(&e); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
+		return
+	}
+	if err := validateWatchlistEntry(0, &e); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_entry", err.Error())
+		return
+	}
+	key := watchlistKey(uname, id)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "watchlist_not_found", "Watchlist not found")
+		return
+	}
+	var w Watchlist
+	if err := json.Unmarshal([]byte(data), &w); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to load watchlist")
+		return
+	}
+	if len(w.Entries) >= maxWatchlistEntries {
+		errorResponse(c, http.StatusTooManyRequests, "entry_quota_exceeded", fmt.Sprintf("Maximum %d entries per watchlist", maxWatchlistEntries))
+		return
+	}
+	w.Entries = append(w.Entries, e)
+	w.Updated = time.Now()
+	newData, _ := json.Marshal(w)
+	if err := rdb.Set(ctx, key, newData, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_save_failed", "Failed to save watchlist")
+		return
+	}
+	c.JSON(http.StatusCreated, w)
+}
+
+// updateWatchlistEntryHandler updates an entry at the given 0-based index.
+func updateWatchlistEntryHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	indexStr := c.Param("index")
+	if id == "" || indexStr == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID and entry index required")
+		return
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 0 {
+		errorResponse(c, http.StatusBadRequest, "invalid_index", "Entry index must be a non-negative integer")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	var e WatchlistEntry
+	if err := c.ShouldBindJSON(&e); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request format")
+		return
+	}
+	if err := validateWatchlistEntry(0, &e); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_entry", err.Error())
+		return
+	}
+	key := watchlistKey(uname, id)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "watchlist_not_found", "Watchlist not found")
+		return
+	}
+	var w Watchlist
+	if err := json.Unmarshal([]byte(data), &w); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to load watchlist")
+		return
+	}
+	if index >= len(w.Entries) {
+		errorResponse(c, http.StatusNotFound, "entry_not_found", "Entry index out of range")
+		return
+	}
+	w.Entries[index] = e
+	w.Updated = time.Now()
+	newData, _ := json.Marshal(w)
+	if err := rdb.Set(ctx, key, newData, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_save_failed", "Failed to save watchlist")
+		return
+	}
+	c.JSON(http.StatusOK, w)
+}
+
+// deleteWatchlistEntryHandler removes the entry at the given 0-based index.
+func deleteWatchlistEntryHandler(c *gin.Context) {
+	username, ok := c.Get("username")
+	if !ok {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+	uname := username.(string)
+	id := c.Param("id")
+	indexStr := c.Param("index")
+	if id == "" || indexStr == "" {
+		errorResponse(c, http.StatusBadRequest, "invalid_id", "Watchlist ID and entry index required")
+		return
+	}
+	index, err := strconv.Atoi(indexStr)
+	if err != nil || index < 0 {
+		errorResponse(c, http.StatusBadRequest, "invalid_index", "Entry index must be a non-negative integer")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Watchlists require Redis")
+		return
+	}
+	key := watchlistKey(uname, id)
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "watchlist_not_found", "Watchlist not found")
+		return
+	}
+	var w Watchlist
+	if err := json.Unmarshal([]byte(data), &w); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_fetch_failed", "Failed to load watchlist")
+		return
+	}
+	if index >= len(w.Entries) {
+		errorResponse(c, http.StatusNotFound, "entry_not_found", "Entry index out of range")
+		return
+	}
+	w.Entries = append(w.Entries[:index], w.Entries[index+1:]...)
+	w.Updated = time.Now()
+	newData, _ := json.Marshal(w)
+	if err := rdb.Set(ctx, key, newData, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "watchlist_save_failed", "Failed to save watchlist")
+		return
+	}
+	c.JSON(http.StatusOK, w)
 }
 
 // exportPortfolioCSVHandler streams a single portfolio's holdings as CSV.

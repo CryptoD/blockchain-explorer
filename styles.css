@@ -63,6 +63,51 @@
   --hover: #fff7ed;
 }
 
+/* Profile theme: dark mode (applied when user preference is "dark" or "system" + OS dark) */
+[data-color-scheme="dark"] {
+  --primary: #60a5fa;
+  --accent: #3b82f6;
+  --bg: #0f172a;
+  --text: #f1f5f9;
+  --bg-secondary: #1e293b;
+  --text-secondary: #cbd5e1;
+  --border: #334155;
+  --hover: #334155;
+}
+
+[data-theme="green"][data-color-scheme="dark"] {
+  --primary: #34d399;
+  --accent: #10b981;
+  --bg: #0f172a;
+  --text: #f0fdf4;
+  --bg-secondary: #14532d;
+  --text-secondary: #bbf7d0;
+  --border: #166534;
+  --hover: #15803d;
+}
+
+[data-theme="purple"][data-color-scheme="dark"] {
+  --primary: #a78bfa;
+  --accent: #8b5cf6;
+  --bg: #0f172a;
+  --text: #faf5ff;
+  --bg-secondary: #581c87;
+  --text-secondary: #d8b4fe;
+  --border: #6b21a8;
+  --hover: #7c3aed;
+}
+
+[data-theme="orange"][data-color-scheme="dark"] {
+  --primary: #fb923c;
+  --accent: #f97316;
+  --bg: #0f172a;
+  --text: #fff7ed;
+  --bg-secondary: #9a3412;
+  --text-secondary: #fed7aa;
+  --border: #c2410c;
+  --hover: #ea580c;
+}
+
 /* Global Styles */
 body {
   font-family: Arial, sans-serif;

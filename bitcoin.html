@@ -59,6 +59,14 @@
                         <span id="export-search-json-label">Download as JSON</span>
                         <span id="export-search-json-spinner" class="hidden w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
                     </button>
+                    <div id="watchlist-add-wrap" class="hidden relative inline-block">
+                        <button type="button" id="watchlist-add-btn" class="inline-flex items-center gap-2 px-4 py-2 text-sm font-medium rounded-lg border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-slate-700 dark:text-slate-300 hover:bg-gray-50 dark:hover:bg-gray-600 focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2" aria-haspopup="true" aria-expanded="false" aria-label="Add to watchlist">
+                            Add to watchlist
+                        </button>
+                        <div id="watchlist-dropdown" class="hidden absolute left-0 mt-1 py-1 bg-white dark:bg-gray-800 border border-gray-200 dark:border-gray-700 rounded-lg shadow z-20 min-w-[200px] max-h-60 overflow-auto" role="menu"></div>
+                        <p id="watchlist-add-message" class="hidden absolute left-0 mt-1 text-sm text-green-600 dark:text-green-400" role="status"></p>
+                        <p id="watchlist-add-error" class="hidden absolute left-0 mt-1 text-sm text-red-600 dark:text-red-400" role="alert"></p>
+                    </div>
                     <p id="export-search-error" class="hidden text-red-600 dark:text-red-400 text-sm" role="alert"></p>
                 </div>
                 <!-- Address Details -->

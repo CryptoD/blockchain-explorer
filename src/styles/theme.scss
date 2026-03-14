@@ -119,6 +119,75 @@ $text: #0f172a;
   }
 }
 
+// User profile theme preference (overrides OS when set)
+[data-color-scheme="dark"] {
+  --color-bg: #0f172a;
+  --color-text: #f1f5f9;
+  --color-bg-secondary: #1e293b;
+  --color-text-secondary: #cbd5e1;
+  --color-border: #334155;
+  --color-hover: #334155;
+
+  &[data-theme="green"] {
+    --color-bg: #0f172a;
+    --color-text: #f0fdf4;
+    --color-bg-secondary: #14532d;
+    --color-text-secondary: #bbf7d0;
+    --color-border: #166534;
+    --color-hover: #15803d;
+  }
+  &[data-theme="purple"] {
+    --color-bg: #0f172a;
+    --color-text: #faf5ff;
+    --color-bg-secondary: #581c87;
+    --color-text-secondary: #d8b4fe;
+    --color-border: #6b21a8;
+    --color-hover: #7c3aed;
+  }
+  &[data-theme="orange"] {
+    --color-bg: #0f172a;
+    --color-text: #fff7ed;
+    --color-bg-secondary: #9a3412;
+    --color-text-secondary: #fed7aa;
+    --color-border: #c2410c;
+    --color-hover: #ea580c;
+  }
+}
+
+[data-color-scheme="light"] {
+  --color-bg: #f8fafc;
+  --color-text: #0f172a;
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #e2e8f0;
+  --color-hover: #f1f5f9;
+
+  &[data-theme="green"] {
+    --color-bg: #f0fdf4;
+    --color-text: #14532d;
+    --color-bg-secondary: #ffffff;
+    --color-text-secondary: #64748b;
+    --color-border: #bbf7d0;
+    --color-hover: #dcfce7;
+  }
+  &[data-theme="purple"] {
+    --color-bg: #faf5ff;
+    --color-text: #581c87;
+    --color-bg-secondary: #ffffff;
+    --color-text-secondary: #64748b;
+    --color-border: #d8b4fe;
+    --color-hover: #f3e8ff;
+  }
+  &[data-theme="orange"] {
+    --color-bg: #fff7ed;
+    --color-text: #9a3412;
+    --color-bg-secondary: #ffffff;
+    --color-text-secondary: #64748b;
+    --color-border: #fed7aa;
+    --color-hover: #ffedd5;
+  }
+}
+
 @tailwind base;
 @tailwind components;
 @tailwind utilities;

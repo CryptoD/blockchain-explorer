@@ -848,6 +848,7 @@
             } else {
                 paginationEl.style.display = 'none';
             }
+            if (window.__showWatchlistAddWrap) window.__showWatchlistAddWrap({ type: "address", address: addressData.address || "" });
         }
 
         function displayTransactionData(data) {
@@ -939,6 +940,7 @@
             } else {
                 toContainer.textContent = 'N/A';
             }
+            if (window.__showWatchlistAddWrap) window.__showWatchlistAddWrap({ type: "address", address: txData.txid || "" });
         }
 
         function displayBlockData(data) {
@@ -1001,6 +1003,7 @@
             } else {
                 txContainer.textContent = 'No transactions';
             }
+            if (window.__showWatchlistAddWrap) window.__showWatchlistAddWrap({ type: "address", address: blockData.hash || "" });
         }
 
         function loadNetworkStatus() {
@@ -1043,24 +1046,115 @@
         }
 
         // Pagination event listeners
-        document.getElementById('prev-page').addEventListener('click', () => {
-            if (currentPage > 1) {
-                displayAddressData({result: currentAddressData}, currentPage - 1);
-            }
+        const prevPage = document.getElementById("prev-page");
+        const nextPage = document.getElementById("next-page");
+        if (prevPage) prevPage.addEventListener("click", function() {
+            if (currentPage > 1) displayAddressData({ result: currentAddressData }, currentPage - 1);
         });
-
-        document.getElementById('next-page').addEventListener('click', () => {
+        if (nextPage) nextPage.addEventListener("click", function() {
             const transactions = currentAddressData.transactions || [];
             const totalPages = Math.ceil(transactions.length / ITEMS_PER_PAGE);
-            if (currentPage < totalPages) {
-                displayAddressData({result: currentAddressData}, currentPage + 1);
-            }
+            if (currentPage < totalPages) displayAddressData({ result: currentAddressData }, currentPage + 1);
         });
 
         // Share button event listeners
-        document.getElementById('share-address').addEventListener('click', shareResult);
-        document.getElementById('share-tx').addEventListener('click', shareResult);
-        document.getElementById('share-block').addEventListener('click', shareResult);
+        const shareAddress = document.getElementById("share-address");
+        const shareTx = document.getElementById("share-tx");
+        const shareBlock = document.getElementById("share-block");
+        if (shareAddress) shareAddress.addEventListener("click", shareResult);
+        if (shareTx) shareTx.addEventListener("click", shareResult);
+        if (shareBlock) shareBlock.addEventListener("click", shareResult);
+
+        // Watchlist "Add to watchlist" — show wrap and set target when a result is displayed
+        window.__watchlistTarget = null;
+        window.__showWatchlistAddWrap = function(target) {
+            window.__watchlistTarget = target;
+            const wrap = document.getElementById("watchlist-add-wrap");
+            if (wrap) wrap.classList.remove("hidden");
+        };
+        (function initWatchlistAdd() {
+            const btn = document.getElementById("watchlist-add-btn");
+            const dropdown = document.getElementById("watchlist-dropdown");
+            const msgEl = document.getElementById("watchlist-add-message");
+            const errEl = document.getElementById("watchlist-add-error");
+            if (!btn || !dropdown) return;
+            function hideMessages() {
+                if (msgEl) msgEl.classList.add("hidden");
+                if (errEl) errEl.classList.add("hidden");
+            }
+            function closeDropdown() {
+                dropdown.classList.add("hidden");
+                btn.setAttribute("aria-expanded", "false");
+            }
+            btn.addEventListener("click", function(e) {
+                e.stopPropagation();
+                hideMessages();
+                const target = window.__watchlistTarget;
+                if (!target || !target.address) return;
+                if (dropdown.classList.contains("hidden")) {
+                    fetch(API_BASE + "/user/watchlists", { credentials: "include" })
+                        .then(function(res) {
+                            if (res.status === 401) {
+                                if (errEl) {
+                                    errEl.textContent = "Sign in to add to watchlist.";
+                                    errEl.classList.remove("hidden");
+                                }
+                                return [];
+                            }
+                            if (!res.ok) return [];
+                            return res.json();
+                        })
+                        .then(function(data) {
+                            const list = (data && data.data) ? data.data : (Array.isArray(data) ? data : []);
+                            dropdown.innerHTML = "";
+                            if (list.length === 0 && !errEl.classList.contains("hidden")) return;
+                            if (list.length === 0) {
+                                if (errEl) {
+                                    errEl.textContent = "No watchlists. Create one in Profile.";
+                                    errEl.classList.remove("hidden");
+                                }
+                                return;
+                            }
+                            list.forEach(function(w) {
+                                const b = document.createElement("button");
+                                b.type = "button";
+                                b.className = "w-full text-left px-4 py-2 text-sm hover:bg-gray-100 dark:hover:bg-gray-700";
+                                b.textContent = w.name || ("Watchlist " + (w.id || ""));
+                                b.setAttribute("role", "menuitem");
+                                b.addEventListener("click", function(ev) {
+                                    ev.stopPropagation();
+                                    closeDropdown();
+                                    const body = JSON.stringify({ type: "address", address: target.address });
+                                    const headers = { "Content-Type": "application/json" };
+                                    const token = getCSRFToken();
+                                    if (token) headers["X-CSRF-Token"] = token;
+                                    fetch(API_BASE + "/user/watchlists/" + w.id + "/entries", { method: "POST", headers: headers, body: body, credentials: "include" })
+                                        .then(function(r) {
+                                            if (r.ok) {
+                                                if (msgEl) { msgEl.textContent = "Added to watchlist."; msgEl.classList.remove("hidden"); }
+                                                setTimeout(hideMessages, 2500);
+                                            } else {
+                                                if (errEl) { errEl.textContent = "Failed to add."; errEl.classList.remove("hidden"); }
+                                            }
+                                        })
+                                        .catch(function() {
+                                            if (errEl) { errEl.textContent = "Request failed."; errEl.classList.remove("hidden"); }
+                                        });
+                                });
+                                dropdown.appendChild(b);
+                            });
+                            dropdown.classList.remove("hidden");
+                            btn.setAttribute("aria-expanded", "true");
+                        })
+                        .catch(function() {
+                            if (errEl) { errEl.textContent = "Failed to load watchlists."; errEl.classList.remove("hidden"); }
+                        });
+                } else {
+                    closeDropdown();
+                }
+            });
+            document.addEventListener("click", closeDropdown);
+        })();
 
         renderHistory();
 
@@ -1470,14 +1564,30 @@
         document.getElementById('username-display').textContent = '';
     }
 
+    function applyProfileToPage(user) {
+        if (!user) return;
+        if (user.theme === "system" || user.theme === "light" || user.theme === "dark") {
+            const scheme = user.theme === "system"
+                ? (window.matchMedia && window.matchMedia("(prefers-color-scheme: dark)").matches ? "dark" : "light")
+                : user.theme;
+            document.documentElement.setAttribute("data-color-scheme", scheme);
+        } else {
+            document.documentElement.removeAttribute("data-color-scheme");
+        }
+        if (user.language && (user.language === "en" || user.language === "es")) {
+            document.documentElement.lang = user.language;
+        }
+    }
+
     async function checkAuthStatus() {
         try {
-            const response = await fetch(`${API_BASE}/user/profile`);
+            const response = await fetch(`${API_BASE}/user/profile`, { credentials: "include" });
             if (response.ok) {
                 const data = await response.json();
-                document.getElementById('auth-buttons').classList.add('hidden');
-                document.getElementById('user-info').classList.remove('hidden');
-                document.getElementById('username-display').textContent = data.username;
+                applyProfileToPage(data);
+                document.getElementById("auth-buttons").classList.add("hidden");
+                document.getElementById("user-info").classList.remove("hidden");
+                document.getElementById("username-display").textContent = data.username;
             }
         } catch (error) {
             // Not authenticated, show login/register buttons

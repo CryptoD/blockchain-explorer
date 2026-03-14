@@ -23,6 +23,7 @@
                 <a href="/addresses" class="hover:text-primary">Addresses</a>
                 <a href="/portfolios" class="hover:text-primary">Portfolios</a>
                 <a href="/dashboard" class="hover:text-primary" aria-current="page">Dashboard</a>
+                <a href="/profile" class="hover:text-primary">Profile</a>
                 <a href="/admin" class="hover:text-primary">Admin</a>
             </nav>
 
@@ -81,6 +82,7 @@
                     <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Addresses</a>
                     <a href="/portfolios" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Portfolios</a>
                     <a href="/dashboard" class="px-3 py-2 rounded hover:bg-hover font-semibold" role="menuitem">Dashboard</a>
+                    <a href="/profile" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Profile</a>
                     <a href="/admin" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Admin</a>
                 </nav>
 
@@ -212,6 +214,32 @@
                         <span class="text-text-secondary text-sm">All time activity</span>
                     </div>
                 </div>
+            </div>
+
+            <!-- Watchlist panel -->
+            <div id="watchlist-panel" class="mb-8 bg-bg-secondary p-6 rounded-lg shadow border border-border">
+                <div class="flex flex-wrap items-center justify-between gap-4 mb-4">
+                    <h3 class="text-lg font-semibold">Watchlist</h3>
+                    <div class="flex flex-wrap items-center gap-2">
+                        <label for="watchlist-selector" class="sr-only">Select watchlist</label>
+                        <select id="watchlist-selector" class="bg-bg border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
+                            <option value="">Loading…</option>
+                        </select>
+                        <label for="watchlist-group-by" class="sr-only">Group by</label>
+                        <select id="watchlist-group-by" class="bg-bg border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" title="Group entries">
+                            <option value="none">Order only</option>
+                            <option value="asset_type">Asset type</option>
+                            <option value="group">Custom group</option>
+                        </select>
+                        <a href="/profile" class="text-sm text-primary hover:underline">Manage watchlists</a>
+                    </div>
+                </div>
+                <p id="watchlist-signin-msg" class="hidden text-text-secondary text-sm">Sign in to view your watchlist. Add addresses or symbols from search results or <a href="/bitcoin" class="text-primary hover:underline">explorer</a>.</p>
+                <p id="watchlist-empty-msg" class="hidden text-text-secondary text-sm">No watchlists yet. Create one in <a href="/profile" class="text-primary hover:underline">Profile</a> and add assets from the <a href="/bitcoin" class="text-primary hover:underline">explorer</a>.</p>
+                <div id="watchlist-entries" class="space-y-2">
+                    <!-- Entries with reorder, group, price and link populated by JS -->
+                </div>
+                <p id="watchlist-alerts-note" class="mt-4 text-text-secondary text-xs border-t border-border pt-3">Price alerts — coming soon.</p>
             </div>
 
             <!-- Breakdown by asset class (in selected fiat) -->
@@ -373,8 +401,14 @@
     let portfolios = [];
     let btcPrice = 0;
     let currentCurrency = 'usd';
+    let currentWatchlist = null;
+    let watchlistRates = {};
 
     const CURRENCY_SYMBOLS = { usd: '$', eur: '€', gbp: '£', jpy: '¥', cad: 'C$', aud: 'A$', chf: 'CHF ' };
+
+    function getCSRFToken() {
+        try { return localStorage.getItem('csrfToken'); } catch (e) { return null; }
+    }
 
     // Initialize dashboard
     async function initDashboard() {
@@ -384,6 +418,195 @@
         await fetchBTCPrice();
         initCharts();
         updateDashboard();
+        loadWatchlistPanel();
+    }
+
+    // Watchlist panel: fetch lists, show selected watchlist entries with price and links
+    async function loadWatchlistPanel() {
+        const panel = document.getElementById('watchlist-panel');
+        const selector = document.getElementById('watchlist-selector');
+        const signinMsg = document.getElementById('watchlist-signin-msg');
+        const emptyMsg = document.getElementById('watchlist-empty-msg');
+        const entriesEl = document.getElementById('watchlist-entries');
+        if (!panel || !selector) return;
+        try {
+            const res = await fetch('/api/user/watchlists', { credentials: 'include' });
+            if (!res.ok) {
+                signinMsg.classList.remove('hidden');
+                emptyMsg.classList.add('hidden');
+                selector.innerHTML = '<option value="">Sign in to use watchlists</option>';
+                entriesEl.innerHTML = '';
+                return;
+            }
+            const data = await res.json();
+            const list = (data && data.data) ? data.data : (Array.isArray(data) ? data : []);
+            signinMsg.classList.add('hidden');
+            if (list.length === 0) {
+                emptyMsg.classList.remove('hidden');
+                selector.innerHTML = '<option value="">No watchlists</option>';
+                entriesEl.innerHTML = '';
+                return;
+            }
+            emptyMsg.classList.add('hidden');
+            selector.innerHTML = list.map(w => `<option value="${w.id}">${(w.name || 'Watchlist').replace(/"/g, '&quot;')}</option>`).join('');
+            selector.value = list[0].id;
+            await loadWatchlistEntries(list[0].id);
+            selector.addEventListener('change', async function() {
+                await loadWatchlistEntries(this.value);
+            });
+        } catch (e) {
+            signinMsg.classList.remove('hidden');
+            emptyMsg.classList.add('hidden');
+            selector.innerHTML = '<option value="">Error loading watchlists</option>';
+            entriesEl.innerHTML = '';
+        }
+    }
+
+    async function loadWatchlistEntries(watchlistId) {
+        const entriesEl = document.getElementById('watchlist-entries');
+        if (!entriesEl || !watchlistId) return;
+        try {
+            const res = await fetch('/api/user/watchlists/' + encodeURIComponent(watchlistId), { credentials: 'include' });
+            if (!res.ok) {
+                currentWatchlist = null;
+                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">Failed to load watchlist.</p>';
+                return;
+            }
+            const w = await res.json();
+            currentWatchlist = w;
+            const entries = w.entries || [];
+            if (entries.length === 0) {
+                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">No entries. Add addresses or symbols from the explorer.</p>';
+                return;
+            }
+            try {
+                const r = await fetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
+                if (r.ok) watchlistRates = await r.json(); else watchlistRates = {};
+            } catch (e) { watchlistRates = {}; }
+            const groupByEl = document.getElementById('watchlist-group-by');
+            if (groupByEl && !groupByEl.hasAttribute('data-bound')) {
+                groupByEl.setAttribute('data-bound', '1');
+                groupByEl.addEventListener('change', function() { renderWatchlistEntries(); });
+            }
+            renderWatchlistEntries();
+        } catch (e) {
+            currentWatchlist = null;
+            entriesEl.innerHTML = '<p class="text-text-secondary text-sm">Failed to load entries.</p>';
+        }
+    }
+
+    async function persistWatchlist() {
+        if (!currentWatchlist || !currentWatchlist.id) return false;
+        const headers = { 'Content-Type': 'application/json' };
+        const token = getCSRFToken();
+        if (token) headers['X-CSRF-Token'] = token;
+        const res = await fetch('/api/user/watchlists/' + encodeURIComponent(currentWatchlist.id), {
+            method: 'PUT',
+            headers: headers,
+            body: JSON.stringify({ name: currentWatchlist.name, entries: currentWatchlist.entries }),
+            credentials: 'include'
+        });
+        return res.ok;
+    }
+
+    function moveEntry(index, direction) {
+        if (!currentWatchlist || !currentWatchlist.entries) return;
+        const arr = currentWatchlist.entries;
+        const next = index + direction;
+        if (next < 0 || next >= arr.length) return;
+        [arr[index], arr[next]] = [arr[next], arr[index]];
+        persistWatchlist().then(function() { renderWatchlistEntries(); });
+    }
+
+    function setEntryGroup(index, groupValue) {
+        if (!currentWatchlist || !currentWatchlist.entries || index < 0 || index >= currentWatchlist.entries.length) return;
+        currentWatchlist.entries[index].group = groupValue || '';
+        persistWatchlist().then(function() { renderWatchlistEntries(); });
+    }
+
+    function renderWatchlistEntries() {
+        const entriesEl = document.getElementById('watchlist-entries');
+        const groupByEl = document.getElementById('watchlist-group-by');
+        if (!entriesEl || !currentWatchlist) return;
+        const entries = currentWatchlist.entries || [];
+        const groupBy = (groupByEl && groupByEl.value) ? groupByEl.value : 'none';
+        const sym = CURRENCY_SYMBOLS[currentCurrency] || (currentCurrency.toUpperCase() + ' ');
+        const rates = watchlistRates || {};
+
+        function rowHtml(e, i, showOrderControls) {
+            const isSymbol = (e.type || '').toLowerCase() === 'symbol';
+            const label = isSymbol ? (e.symbol || '') : (e.address ? (e.address.substring(0, 10) + '…' + e.address.slice(-8)) : '');
+            const link = isSymbol ? ('/bitcoin?q=' + encodeURIComponent(e.symbol || '')) : ('/bitcoin?q=' + encodeURIComponent(e.address || ''));
+            let priceHtml = '<span class="text-text-secondary">—</span>';
+            if (isSymbol && e.symbol) {
+                const asset = (e.symbol || '').toLowerCase();
+                const priceMap = rates[asset];
+                const price = priceMap && typeof priceMap[currentCurrency] === 'number' ? priceMap[currentCurrency] : null;
+                if (price != null) {
+                    priceHtml = '<span class="font-medium">' + sym + (price >= 1e6 ? price.toExponential(2) : price.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })) + '</span> <span class="text-text-secondary text-xs">(— change)</span>';
+                }
+            }
+            const rawNotes = (e.notes || '').trim();
+            const noteEscaped = rawNotes ? rawNotes.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').substring(0, 40) + (rawNotes.length > 40 ? '…' : '') : '';
+            const notes = noteEscaped ? (' <span class="text-text-secondary text-xs">' + noteEscaped + '</span>') : '';
+            const labelEscaped = (label || '—').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+            const orderBtns = showOrderControls
+                ? '<span class="flex items-center gap-0.5" role="group" aria-label="Reorder"><button type="button" class="watchlist-up px-1.5 py-0.5 rounded border border-border hover:bg-hover text-xs" data-index="' + i + '" aria-label="Move up">↑</button><button type="button" class="watchlist-down px-1.5 py-0.5 rounded border border-border hover:bg-hover text-xs" data-index="' + i + '" aria-label="Move down">↓</button></span>'
+                : '';
+            const groupSelect = '<select class="watchlist-group-select bg-bg border border-border rounded px-2 py-1 text-xs max-w-[120px]" data-index="' + i + '" title="Group"><option value="">(none)</option><option value="Crypto"' + (e.group === 'Crypto' ? ' selected' : '') + '>Crypto</option><option value="Addresses"' + (e.group === 'Addresses' ? ' selected' : '') + '>Addresses</option><option value="High risk"' + (e.group === 'High risk' ? ' selected' : '') + '>High risk</option><option value="Medium risk"' + (e.group === 'Medium risk' ? ' selected' : '') + '>Medium risk</option><option value="Low risk"' + (e.group === 'Low risk' ? ' selected' : '') + '>Low risk</option></select>';
+            return '<div class="flex flex-wrap items-center gap-2 p-2 rounded border border-border hover:bg-hover" data-entry-index="' + i + '">' + orderBtns + '<div class="flex-1 min-w-0"><a href="' + link + '" class="text-primary hover:underline font-mono text-sm">' + labelEscaped + '</a>' + notes + '</div><div class="flex items-center gap-2 text-sm">' + groupSelect + priceHtml + '</div></div>';
+        }
+
+        if (groupBy === 'asset_type') {
+            const symbols = entries.filter(function(e) { return (e.type || '').toLowerCase() === 'symbol'; });
+            const addresses = entries.filter(function(e) { return (e.type || '').toLowerCase() === 'address'; });
+            let html = '';
+            if (symbols.length) {
+                html += '<p class="text-text-secondary text-xs font-medium mt-3 mb-1">Symbols</p>';
+                symbols.forEach(function(e, idx) {
+                    const i = entries.indexOf(e);
+                    html += rowHtml(e, i, false);
+                });
+            }
+            if (addresses.length) {
+                html += '<p class="text-text-secondary text-xs font-medium mt-3 mb-1">Addresses</p>';
+                addresses.forEach(function(e, idx) {
+                    const i = entries.indexOf(e);
+                    html += rowHtml(e, i, false);
+                });
+            }
+            entriesEl.innerHTML = html || '<p class="text-text-secondary text-sm">No entries.</p>';
+        } else if (groupBy === 'group') {
+            const byGroup = {};
+            entries.forEach(function(e, i) {
+                const g = (e.group || '').trim() || '(Ungrouped)';
+                if (!byGroup[g]) byGroup[g] = [];
+                byGroup[g].push({ e: e, i: i });
+            });
+            const order = ['(Ungrouped)'];
+            Object.keys(byGroup).forEach(function(g) { if (g !== '(Ungrouped)' && order.indexOf(g) === -1) order.push(g); });
+            let html = '';
+            order.forEach(function(g) {
+                const list = byGroup[g];
+                if (!list) return;
+                html += '<p class="text-text-secondary text-xs font-medium mt-3 mb-1">' + g.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
+                list.forEach(function(_) { html += rowHtml(_.e, _.i, false); });
+            });
+            entriesEl.innerHTML = html || '<p class="text-text-secondary text-sm">No entries.</p>';
+        } else {
+            let html = entries.map(function(e, i) { return rowHtml(e, i, true); }).join('');
+            entriesEl.innerHTML = html;
+        }
+
+        entriesEl.querySelectorAll('.watchlist-up').forEach(function(btn) {
+            btn.addEventListener('click', function() { moveEntry(parseInt(btn.getAttribute('data-index'), 10), -1); });
+        });
+        entriesEl.querySelectorAll('.watchlist-down').forEach(function(btn) {
+            btn.addEventListener('click', function() { moveEntry(parseInt(btn.getAttribute('data-index'), 10), 1); });
+        });
+        entriesEl.querySelectorAll('.watchlist-group-select').forEach(function(sel) {
+            sel.addEventListener('change', function() { setEntryGroup(parseInt(sel.getAttribute('data-index'), 10), sel.value); });
+        });
     }
 
     // Sync currency selector from user profile (preferred_currency)
@@ -406,12 +629,28 @@
         }
     }
 
+    function applyProfileToPage(user) {
+        if (!user) return;
+        if (user.theme === 'system' || user.theme === 'light' || user.theme === 'dark') {
+            const scheme = user.theme === 'system'
+                ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : user.theme;
+            document.documentElement.setAttribute('data-color-scheme', scheme);
+        } else {
+            document.documentElement.removeAttribute('data-color-scheme');
+        }
+        if (user.language && (user.language === 'en' || user.language === 'es')) {
+            document.documentElement.lang = user.language;
+        }
+    }
+
     // Check authentication
     async function checkAuth() {
         try {
             const res = await fetch('/api/user/profile', { credentials: 'include' });
             if (res.ok) {
                 const user = await res.json();
+                applyProfileToPage(user);
                 document.getElementById('username-display').textContent = user.username;
                 document.getElementById('user-info').classList.remove('hidden');
                 document.getElementById('auth-buttons').classList.add('hidden');
@@ -870,6 +1109,8 @@
         currentCurrency = e.target.value;
         await loadPortfolios();
         updateDashboard();
+        const ws = document.getElementById('watchlist-selector');
+        if (ws && ws.value) loadWatchlistEntries(ws.value);
     });
 
     document.getElementById('portfolio-selector').addEventListener('change', (e) => {

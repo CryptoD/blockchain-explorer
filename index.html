@@ -22,6 +22,7 @@
                 <a href="/addresses" class="hover:text-primary">Addresses</a>
                 <a href="/portfolios" id="portfolios-nav" class="hover:text-primary hidden">Portfolios</a>
                 <a href="/dashboard" id="dashboard-nav" class="hover:text-primary hidden">Dashboard</a>
+                <a href="/profile" id="profile-nav" class="hover:text-primary hidden">Profile</a>
                 <a href="/admin" class="hover:text-primary">Admin</a>
             </nav>
 
@@ -80,6 +81,7 @@
                     <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Addresses</a>
                     <a href="/portfolios" id="portfolios-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Portfolios</a>
                     <a href="/dashboard" id="dashboard-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Dashboard</a>
+                    <a href="/profile" id="profile-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Profile</a>
                     <a href="/admin" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Admin</a>
                 </nav>
 
@@ -499,11 +501,27 @@
         location.reload();
     });
 
+    function applyProfileToPage(user) {
+        if (!user) return;
+        if (user.theme === 'system' || user.theme === 'light' || user.theme === 'dark') {
+            const scheme = user.theme === 'system'
+                ? (window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light')
+                : user.theme;
+            document.documentElement.setAttribute('data-color-scheme', scheme);
+        } else {
+            document.documentElement.removeAttribute('data-color-scheme');
+        }
+        if (user.language && (user.language === 'en' || user.language === 'es')) {
+            document.documentElement.lang = user.language;
+        }
+    }
+
     async function checkAuth() {
         try {
-            const res = await fetch('/api/v1/user/profile');
+            const res = await fetch('/api/v1/user/profile', { credentials: 'include' });
             if (res.ok) {
                 const user = await res.json();
+                applyProfileToPage(user);
                 usernameDisplay.textContent = user.username;
                 userInfo.classList.remove('hidden');
                 authButtons.classList.add('hidden');
@@ -515,6 +533,10 @@
                 const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
                 if (dashboardNav) dashboardNav.classList.remove('hidden');
                 if (dashboardNavMobile) dashboardNavMobile.classList.remove('hidden');
+                const profileNav = document.getElementById('profile-nav');
+                const profileNavMobile = document.getElementById('profile-nav-mobile');
+                if (profileNav) profileNav.classList.remove('hidden');
+                if (profileNavMobile) profileNavMobile.classList.remove('hidden');
             } else {
                 userInfo.classList.add('hidden');
                 authButtons.classList.remove('hidden');
@@ -526,6 +548,10 @@
                 const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
                 if (dashboardNav) dashboardNav.classList.add('hidden');
                 if (dashboardNavMobile) dashboardNavMobile.classList.add('hidden');
+                const profileNav = document.getElementById('profile-nav');
+                const profileNavMobile = document.getElementById('profile-nav-mobile');
+                if (profileNav) profileNav.classList.add('hidden');
+                if (profileNavMobile) profileNavMobile.classList.add('hidden');
             }
         } catch (err) {
             userInfo.classList.add('hidden');

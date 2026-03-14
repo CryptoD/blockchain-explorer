@@ -1,0 +1,335 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Profile &amp; Settings - Blockchain Explorer</title>
+    <link rel="stylesheet" href="/dist/styles.css" />
+</head>
+<body class="min-h-screen bg-bg text-text">
+    <header class="w-full bg-bg-secondary shadow">
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
+            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
+                <span class="font-semibold text-lg">Blockchain Explorer</span>
+            </a>
+
+            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" aria-label="Main navigation">
+                <a href="/" class="hover:text-primary">Home</a>
+                <a href="/blocks" class="hover:text-primary">Blocks</a>
+                <a href="/transactions" class="hover:text-primary">Transactions</a>
+                <a href="/addresses" class="hover:text-primary">Addresses</a>
+                <a href="/portfolios" class="hover:text-primary">Portfolios</a>
+                <a href="/dashboard" class="hover:text-primary">Dashboard</a>
+                <a href="/profile" class="hover:text-primary font-semibold text-primary" aria-current="page">Profile</a>
+                <a href="/admin" class="hover:text-primary">Admin</a>
+            </nav>
+
+            <div class="hidden md:block flex-1 max-w-lg">
+                <div class="flex shadow-sm rounded-lg overflow-hidden bg-bg-secondary">
+                    <label for="search-input" class="sr-only">Search blockchain</label>
+                    <input id="search-input" type="search" placeholder="Search..." class="flex-1 p-3 border-none text-base text-text focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off" />
+                    <button id="search-icon" class="bg-primary text-white px-4" type="button" aria-label="Search">Search</button>
+                </div>
+            </div>
+
+            <div class="flex items-center gap-2">
+                <label for="theme-select" class="sr-only">Color theme</label>
+                <select id="theme-select" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary">
+                    <option value="blue">Blue</option>
+                    <option value="green">Green</option>
+                    <option value="purple">Purple</option>
+                    <option value="orange">Orange</option>
+                </select>
+            </div>
+
+            <div id="auth-section" class="flex items-center gap-4">
+                <div id="user-info" class="text-sm text-text-secondary">
+                    <span id="username-display"></span>
+                    <a href="/profile" class="ml-2 text-primary hover:underline">Profile</a>
+                    <button id="logout-btn" class="ml-2 text-red-600 hover:text-red-800">Logout</button>
+                </div>
+                <div id="auth-buttons" class="hidden flex items-center gap-2">
+                    <a href="/?login=true" class="text-sm text-primary hover:text-primary-dark">Login</a>
+                    <a href="/?register=true" class="text-sm bg-primary text-white px-3 py-1 rounded hover:bg-primary-dark">Register</a>
+                </div>
+            </div>
+
+            <div class="md:hidden">
+                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            </div>
+        </div>
+
+        <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu">
+            <div class="px-4 pt-4 pb-6 space-y-4">
+                <nav class="flex flex-col gap-2">
+                    <a href="/" class="px-3 py-2 rounded hover:bg-hover">Home</a>
+                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-hover">Blocks</a>
+                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-hover">Transactions</a>
+                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover">Addresses</a>
+                    <a href="/portfolios" class="px-3 py-2 rounded hover:bg-hover">Portfolios</a>
+                    <a href="/dashboard" class="px-3 py-2 rounded hover:bg-hover">Dashboard</a>
+                    <a href="/profile" class="px-3 py-2 rounded hover:bg-hover font-semibold text-primary">Profile</a>
+                    <a href="/admin" class="px-3 py-2 rounded hover:bg-hover">Admin</a>
+                </nav>
+            </div>
+        </div>
+    </header>
+
+    <main class="flex-1 px-4 py-8">
+        <div class="max-w-2xl mx-auto">
+            <h1 class="text-3xl font-bold mb-2">Profile &amp; Settings</h1>
+            <p class="text-text-secondary mb-8">Manage your preferences. Changes are saved to your account and apply across devices.</p>
+
+            <div id="profile-guest" class="hidden bg-bg-secondary border border-border rounded-lg p-6 text-center">
+                <p class="text-text-secondary mb-4">Sign in to view and edit your profile.</p>
+                <a href="/?login=true" class="inline-block bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark">Login</a>
+            </div>
+
+            <form id="profile-form" class="space-y-8 hidden">
+                <section class="bg-bg-secondary border border-border rounded-lg p-6" aria-labelledby="heading-appearance">
+                    <h2 id="heading-appearance" class="text-xl font-semibold mb-4">Appearance</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="profile-theme" class="block text-sm font-medium text-text mb-1">Theme (light / dark)</label>
+                            <select id="profile-theme" name="theme" class="w-full max-w-xs p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">System default</option>
+                                <option value="light">Light</option>
+                                <option value="dark">Dark</option>
+                                <option value="system">Follow system</option>
+                            </select>
+                            <p class="text-text-secondary text-sm mt-1">Applied immediately and saved to your account.</p>
+                        </div>
+                        <div>
+                            <label for="profile-language" class="block text-sm font-medium text-text mb-1">Language</label>
+                            <select id="profile-language" name="language" class="w-full max-w-xs p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Default</option>
+                                <option value="en">English</option>
+                                <option value="es">Español</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-bg-secondary border border-border rounded-lg p-6" aria-labelledby="heading-general">
+                    <h2 id="heading-general" class="text-xl font-semibold mb-4">General</h2>
+                    <div class="space-y-4">
+                        <div>
+                            <label for="profile-currency" class="block text-sm font-medium text-text mb-1">Preferred currency</label>
+                            <select id="profile-currency" name="preferred_currency" class="w-full max-w-xs p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">None</option>
+                                <option value="usd">USD</option>
+                                <option value="eur">EUR</option>
+                                <option value="gbp">GBP</option>
+                                <option value="jpy">JPY</option>
+                                <option value="cad">CAD</option>
+                                <option value="aud">AUD</option>
+                                <option value="chf">CHF</option>
+                            </select>
+                        </div>
+                        <div>
+                            <label for="profile-landing" class="block text-sm font-medium text-text mb-1">Default landing page</label>
+                            <select id="profile-landing" name="default_landing_page" class="w-full max-w-xs p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary">
+                                <option value="">Home (Explorer)</option>
+                                <option value="explorer">Explorer</option>
+                                <option value="dashboard">Dashboard</option>
+                                <option value="portfolios">Portfolios</option>
+                            </select>
+                        </div>
+                    </div>
+                </section>
+
+                <section class="bg-bg-secondary border border-border rounded-lg p-6" aria-labelledby="heading-notifications">
+                    <h2 id="heading-notifications" class="text-xl font-semibold mb-4">Notifications</h2>
+                    <div class="space-y-3">
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="profile-notify-email" name="notifications_email" class="rounded border-border text-primary focus:ring-primary" />
+                            <span class="text-sm">Email notifications</span>
+                        </label>
+                        <label class="flex items-center gap-3 cursor-pointer">
+                            <input type="checkbox" id="profile-notify-alerts" name="notifications_price_alerts" class="rounded border-border text-primary focus:ring-primary" />
+                            <span class="text-sm">Price alert notifications</span>
+                        </label>
+                    </div>
+                </section>
+
+                <div class="flex flex-wrap items-center gap-4">
+                    <button type="submit" id="profile-save-btn" class="bg-primary text-white px-6 py-2 rounded hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
+                        Save changes
+                    </button>
+                    <span id="profile-message" class="text-sm text-green-600 hidden">Settings saved.</span>
+                    <span id="profile-error" class="text-sm text-red-600 hidden" role="alert"></span>
+                </div>
+            </form>
+        </div>
+    </main>
+
+    <script>
+    const API_BASE = '/api/v1';
+    function getCSRFToken() {
+        try { return localStorage.getItem('csrfToken'); } catch (e) { return null; }
+    }
+    async function authFetch(url, options = {}) {
+        const opts = { ...options };
+        opts.credentials = opts.credentials || 'include';
+        opts.headers = opts.headers ? { ...opts.headers } : {};
+        if (getCSRFToken()) opts.headers['X-CSRF-Token'] = getCSRFToken();
+        return fetch(url, opts);
+    }
+
+    function getSavedAccentTheme() {
+        return localStorage.getItem('blockchain-explorer-theme') || 'blue';
+    }
+    function setAccentTheme(theme) {
+        document.documentElement.setAttribute('data-theme', theme);
+        localStorage.setItem('blockchain-explorer-theme', theme);
+    }
+
+    function applyColorScheme(scheme) {
+        if (scheme === 'system') {
+            const dark = window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches;
+            document.documentElement.setAttribute('data-color-scheme', dark ? 'dark' : 'light');
+        } else if (scheme === 'light' || scheme === 'dark') {
+            document.documentElement.setAttribute('data-color-scheme', scheme);
+        } else {
+            document.documentElement.removeAttribute('data-color-scheme');
+        }
+    }
+    function installSystemThemeListener() {
+        if (!window.matchMedia) return;
+        window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function() {
+            if (document.getElementById('profile-theme').value === 'system') {
+                applyColorScheme('system');
+            }
+        });
+    }
+
+    function applyLanguage(lang) {
+        if (lang && (lang === 'en' || lang === 'es')) {
+            document.documentElement.lang = lang;
+        }
+    }
+
+    function populateForm(user) {
+        const themeSel = document.getElementById('profile-theme');
+        const langSel = document.getElementById('profile-language');
+        const currencySel = document.getElementById('profile-currency');
+        const landingSel = document.getElementById('profile-landing');
+        const emailCb = document.getElementById('profile-notify-email');
+        const alertsCb = document.getElementById('profile-notify-alerts');
+        if (themeSel && user.theme) themeSel.value = user.theme;
+        if (langSel && user.language) langSel.value = user.language;
+        if (currencySel && user.preferred_currency) currencySel.value = user.preferred_currency;
+        if (landingSel && user.default_landing_page) landingSel.value = user.default_landing_page;
+        if (emailCb) emailCb.checked = !!user.notifications_email;
+        if (alertsCb) alertsCb.checked = !!user.notifications_price_alerts;
+    }
+
+    document.getElementById('profile-form').addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const msg = document.getElementById('profile-message');
+        const err = document.getElementById('profile-error');
+        msg.classList.add('hidden');
+        err.classList.add('hidden');
+        const theme = document.getElementById('profile-theme').value || null;
+        const language = document.getElementById('profile-language').value || null;
+        const preferred_currency = document.getElementById('profile-currency').value || null;
+        const default_landing_page = document.getElementById('profile-landing').value || null;
+        const notifications_email = document.getElementById('profile-notify-email').checked;
+        const notifications_price_alerts = document.getElementById('profile-notify-alerts').checked;
+        const body = {};
+        if (theme !== null) body.theme = theme;
+        if (language !== null) body.language = language;
+        if (preferred_currency !== null) body.preferred_currency = preferred_currency;
+        if (default_landing_page !== null) body.default_landing_page = default_landing_page;
+        body.notifications_email = notifications_email;
+        body.notifications_price_alerts = notifications_price_alerts;
+
+        try {
+            const res = await authFetch(API_BASE + '/user/profile', {
+                method: 'PATCH',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body)
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                err.textContent = data.error || data.code || 'Failed to save';
+                err.classList.remove('hidden');
+                return;
+            }
+            applyColorScheme(theme || '');
+            applyLanguage(language || '');
+            msg.classList.remove('hidden');
+            setTimeout(() => msg.classList.add('hidden'), 3000);
+        } catch (e) {
+            err.textContent = 'Network error. Try again.';
+            err.classList.remove('hidden');
+        }
+    });
+
+    document.getElementById('profile-theme').addEventListener('change', function() {
+        applyColorScheme(this.value || '');
+    });
+    document.getElementById('profile-language').addEventListener('change', function() {
+        applyLanguage(this.value || '');
+    });
+
+    const themeSelect = document.getElementById('theme-select');
+    if (themeSelect) {
+        themeSelect.value = getSavedAccentTheme();
+        themeSelect.addEventListener('change', function() {
+            setAccentTheme(this.value);
+        });
+    }
+
+    const mobileBtn = document.getElementById('mobile-menu-button');
+    const mobileMenu = document.getElementById('mobile-menu');
+    if (mobileBtn && mobileMenu) {
+        mobileBtn.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
+    }
+
+    document.getElementById('search-icon').addEventListener('click', function() {
+        const q = document.getElementById('search-input').value.trim();
+        if (q) window.location.href = '/bitcoin?q=' + encodeURIComponent(q);
+    });
+    document.getElementById('search-input').addEventListener('keydown', function(e) {
+        if (e.key === 'Enter') document.getElementById('search-icon').click();
+    });
+
+    async function init() {
+        const accent = getSavedAccentTheme();
+        setAccentTheme(accent);
+        try {
+            const res = await authFetch(API_BASE + '/user/profile');
+            if (res.ok) {
+                const user = await res.json();
+                document.getElementById('username-display').textContent = user.username;
+                document.getElementById('user-info').classList.remove('hidden');
+                document.getElementById('auth-buttons').classList.add('hidden');
+                document.getElementById('profile-form').classList.remove('hidden');
+                document.getElementById('profile-guest').classList.add('hidden');
+                populateForm(user);
+                applyColorScheme(user.theme || '');
+                applyLanguage(user.language || '');
+                installSystemThemeListener();
+            } else {
+                document.getElementById('auth-buttons').classList.remove('hidden');
+                document.getElementById('user-info').classList.add('hidden');
+                document.getElementById('profile-form').classList.add('hidden');
+                document.getElementById('profile-guest').classList.remove('hidden');
+            }
+        } catch (e) {
+            document.getElementById('auth-buttons').classList.remove('hidden');
+            document.getElementById('user-info').classList.add('hidden');
+            document.getElementById('profile-form').classList.add('hidden');
+            document.getElementById('profile-guest').classList.remove('hidden');
+        }
+    }
+    document.getElementById('logout-btn').addEventListener('click', async () => {
+        await authFetch(API_BASE + '/logout', { method: 'POST' });
+        window.location.href = '/';
+    });
+    init();
+    </script>
+</body>
+</html>
