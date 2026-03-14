@@ -86,3 +86,9 @@ build/
 # Uncomment the next line if you prefer to keep them local-only.
 # API_TEST_RESULTS.md
 
+# Local temp / generated (do not track)
+.tmp/
+
+# Extra binary build (primary is blockchain-explorer if tracked)
+bitcoin-explorer
+

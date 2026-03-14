@@ -1,0 +1,282 @@
+/* Theme and Tailwind entrypoint (SCSS)
+   - Define SCSS variables and emit CSS custom properties
+   - Include Tailwind base/components/utilities via @tailwind directives
+   - Add a few custom utility classes using @apply
+*/
+
+// SCSS variables
+$primary: #0d47a1;
+$accent: #f59e0b;
+$bg: #f8fafc;
+$text: #0f172a;
+
+// Default theme (blue)
+:root {
+  --color-primary: #{$primary};
+  --color-accent: #{$accent};
+  --color-bg: #{$bg};
+  --color-text: #{$text};
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #e2e8f0;
+  --color-hover: #f1f5f9;
+}
+
+// Blue theme
+[data-theme="blue"] {
+  --color-primary: #0d47a1;
+  --color-accent: #f59e0b;
+  --color-bg: #f8fafc;
+  --color-text: #0f172a;
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #e2e8f0;
+  --color-hover: #f1f5f9;
+}
+
+// Green theme
+[data-theme="green"] {
+  --color-primary: #059669;
+  --color-accent: #f59e0b;
+  --color-bg: #f0fdf4;
+  --color-text: #14532d;
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #bbf7d0;
+  --color-hover: #dcfce7;
+  --color-card-muted: #f8fafc;
+}
+
+// Purple theme
+[data-theme="purple"] {
+  --color-primary: #7c3aed;
+  --color-accent: #f59e0b;
+  --color-bg: #faf5ff;
+  --color-text: #581c87;
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #d8b4fe;
+  --color-hover: #f3e8ff;
+}
+
+// Orange theme
+[data-theme="orange"] {
+  --color-primary: #ea580c;
+  --color-accent: #f59e0b;
+  --color-bg: #fff7ed;
+  --color-text: #9a3412;
+  --color-bg-secondary: #ffffff;
+  --color-text-secondary: #64748b;
+  --color-border: #fed7aa;
+  --color-hover: #ffedd5;
+}
+
+// Dark mode overrides (applied on top of themes)
+@media (prefers-color-scheme: dark) {
+  :root {
+    --color-bg: #0f172a;
+    --color-text: #f1f5f9;
+    --color-bg-secondary: #1e293b;
+    --color-text-secondary: #cbd5e1;
+    --color-border: #334155;
+    --color-hover: #334155;
+  }
+
+  [data-theme="blue"] {
+    --color-bg: #0f172a;
+    --color-text: #f1f5f9;
+    --color-bg-secondary: #1e293b;
+    --color-text-secondary: #cbd5e1;
+    --color-border: #334155;
+    --color-hover: #334155;
+  }
+
+  [data-theme="green"] {
+    --color-bg: #14532d;
+    --color-text: #f0fdf4;
+    --color-bg-secondary: #166534;
+    --color-text-secondary: #bbf7d0;
+    --color-border: #166534;
+    --color-hover: #15803d;
+  }
+
+  [data-theme="purple"] {
+    --color-bg: #581c87;
+    --color-text: #faf5ff;
+    --color-bg-secondary: #6b21a8;
+    --color-text-secondary: #d8b4fe;
+    --color-border: #6b21a8;
+    --color-hover: #7c3aed;
+  }
+
+  [data-theme="orange"] {
+    --color-bg: #9a3412;
+    --color-text: #fff7ed;
+    --color-bg-secondary: #c2410c;
+    --color-text-secondary: #fed7aa;
+    --color-border: #c2410c;
+    --color-hover: #ea580c;
+  }
+}
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* Accessibility and Performance */
+@media (prefers-reduced-motion: reduce) {
+  .blockchain-info,
+  .balance-info,
+  .transaction-item,
+  .result-section {
+    transition: none;
+    animation: none;
+  }
+
+  .animate-fade-in,
+  .animate-fade-out {
+    animation: none;
+  }
+
+  /* Mobile menu animation and focus helpers */
+  .mobile-menu {
+    @apply bg-bg-secondary border-t border-border animate-fade-in;
+  }
+}
+
+/* Small custom components / utilities */
+.btn-primary {
+  @apply bg-primary text-white font-semibold py-2 px-4 rounded-md;
+}
+
+.card-muted {
+  @apply bg-white shadow-sm rounded-lg p-4;
+}
+
+.loading-dot {
+  @apply text-gray-600 font-bold;
+}
+
+/* Result styling: addresses, transactions, blocks */
+.result-container {
+  @apply space-y-6;
+}
+
+.result-section {
+  @apply card-muted;
+}
+
+/* Address results */
+.address-card {
+  @apply card-muted flex flex-col md:flex-row items-start md:items-center gap-4;
+}
+
+.address-balance {
+  @apply text-3xl font-bold text-primary;
+}
+
+.address-meta {
+  @apply text-sm text-gray-500;
+}
+
+/* Transaction results */
+.tx-table {
+  @apply w-full table-auto border-collapse;
+  th {
+    @apply text-left text-sm font-medium text-gray-600 border-b pb-2;
+  }
+  td {
+    @apply py-3 text-sm text-gray-700 border-b align-top;
+  }
+}
+
+.tx-inputs,
+.tx-outputs {
+  @apply space-y-2;
+}
+
+.tx-row {
+  @apply flex items-center justify-between gap-4;
+}
+
+/* Block results */
+.block-card {
+  @apply card-muted;
+}
+
+.block-meta {
+  @apply text-sm text-gray-500;
+}
+
+/* Utilities */
+.hash-link {
+  @apply text-primary font-mono truncate;
+  display: inline-block;
+  max-width: 16rem;
+}
+
+.chip {
+  @apply inline-flex items-center px-3 py-1 rounded-full text-xs font-medium bg-gray-100 text-gray-700;
+}
+
+.confirmations-low {
+  @apply text-yellow-600 font-semibold;
+}
+
+.confirmations-ok {
+  @apply text-green-600 font-semibold;
+}
+
+.empty-state {
+  @apply text-center text-gray-500 py-6;
+}
+
+.monospace {
+  font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, "Roboto Mono", monospace;
+}
+
+.result-actions {
+  @apply flex gap-2 items-center;
+}
+
+/* Mobile menu animation and focus helpers */
+.mobile-menu {
+  @apply bg-white border-t border-gray-100 animate-fade-in;
+}
+
+@keyframes fade-in {
+  from { opacity: 0; transform: translateY(-6px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.animate-fade-in {
+  animation: fade-in 180ms ease-out;
+}
+
+@keyframes fade-out {
+  from { opacity: 1; transform: translateY(0); }
+  to   { opacity: 0; transform: translateY(6px); }
+}
+
+.animate-fade-out {
+  animation: fade-out 180ms ease-in;
+}
+
+/* Result section animations */
+.result-section {
+  transition: opacity 0.2s ease-in-out, transform 0.2s ease-in-out;
+}
+
+.result-section.fade-in {
+  opacity: 1;
+  transform: translateY(0);
+}
+
+.result-section.fade-out {
+  opacity: 0;
+  transform: translateY(6px);
+}
+
+.focus-ring {
+  @apply focus:outline-none focus:ring-2 focus:ring-primary;
+}
