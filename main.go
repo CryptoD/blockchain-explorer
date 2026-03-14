@@ -6,6 +6,7 @@ import (
 	"crypto/sha256"
 	"crypto/subtle"
 	"encoding/base64"
+	"encoding/csv"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -745,6 +746,8 @@ func main() {
 		apiV1.GET("/search/advanced", advancedSearchHandler)
 		apiV1.GET("/search/advanced/export", exportAdvancedSearchHandler)
 		apiV1.GET("/search/categories", getSymbolCategoriesHandler)
+		apiV1.GET("/blocks/export/csv", exportBlocksCSVHandler)
+		apiV1.GET("/transactions/export/csv", exportTransactionsCSVHandler)
 		apiV1.GET("/autocomplete", autocompleteHandler)
 		apiV1.GET("/metrics", metricsHandler)
 		apiV1.GET("/network-status", networkStatusHandler)
@@ -764,6 +767,7 @@ func main() {
 			userV1.GET("/profile", userProfileHandler)
 			userV1.GET("/portfolios", listPortfoliosHandler)
 			userV1.GET("/portfolios/export", exportPortfoliosHandler)
+			userV1.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
 			userV1.POST("/portfolios", createPortfolioHandler)
 			userV1.PUT("/portfolios/:id", updatePortfolioHandler)
 			userV1.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -787,6 +791,8 @@ func main() {
 	r.GET("/api/search/advanced", advancedSearchHandler)
 	r.GET("/api/search/advanced/export", exportAdvancedSearchHandler)
 	r.GET("/api/search/categories", getSymbolCategoriesHandler)
+	r.GET("/api/blocks/export/csv", exportBlocksCSVHandler)
+	r.GET("/api/transactions/export/csv", exportTransactionsCSVHandler)
 
 	r.GET("/api/autocomplete", autocompleteHandler)
 	r.GET("/api/metrics", metricsHandler)
@@ -808,6 +814,7 @@ func main() {
 		user.GET("/profile", userProfileHandler)
 		user.GET("/portfolios", listPortfoliosHandler)
 		user.GET("/portfolios/export", exportPortfoliosHandler)
+		user.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
 		user.POST("/portfolios", createPortfolioHandler)
 		user.PUT("/portfolios/:id", updatePortfolioHandler)
 		user.DELETE("/portfolios/:id", deletePortfolioHandler)
@@ -1484,7 +1491,305 @@ func deletePortfolioHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Portfolio deleted successfully"})
 }
 
+// exportPortfolioCSVHandler streams a single portfolio's holdings as CSV.
+// Requires authentication. Sets Content-Type and Content-Disposition for browser download.
+func exportPortfolioCSVHandler(c *gin.Context) {
+	username, _ := c.Get("username")
+	portfolioID := c.Param("id")
+	key := "portfolio:" + username.(string) + ":" + portfolioID
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
+		return
+	}
+	var p Portfolio
+	if err := json.Unmarshal([]byte(data), &p); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to load portfolio")
+		return
+	}
+
+	// Safe filename: alphanumeric, dash, underscore only
+	var b strings.Builder
+	for _, r := range p.Name {
+		if (r >= 'a' && r <= 'z') || (r >= 'A' && r <= 'Z') || (r >= '0' && r <= '9') || r == '-' || r == '_' || r == ' ' {
+			if r == ' ' {
+				b.WriteRune('_')
+			} else {
+				b.WriteRune(r)
+			}
+		}
+	}
+	safeName := b.String()
+	if safeName == "" {
+		safeName = "portfolio"
+	}
+	filename := fmt.Sprintf("portfolio-%s-%s.csv", portfolioID, safeName)
+	if len(filename) > 200 {
+		filename = "portfolio-" + portfolioID + ".csv"
+	}
+
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"symbol", "type", "address", "amount", "value", "portfolio_created", "portfolio_updated"})
+	createdStr := p.Created.UTC().Format(time.RFC3339)
+	updatedStr := p.Updated.UTC().Format(time.RFC3339)
+	for _, item := range p.Items {
+		amountStr := strconv.FormatFloat(item.Amount, 'f', -1, 64)
+		_ = w.Write([]string{
+			item.Label,
+			item.Type,
+			item.Address,
+			amountStr,
+			amountStr, // value (quantity; replace with amount*price if pricing available)
+			createdStr,
+			updatedStr,
+		})
+	}
+	w.Flush()
+	if err := w.Error(); err != nil {
+		log.WithError(err).Error("CSV export write failed")
+	}
+}
+
 const exportVersion = "1.0"
+
+// CSV export limits to prevent abuse and control memory/RPC load.
+const (
+	maxBlockRangeExport   = 500   // max blocks in one blocks CSV export (end_height - start_height + 1)
+	maxBlockRowsExport   = 2000  // max rows for blocks CSV
+	maxTxBlockRangeExport = 100   // max block range when exporting transactions (each block may have many txs)
+	maxTxRowsExport      = 5000  // max transaction rows per CSV export
+	defaultBlockRows     = 500
+	defaultTxRows        = 1000
+)
+
+// exportBlocksCSVHandler streams blocks in a height range as CSV. Memory-efficient: one block at a time.
+// Query params: start_height, end_height (required), limit (optional, default 500, max 2000).
+// Range is capped at maxBlockRangeExport blocks.
+func exportBlocksCSVHandler(c *gin.Context) {
+	startStr := c.Query("start_height")
+	endStr := c.Query("end_height")
+	if startStr == "" || endStr == "" {
+		errorResponse(c, http.StatusBadRequest, "missing_range", "start_height and end_height are required")
+		return
+	}
+	start, err1 := strconv.Atoi(startStr)
+	end, err2 := strconv.Atoi(endStr)
+	if err1 != nil || err2 != nil || start < 0 || end < 0 {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", "start_height and end_height must be non-negative integers")
+		return
+	}
+	if start > end {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", "start_height must be <= end_height")
+		return
+	}
+	rangeSize := end - start + 1
+	if rangeSize > maxBlockRangeExport {
+		errorResponse(c, http.StatusBadRequest, "range_too_large", fmt.Sprintf("block range may not exceed %d blocks", maxBlockRangeExport))
+		return
+	}
+	limit := defaultBlockRows
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			if n > maxBlockRowsExport {
+				n = maxBlockRowsExport
+			}
+			limit = n
+		}
+	}
+
+	status, err := getNetworkStatus()
+	if err != nil {
+		errorResponse(c, http.StatusServiceUnavailable, "service_unavailable", "could not get chain height")
+		return
+	}
+	bestF, _ := status["block_height"].(float64)
+	best := int(bestF)
+	if end > best {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", fmt.Sprintf("end_height cannot exceed current chain height %d", best))
+		return
+	}
+
+	filename := fmt.Sprintf("blocks-%d-%d.csv", start, end)
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"height", "hash", "time", "time_iso", "tx_count", "size", "weight", "difficulty", "confirmations"})
+	written := 0
+	for h := start; h <= end && written < limit; h++ {
+		block, err := getBlockDetails(fmt.Sprintf("%d", h))
+		if err != nil {
+			continue
+		}
+		height := int(float64OrZero(block["height"]))
+		if height == 0 {
+			height = h
+		}
+		hash := stringOrEmpty(block["hash"])
+		timeVal := float64OrZero(block["time"])
+		tm := time.Unix(int64(timeVal), 0).UTC()
+		txCount := 0
+		if txs, ok := block["tx"].([]interface{}); ok {
+			txCount = len(txs)
+		}
+		size := float64OrZero(block["size"])
+		weight := float64OrZero(block["weight"])
+		difficulty := float64OrZero(block["difficulty"])
+		confs := best - height + 1
+		if confs < 0 {
+			confs = 0
+		}
+		_ = w.Write([]string{
+			fmt.Sprintf("%d", height),
+			hash,
+			fmt.Sprintf("%.0f", timeVal),
+			tm.Format(time.RFC3339),
+			fmt.Sprintf("%d", txCount),
+			fmt.Sprintf("%.0f", size),
+			fmt.Sprintf("%.0f", weight),
+			fmt.Sprintf("%.0f", difficulty),
+			fmt.Sprintf("%d", confs),
+		})
+		written++
+	}
+	w.Flush()
+	if w.Error() != nil {
+		log.WithError(w.Error()).Error("blocks CSV export write failed")
+	}
+}
+
+// exportTransactionsCSVHandler streams transactions from blocks in a height range as CSV.
+// One block at a time, then one tx at a time per block. Query params: start_height, end_height (required), limit (optional, default 1000, max 5000).
+func exportTransactionsCSVHandler(c *gin.Context) {
+	startStr := c.Query("start_height")
+	endStr := c.Query("end_height")
+	if startStr == "" || endStr == "" {
+		errorResponse(c, http.StatusBadRequest, "missing_range", "start_height and end_height are required")
+		return
+	}
+	start, err1 := strconv.Atoi(startStr)
+	end, err2 := strconv.Atoi(endStr)
+	if err1 != nil || err2 != nil || start < 0 || end < 0 {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", "start_height and end_height must be non-negative integers")
+		return
+	}
+	if start > end {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", "start_height must be <= end_height")
+		return
+	}
+	rangeSize := end - start + 1
+	if rangeSize > maxTxBlockRangeExport {
+		errorResponse(c, http.StatusBadRequest, "range_too_large", fmt.Sprintf("block range for transaction export may not exceed %d blocks", maxTxBlockRangeExport))
+		return
+	}
+	limit := defaultTxRows
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			if n > maxTxRowsExport {
+				n = maxTxRowsExport
+			}
+			limit = n
+		}
+	}
+
+	status, err := getNetworkStatus()
+	if err != nil {
+		errorResponse(c, http.StatusServiceUnavailable, "service_unavailable", "could not get chain height")
+		return
+	}
+	bestF, _ := status["block_height"].(float64)
+	best := int(bestF)
+	if end > best {
+		errorResponse(c, http.StatusBadRequest, "invalid_range", fmt.Sprintf("end_height cannot exceed current chain height %d", best))
+		return
+	}
+
+	filename := fmt.Sprintf("transactions-%d-%d.csv", start, end)
+	c.Header("Content-Type", "text/csv; charset=utf-8")
+	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
+
+	w := csv.NewWriter(c.Writer)
+	_ = w.Write([]string{"txid", "block_height", "block_hash", "block_time", "block_time_iso", "size", "vsize", "weight", "fee", "locktime", "version"})
+	written := 0
+	for h := start; h <= end && written < limit; h++ {
+		block, err := getBlockDetails(fmt.Sprintf("%d", h))
+		if err != nil {
+			continue
+		}
+		blockHash := stringOrEmpty(block["hash"])
+		blockTime := float64OrZero(block["time"])
+		blockTimeISO := time.Unix(int64(blockTime), 0).UTC().Format(time.RFC3339)
+		txList, ok := block["tx"].([]interface{})
+		if !ok {
+			continue
+		}
+		for _, txi := range txList {
+			if written >= limit {
+				break
+			}
+			txid, _ := txi.(string)
+			if txid == "" {
+				continue
+			}
+			tx, err := getTransactionDetails(txid)
+			if err != nil {
+				continue
+			}
+			size := float64OrZero(tx["size"])
+			vsize := float64OrZero(tx["vsize"])
+			weight := float64OrZero(tx["weight"])
+			fee := float64OrZero(tx["fee"])
+			locktime := float64OrZero(tx["locktime"])
+			version := float64OrZero(tx["version"])
+			_ = w.Write([]string{
+				txid,
+				fmt.Sprintf("%d", h),
+				blockHash,
+				fmt.Sprintf("%.0f", blockTime),
+				blockTimeISO,
+				fmt.Sprintf("%.0f", size),
+				fmt.Sprintf("%.0f", vsize),
+				fmt.Sprintf("%.0f", weight),
+				fmt.Sprintf("%.6f", fee),
+				fmt.Sprintf("%.0f", locktime),
+				fmt.Sprintf("%.0f", version),
+			})
+			written++
+		}
+	}
+	w.Flush()
+	if w.Error() != nil {
+		log.WithError(w.Error()).Error("transactions CSV export write failed")
+	}
+}
+
+func float64OrZero(v interface{}) float64 {
+	if v == nil {
+		return 0
+	}
+	switch x := v.(type) {
+	case float64:
+		return x
+	case int:
+		return float64(x)
+	case int64:
+		return float64(x)
+	}
+	return 0
+}
+
+func stringOrEmpty(v interface{}) string {
+	if v == nil {
+		return ""
+	}
+	if s, ok := v.(string); ok {
+		return s
+	}
+	return fmt.Sprintf("%v", v)
+}
 
 // exportPortfoliosHandler returns portfolios as machine-friendly JSON for archival or analysis.
 // Requires authentication. Respects pagination (page, page_size) and sort (sort_by, sort_dir).

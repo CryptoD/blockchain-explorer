@@ -165,6 +165,73 @@ curl -b cookies.txt "http://localhost:8080/api/user/portfolios/export?page=1&pag
 }
 ```
 
+#### Export Portfolio Holdings (CSV)
+Stream a single portfolio's positions as CSV for download. **Requires authentication.** Response uses `Content-Type: text/csv` and `Content-Disposition: attachment` so browsers download a named file.
+
+**Endpoint:** `GET /api/user/portfolios/:id/export/csv`  
+**Versioned:** `GET /api/v1/user/portfolios/:id/export/csv`
+
+**Parameters:**
+- `id` (path): Portfolio ID
+
+**Headers:**
+- Session cookie or `Authorization` as required for user endpoints
+
+**Response headers:**
+- `Content-Type: text/csv; charset=utf-8`
+- `Content-Disposition: attachment; filename="portfolio-{id}-{name}.csv"`
+
+**CSV columns:** `symbol`, `type`, `address`, `amount`, `value`, `portfolio_created`, `portfolio_updated`
+
+**Example Request:**
+```bash
+curl -b cookies.txt -o holdings.csv "http://localhost:8080/api/user/portfolios/abc123/export/csv"
+```
+
+#### Export blocks (CSV)
+Stream blocks in a height range as CSV. **Public.** Server-side streaming with one block fetched at a time; range and row limits prevent abuse.
+
+**Endpoint:** `GET /api/blocks/export/csv`  
+**Versioned:** `GET /api/v1/blocks/export/csv`
+
+**Parameters:**
+- `start_height` (required): First block height (inclusive)
+- `end_height` (required): Last block height (inclusive). Must not exceed current chain height.
+- `limit` (optional): Max rows to return (default: 500, max: 2000). Range size is also capped at 500 blocks.
+
+**Response headers:**
+- `Content-Type: text/csv; charset=utf-8`
+- `Content-Disposition: attachment; filename="blocks-{start}-{end}.csv"`
+
+**CSV columns:** `height`, `hash`, `time`, `time_iso`, `tx_count`, `size`, `weight`, `difficulty`, `confirmations`
+
+**Example Request:**
+```bash
+curl -o blocks.csv "http://localhost:8080/api/blocks/export/csv?start_height=800000&end_height=800050&limit=100"
+```
+
+#### Export transactions (CSV)
+Stream transactions from blocks in a height range as CSV. **Public.** Memory-efficient: one block and one transaction at a time; block range and row limits prevent abuse.
+
+**Endpoint:** `GET /api/transactions/export/csv`  
+**Versioned:** `GET /api/v1/transactions/export/csv`
+
+**Parameters:**
+- `start_height` (required): First block height (inclusive)
+- `end_height` (required): Last block height (inclusive). Must not exceed current chain height.
+- `limit` (optional): Max transaction rows (default: 1000, max: 5000). Block range is capped at 100 blocks.
+
+**Response headers:**
+- `Content-Type: text/csv; charset=utf-8`
+- `Content-Disposition: attachment; filename="transactions-{start}-{end}.csv"`
+
+**CSV columns:** `txid`, `block_height`, `block_hash`, `block_time`, `block_time_iso`, `size`, `vsize`, `weight`, `fee`, `locktime`, `version`
+
+**Example Request:**
+```bash
+curl -o transactions.csv "http://localhost:8080/api/transactions/export/csv?start_height=800000&end_height=800010&limit=500"
+```
+
 #### Export Search (Blockchain)
 Export a single blockchain search result (block, transaction, or address) as JSON. **Public;** no authentication required.
 
