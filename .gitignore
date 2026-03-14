@@ -89,6 +89,7 @@ build/
 # Local temp / generated (do not track)
 .tmp/
 
-# Extra binary build (primary is blockchain-explorer if tracked)
+# Built binaries (build from source: go build -o blockchain-explorer .)
+blockchain-explorer
 bitcoin-explorer
 
