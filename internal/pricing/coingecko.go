@@ -88,26 +88,51 @@ func normalizeAndFilterCurrencies(currencies []string) []string {
 }
 
 func (c *CoinGeckoClient) GetBTCUSD(ctx context.Context) (float64, error) {
+	v, ok := c.GetCryptoPriceInFiat(ctx, "bitcoin", "usd")
+	if !ok {
+		return 0, fmt.Errorf("coingecko bitcoin/usd unavailable")
+	}
+	return v, nil
+}
+
+// GetCryptoPriceInFiat returns the spot price of a crypto asset (by CoinGecko id) in the given fiat.
+// Implements CryptoPriceFetcher for multi-asset valuation.
+func (c *CoinGeckoClient) GetCryptoPriceInFiat(ctx context.Context, coinID, fiat string) (float64, bool) {
+	fiat = strings.ToLower(strings.TrimSpace(fiat))
+	if fiat == "" || !SupportedFiatCurrencies[fiat] {
+		fiat = "usd"
+	}
+	coinID = strings.ToLower(strings.TrimSpace(coinID))
+	if coinID == "" {
+		return 0, false
+	}
+	url := fmt.Sprintf("https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=%s", coinID, fiat)
 	resp, err := c.HTTPClient.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
-		Get("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=usd")
+		Get(url)
 	if err != nil {
-		return 0, fmt.Errorf("coingecko BTC/USD request failed: %w", err)
+		return 0, false
 	}
-
-	var rates map[string]map[string]float64
+	var rates map[string]map[string]interface{}
 	if err := json.Unmarshal(resp.Body(), &rates); err != nil {
-		return 0, fmt.Errorf("failed to unmarshal coingecko BTC/USD response: %w", err)
+		return 0, false
 	}
-	btc, ok := rates["bitcoin"]
+	coin, ok := rates[coinID]
 	if !ok {
-		return 0, fmt.Errorf("missing bitcoin key in coingecko response")
+		return 0, false
 	}
-	usd, ok := btc["usd"]
+	val, ok := coin[fiat]
 	if !ok {
-		return 0, fmt.Errorf("missing usd price in coingecko response")
+		return 0, false
 	}
-	return usd, nil
+	switch v := val.(type) {
+	case float64:
+		return v, v >= 0
+	case int:
+		return float64(v), v >= 0
+	default:
+		return 0, false
+	}
 }
 

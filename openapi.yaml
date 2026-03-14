@@ -785,13 +785,19 @@ components:
       properties:
         type:
           type: string
-          description: Asset type (e.g. stock, crypto, bond, commodity).
+          description: Asset class - crypto, commodity, bond, or stock. Used with symbol for unified pricing.
         address:
           type: string
+          description: Optional (e.g. wallet address for crypto).
         label:
           type: string
+          description: Display name.
         amount:
           type: number
+          description: Quantity (units depend on asset; e.g. coins, oz, face value).
+        symbol:
+          type: string
+          description: Pricing identifier - e.g. bitcoin, ethereum (crypto), XAU/XAG (commodity), US10Y (bond). Crypto defaults to bitcoin when empty.
 
     Portfolio:
       type: object

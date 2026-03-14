@@ -223,10 +223,11 @@ type User struct {
 }
 
 type PortfolioItem struct {
-	Type    string  `json:"type"` // "stock", "crypto", "bond", "commodity"
-	Address string  `json:"address"`
-	Label   string  `json:"label"`
-	Amount  float64 `json:"amount"`
+	Type    string  `json:"type"`    // "crypto", "commodity", "bond", "stock"
+	Address string  `json:"address"` // Optional; e.g. wallet address for crypto
+	Label   string  `json:"label"`   // Display name
+	Amount  float64 `json:"amount"`  // Quantity (units: coins, oz, face value, etc.)
+	Symbol  string  `json:"symbol,omitempty"` // Pricing id: "bitcoin", "XAU", "US10Y"; crypto defaults to "bitcoin" when empty
 }
 
 type Portfolio struct {
@@ -899,7 +900,13 @@ func main() {
 
 	// Initialize pluggable service clients
 	blockchainClient = blockchain.NewGetBlockRPCClient(baseURL, apiKey, httpClient)
-	pricingClient = pricing.NewCoinGeckoClient(httpClient)
+	cgClient := pricing.NewCoinGeckoClient(httpClient)
+	pricingClient = cgClient
+	assetPricer = &pricing.CompositePricer{
+		Crypto:    cgClient,
+		Commodity: &pricing.StaticCommoditySource{},
+		Bond:      &pricing.StaticBondSource{PricePer100: pricing.DefaultBondPrices()},
+	}
 
 	// Initialize default admin user
 	initializeDefaultAdmin()
@@ -1517,12 +1524,17 @@ func listPortfoliosHandler(c *gin.Context) {
 	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
 		valuationCurrency = strings.ToLower(u.PreferredCurrency)
 	}
-	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+	usdPerFiat := 1.0
+	if valuationCurrency != "usd" {
+		if u, ok := getUSDPerFiat(ctx, valuationCurrency); ok && u > 0 {
+			usdPerFiat = u
+		}
+	}
 
 	dataWithValuation := make([]PortfolioWithValuation, 0, len(paginated))
 	for i := range paginated {
 		p := &paginated[i]
-		totalFiat, itemsWithVal := computePortfolioValuation(p, btcRate, rateOk)
+		totalFiat, itemsWithVal := computePortfolioValuation(p, valuationCurrency, usdPerFiat)
 		dataWithValuation = append(dataWithValuation, PortfolioWithValuation{
 			ID:                p.ID,
 			Username:          p.Username,
@@ -1746,7 +1758,12 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
 		valuationCurrency = strings.ToLower(u.PreferredCurrency)
 	}
-	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+	usdPerFiat := 1.0
+	if valuationCurrency != "usd" {
+		if u, ok := getUSDPerFiat(ctx, valuationCurrency); ok && u > 0 {
+			usdPerFiat = u
+		}
+	}
 
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
@@ -1758,8 +1775,10 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	for _, item := range p.Items {
 		amountStr := strconv.FormatFloat(item.Amount, 'f', -1, 64)
 		valueStr := ""
-		if rateOk && strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
-			valueStr = strconv.FormatFloat(item.Amount*btcRate, 'f', 2, 64)
+		assetType := strings.ToLower(strings.TrimSpace(item.Type))
+		symbol := pricing.NormalizeAssetSymbol(item.Type, item.Symbol)
+		if price, ok := getAssetPriceInFiat(ctx, assetType, symbol, valuationCurrency, usdPerFiat); ok && price >= 0 {
+			valueStr = strconv.FormatFloat(item.Amount*price, 'f', 2, 64)
 		}
 		_ = w.Write([]string{
 			item.Label,
@@ -1778,8 +1797,8 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 }
 
 // generatePortfolioPDF writes a short portfolio summary report (overall value, allocations by type, positions table) to w.
-// If valuationCurrency is set and rateOk is true, fiat values are shown; otherwise only quantities.
-func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, btcRate float64, rateOk bool) error {
+// Uses unified asset pricer for crypto, commodity, bond; usdPerFiat converts USD to user fiat when needed.
+func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, usdPerFiat float64) error {
 	pdf := gofpdf.New("P", "mm", "A4", "")
 	pdf.SetMargins(15, 15, 15)
 	pdf.SetAutoPageBreak(true, 15)
@@ -1791,16 +1810,20 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, b
 	pdf.CellFormat(0, 6, "Portfolio Report — Generated "+time.Now().UTC().Format("2006-01-02 15:04 MST"), "", 0, "L", false, 0, "")
 	pdf.Ln(10)
 
-	// Overall value: quantity and optionally total fiat
+	// Overall value: quantity and total fiat (from unified pricer)
 	var totalQty float64
 	for _, item := range p.Items {
 		totalQty += item.Amount
 	}
 	totalFiat := 0.0
-	if rateOk && valuationCurrency != "" {
+	hasAnyRate := false
+	if valuationCurrency != "" && assetPricer != nil {
 		for _, item := range p.Items {
-			if strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
-				totalFiat += item.Amount * btcRate
+			assetType := strings.ToLower(strings.TrimSpace(item.Type))
+			symbol := pricing.NormalizeAssetSymbol(item.Type, item.Symbol)
+			if price, ok := getAssetPriceInFiat(ctx, assetType, symbol, valuationCurrency, usdPerFiat); ok && price >= 0 {
+				totalFiat += item.Amount * price
+				hasAnyRate = true
 			}
 		}
 	}
@@ -1812,7 +1835,7 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, b
 		formatFloat(totalQty), len(p.Items),
 		p.Created.UTC().Format("2006-01-02"),
 		p.Updated.UTC().Format("2006-01-02"))
-	if rateOk && valuationCurrency != "" && totalFiat > 0 {
+	if hasAnyRate && valuationCurrency != "" && totalFiat > 0 {
 		summaryLine += fmt.Sprintf("  |  Total value (%s): %s", strings.ToUpper(valuationCurrency), formatFloat(totalFiat))
 	}
 	pdf.CellFormat(0, 6, summaryLine, "", 0, "L", false, 0, "")
@@ -1860,10 +1883,10 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, b
 	}
 	pdf.Ln(8)
 
-	// Positions table: add Value (fiat) column when rate available
+	// Positions table: add Value (fiat) column when rate available (unified pricer)
 	posColW := []float64{45, 25, 70, 35, 40}
 	posHeaders := []string{"Label", "Type", "Address", "Amount", "Value (" + strings.ToUpper(valuationCurrency) + ")"}
-	if !rateOk || valuationCurrency == "" {
+	if !hasAnyRate || valuationCurrency == "" {
 		posColW = []float64{45, 25, 70, 35}
 		posHeaders = []string{"Label", "Type", "Address", "Amount"}
 	}
@@ -1888,10 +1911,12 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, b
 		pdf.CellFormat(posColW[1], 6, item.Type, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(posColW[2], 6, addr, "1", 0, "L", false, 0, "")
 		pdf.CellFormat(posColW[3], 6, formatFloat(item.Amount), "1", 0, "R", false, 0, "")
-		if rateOk && valuationCurrency != "" && len(posColW) > 4 {
+		if hasAnyRate && valuationCurrency != "" && len(posColW) > 4 {
 			valStr := ""
-			if strings.ToLower(strings.TrimSpace(item.Type)) == "crypto" {
-				valStr = formatFloat(item.Amount * btcRate)
+			assetType := strings.ToLower(strings.TrimSpace(item.Type))
+			symbol := pricing.NormalizeAssetSymbol(item.Type, item.Symbol)
+			if price, ok := getAssetPriceInFiat(ctx, assetType, symbol, valuationCurrency, usdPerFiat); ok && price >= 0 {
+				valStr = formatFloat(item.Amount * price)
 			}
 			pdf.CellFormat(posColW[4], 6, valStr, "1", 0, "R", false, 0, "")
 		}
@@ -1900,8 +1925,8 @@ func generatePortfolioPDF(p *Portfolio, w io.Writer, valuationCurrency string, b
 	pdf.Ln(8)
 	pdf.SetFont("Helvetica", "I", 8)
 	footer := "Performance history is not available in this report."
-	if rateOk && valuationCurrency != "" {
-		footer = "Values in " + strings.ToUpper(valuationCurrency) + " use current rate; missing rate data is shown blank."
+	if hasAnyRate && valuationCurrency != "" {
+		footer = "Values in " + strings.ToUpper(valuationCurrency) + " use current rates (crypto, commodity, bond); missing rate data is shown blank."
 	} else {
 		footer += " Value above is total quantity (amounts)."
 	}
@@ -1963,11 +1988,16 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
 		valuationCurrency = strings.ToLower(u.PreferredCurrency)
 	}
-	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+	usdPerFiat := 1.0
+	if valuationCurrency != "usd" {
+		if u, ok := getUSDPerFiat(ctx, valuationCurrency); ok && u > 0 {
+			usdPerFiat = u
+		}
+	}
 
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
-	if err := generatePortfolioPDF(&p, c.Writer, valuationCurrency, btcRate, rateOk); err != nil {
+	if err := generatePortfolioPDF(&p, c.Writer, valuationCurrency, usdPerFiat); err != nil {
 		log.WithError(err).Error("portfolio PDF export failed")
 		errorResponse(c, http.StatusInternalServerError, "pdf_generation_failed", "Failed to generate PDF")
 		return
@@ -2299,11 +2329,16 @@ func exportPortfoliosHandler(c *gin.Context) {
 	if u, ok := getUser(username.(string)); ok && u.PreferredCurrency != "" {
 		valuationCurrency = strings.ToLower(u.PreferredCurrency)
 	}
-	btcRate, rateOk := getBTCPriceInFiat(ctx, valuationCurrency)
+	usdPerFiat := 1.0
+	if valuationCurrency != "usd" {
+		if u, ok := getUSDPerFiat(ctx, valuationCurrency); ok && u > 0 {
+			usdPerFiat = u
+		}
+	}
 	dataWithValuation := make([]PortfolioWithValuation, 0, len(paginated))
 	for i := range paginated {
 		p := &paginated[i]
-		totalFiat, itemsWithVal := computePortfolioValuation(p, btcRate, rateOk)
+		totalFiat, itemsWithVal := computePortfolioValuation(p, valuationCurrency, usdPerFiat)
 		dataWithValuation = append(dataWithValuation, PortfolioWithValuation{
 			ID:                p.ID,
 			Username:          p.Username,
@@ -2320,10 +2355,10 @@ func exportPortfoliosHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
 			"export_timestamp":     time.Now().UTC().Format(time.RFC3339),
-			"export_version":        exportVersion,
-			"endpoint":              "portfolios",
+			"export_version":       exportVersion,
+			"endpoint":             "portfolios",
 			"valuation_currency":   valuationCurrency,
-			"rate_data_available":  rateOk,
+			"rate_data_available":  assetPricer != nil,
 		},
 		"pagination": gin.H{
 			"page":        pagination.Page,
@@ -3069,14 +3104,26 @@ func filterRatesByCurrencies(rates map[string]interface{}, want []string) map[st
 // getBTCPriceInFiat returns the BTC price in the given fiat code (e.g. "usd", "eur").
 // Uses the rates service; returns (0, false) if pricing is unavailable or currency unsupported.
 func getBTCPriceInFiat(ctx context.Context, fiatCode string) (float64, bool) {
+	if assetPricer == nil {
+		return 0, false
+	}
+	return assetPricer.GetAssetPriceInFiat(ctx, pricing.AssetClassCrypto, "bitcoin", fiatCode, 1)
+}
+
+// getUSDPerFiat returns how many USD equal 1 unit of fiat (e.g. 1 EUR = 1.08 USD).
+// Derived from BTC/USD and BTC/fiat; used to convert commodity/bond USD prices into user fiat.
+func getUSDPerFiat(ctx context.Context, fiatCode string) (float64, bool) {
 	fiatCode = strings.ToLower(strings.TrimSpace(fiatCode))
 	if fiatCode == "" || !pricing.SupportedFiatCurrencies[fiatCode] {
 		fiatCode = "usd"
 	}
+	if fiatCode == "usd" {
+		return 1, true
+	}
 	if pricingClient == nil {
 		return 0, false
 	}
-	rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, []string{fiatCode})
+	rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, []string{"usd", fiatCode})
 	if err != nil {
 		return 0, false
 	}
@@ -3084,18 +3131,37 @@ func getBTCPriceInFiat(ctx context.Context, fiatCode string) (float64, bool) {
 	if !ok {
 		return 0, false
 	}
-	val, ok := btc[fiatCode]
-	if !ok {
+	var btcUSD, btcFiat float64
+	for k, val := range btc {
+		var v float64
+		switch x := val.(type) {
+		case float64:
+			v = x
+		case int:
+			v = float64(x)
+		default:
+			continue
+		}
+		if k == "usd" {
+			btcUSD = v
+		}
+		if k == fiatCode {
+			btcFiat = v
+		}
+	}
+	if btcUSD <= 0 || btcFiat <= 0 {
 		return 0, false
 	}
-	switch v := val.(type) {
-	case float64:
-		return v, v > 0
-	case int:
-		return float64(v), v > 0
-	default:
+	return btcUSD / btcFiat, true
+}
+
+// getAssetPriceInFiat returns the spot price of an asset (type + symbol) in the given fiat.
+// usdPerFiat is from getUSDPerFiat for converting commodity/bond USD into user fiat.
+func getAssetPriceInFiat(ctx context.Context, assetType, symbol, fiat string, usdPerFiat float64) (float64, bool) {
+	if assetPricer == nil {
 		return 0, false
 	}
+	return assetPricer.GetAssetPriceInFiat(ctx, assetType, symbol, fiat, usdPerFiat)
 }
 
 // PortfolioItemWithValue adds value_fiat to a portfolio item for API responses.
@@ -3104,17 +3170,20 @@ type PortfolioItemWithValue struct {
 	ValueFiat *float64 `json:"value_fiat,omitempty"` // nil when rate unavailable or non-crypto
 }
 
-// computePortfolioValuation enriches portfolio items with value_fiat (crypto type treated as BTC) and total.
-// Missing rate data: value_fiat is nil for that item; total is sum of known values only.
-func computePortfolioValuation(p *Portfolio, btcRate float64, rateOk bool) (total *float64, items []PortfolioItemWithValue) {
+// computePortfolioValuation enriches portfolio items with value_fiat using the unified asset pricer (crypto, commodity, bond).
+// valuationCurrency and usdPerFiat (from getUSDPerFiat) are used for conversion. Missing rate data: value_fiat is nil; total is sum of known values only.
+func computePortfolioValuation(p *Portfolio, valuationCurrency string, usdPerFiat float64) (total *float64, items []PortfolioItemWithValue) {
 	items = make([]PortfolioItemWithValue, 0, len(p.Items))
 	var sum float64
 	hasAny := false
 	for i := range p.Items {
 		it := p.Items[i]
 		withVal := PortfolioItemWithValue{PortfolioItem: it}
-		if rateOk && strings.ToLower(strings.TrimSpace(it.Type)) == "crypto" {
-			v := it.Amount * btcRate
+		assetType := strings.ToLower(strings.TrimSpace(it.Type))
+		symbol := pricing.NormalizeAssetSymbol(it.Type, it.Symbol)
+		price, ok := getAssetPriceInFiat(ctx, assetType, symbol, valuationCurrency, usdPerFiat)
+		if ok && price >= 0 {
+			v := it.Amount * price
 			withVal.ValueFiat = &v
 			sum += v
 			hasAny = true
@@ -3237,6 +3306,8 @@ var (
 	blockchainClient blockchain.RPCClient
 	// pricingClient is the pluggable pricing/FX provider.
 	pricingClient pricing.Client
+	// assetPricer unifies crypto, commodity, and bond pricing for portfolio valuation.
+	assetPricer pricing.AssetPricer
 	// appConfig holds the parsed application configuration.
 	appConfig *config.Config
 )
@@ -3259,9 +3330,47 @@ func SetBlockchainClient(c blockchain.RPCClient) {
 	blockchainClient = c
 }
 
-// SetPricingClient allows tests to inject a mock pricing client.
+// clientCryptoAdapter adapts pricing.Client to CryptoPriceFetcher (bitcoin only) for tests.
+type clientCryptoAdapter struct{ c pricing.Client }
+
+func (a *clientCryptoAdapter) GetCryptoPriceInFiat(ctx context.Context, coinID, fiat string) (float64, bool) {
+	if a.c == nil {
+		return 0, false
+	}
+	rates, err := a.c.GetMultiCurrencyRatesIn(ctx, []string{fiat})
+	if err != nil {
+		return 0, false
+	}
+	coin, ok := rates[coinID].(map[string]interface{})
+	if !ok {
+		return 0, false
+	}
+	val, ok := coin[fiat]
+	if !ok {
+		return 0, false
+	}
+	switch v := val.(type) {
+	case float64:
+		return v, v >= 0
+	case int:
+		return float64(v), v >= 0
+	default:
+		return 0, false
+	}
+}
+
+// SetPricingClient allows tests to inject a mock pricing client. Also sets assetPricer so portfolio valuation works.
 func SetPricingClient(c pricing.Client) {
 	pricingClient = c
+	if c == nil {
+		assetPricer = nil
+		return
+	}
+	if cg, ok := c.(pricing.CryptoPriceFetcher); ok {
+		assetPricer = &pricing.CompositePricer{Crypto: cg, Commodity: &pricing.StaticCommoditySource{}, Bond: &pricing.StaticBondSource{PricePer100: pricing.DefaultBondPrices()}}
+	} else {
+		assetPricer = &pricing.CompositePricer{Crypto: &clientCryptoAdapter{c: c}, Commodity: &pricing.StaticCommoditySource{}, Bond: &pricing.StaticBondSource{PricePer100: pricing.DefaultBondPrices()}}
+	}
 }
 
 // defaultErrorCode derives a generic error code from an HTTP status code.
