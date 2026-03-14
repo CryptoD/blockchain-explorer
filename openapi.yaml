@@ -370,6 +370,7 @@ paths:
     get:
       tags: [User]
       summary: Get the authenticated user's profile
+      description: Returns the user profile including preferred_currency (persisted in Redis).
       security:
         - SessionCookieAuth: []
       responses:
@@ -379,6 +380,34 @@ paths:
             application/json:
               schema:
                 $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+    patch:
+      tags: [User]
+      summary: Update profile settings (e.g. preferred currency)
+      description: Update the authenticated user's profile. preferred_currency is validated against supported fiat codes (usd, eur, gbp, jpy, cad, aud, chf, krw, cny, inr, brl, mxn, try). Send empty string to clear.
+      security:
+        - SessionCookieAuth: []
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                preferred_currency:
+                  type: string
+                  description: Fiat code (e.g. usd, eur) or empty to clear
+      responses:
+        '200':
+          description: Updated user profile
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -744,6 +773,9 @@ components:
         role:
           type: string
           enum: [admin, user]
+        preferred_currency:
+          type: string
+          description: User-preferred fiat currency code (e.g. usd, eur). Stored in profile in Redis; validated against supported codes on update.
         created:
           type: string
           format: date-time

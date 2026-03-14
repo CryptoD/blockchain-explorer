@@ -215,10 +215,11 @@ func logLargeExport(c *gin.Context, endpoint string, details map[string]interfac
 
 // User struct definition
 type User struct {
-	Username string    `json:"username"`
-	Password string    `json:"-"`    // Hashed password, never sent in JSON
-	Role     string    `json:"role"` // "admin" or "user"
-	Created  time.Time `json:"created"`
+	Username          string    `json:"username"`
+	Password          string    `json:"-"`    // Hashed password, never sent in JSON
+	Role              string    `json:"role"` // "admin" or "user"
+	PreferredCurrency string    `json:"preferred_currency,omitempty"` // Fiat code (e.g. usd, eur); validated against supported list
+	Created           time.Time `json:"created"`
 }
 
 type PortfolioItem struct {
@@ -564,7 +565,7 @@ func authenticateUser(username, password string) (User, bool) {
 	return user, err == nil
 }
 
-// userProfileHandler returns the profile of the authenticated user
+// userProfileHandler returns the profile of the authenticated user (includes preferred_currency from Redis).
 func userProfileHandler(c *gin.Context) {
 	username, exists := c.Get("username")
 	if !exists {
@@ -575,6 +576,54 @@ func userProfileHandler(c *gin.Context) {
 	user, exists := getUser(username.(string))
 	if !exists {
 		errorResponse(c, http.StatusNotFound, "user_profile_not_found", "User profile not found")
+		return
+	}
+
+	c.JSON(http.StatusOK, user)
+}
+
+// updateProfileRequest is the body for PATCH /api/user/profile (profile settings).
+type updateProfileRequest struct {
+	PreferredCurrency *string `json:"preferred_currency"` // Fiat code (e.g. usd, eur); empty string clears preference
+}
+
+// updateProfileHandler updates the authenticated user's profile settings (e.g. preferred_currency).
+func updateProfileHandler(c *gin.Context) {
+	usernameVal, exists := c.Get("username")
+	if !exists {
+		errorResponse(c, http.StatusUnauthorized, "user_not_found", "User not found in session")
+		return
+	}
+	username := usernameVal.(string)
+
+	var body updateProfileRequest
+	if err := c.ShouldBindJSON(&body); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		return
+	}
+
+	user, exists := getUser(username)
+	if !exists {
+		errorResponse(c, http.StatusNotFound, "user_profile_not_found", "User profile not found")
+		return
+	}
+
+	if body.PreferredCurrency != nil {
+		code := strings.ToLower(strings.TrimSpace(*body.PreferredCurrency))
+		if code != "" && !pricing.SupportedFiatCurrencies[code] {
+			errorResponse(c, http.StatusBadRequest, "unsupported_currency", "Unsupported currency code; use a supported fiat code (e.g. usd, eur, gbp)")
+			return
+		}
+		user.PreferredCurrency = code
+	}
+
+	userMutex.Lock()
+	users[username] = user
+	userMutex.Unlock()
+
+	if err := saveUserToRedis(user); err != nil {
+		log.WithError(err).WithField("username", username).Warn("Failed to persist profile to Redis")
+		errorResponse(c, http.StatusInternalServerError, "save_failed", "Failed to save profile")
 		return
 	}
 
@@ -896,6 +945,7 @@ func main() {
 		userV1.Use(authMiddleware)
 		{
 			userV1.GET("/profile", userProfileHandler)
+			userV1.PATCH("/profile", updateProfileHandler)
 			userV1.GET("/portfolios", listPortfoliosHandler)
 			userV1.GET("/portfolios/export", exportPortfoliosHandler)
 			userV1.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
@@ -944,6 +994,7 @@ func main() {
 	user.Use(authMiddleware)
 	{
 		user.GET("/profile", userProfileHandler)
+		user.PATCH("/profile", updateProfileHandler)
 		user.GET("/portfolios", listPortfoliosHandler)
 		user.GET("/portfolios/export", exportPortfoliosHandler)
 		user.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
