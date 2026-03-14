@@ -2923,7 +2923,10 @@ func getSymbolCategoriesHandler(c *gin.Context) {
 }
 
 func metricsHandler(c *gin.Context) {
-	// Get last 100 points for each metric
+	if rdb == nil {
+		c.JSON(http.StatusOK, gin.H{"mempool_size": []map[string]interface{}{}, "block_times": []map[string]interface{}{}, "tx_volume": []map[string]interface{}{}})
+		return
+	}
 	mempoolData, _ := rdb.ZRangeWithScores(ctx, "mempool_size", -100, -1).Result()
 	blockTimeData, _ := rdb.ZRangeWithScores(ctx, "block_times", -100, -1).Result()
 	txVolumeData, _ := rdb.ZRangeWithScores(ctx, "tx_volume", -100, -1).Result()
@@ -3694,6 +3697,9 @@ const btcPriceHistoryMaxPoints = 8640 // ~30 days at 5-min interval
 
 // collectMetrics collects historical metrics for charts, including multi-currency FX for portfolio performance.
 func collectMetrics() {
+	if rdb == nil {
+		return
+	}
 	ctx := context.Background()
 	now := float64(time.Now().Unix())
 
