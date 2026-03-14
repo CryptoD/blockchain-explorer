@@ -55,6 +55,20 @@ var translations = map[string]map[string]string{
 	},
 }
 
+// Supported profile preference values (validated on PATCH /user/profile)
+var (
+	supportedThemes       = map[string]bool{"light": true, "dark": true, "system": true}
+	supportedLandingPages = map[string]bool{"explorer": true, "dashboard": true, "portfolios": true}
+	supportedLangs        map[string]bool // populated once from translations keys
+)
+
+func init() {
+	supportedLangs = make(map[string]bool)
+	for lang := range translations {
+		supportedLangs[lang] = true
+	}
+}
+
 func T(lang, key string) string {
 	if langMap, exists := translations[lang]; exists {
 		if translation, exists := langMap[key]; exists {
@@ -215,11 +229,16 @@ func logLargeExport(c *gin.Context, endpoint string, details map[string]interfac
 
 // User struct definition
 type User struct {
-	Username          string    `json:"username"`
-	Password          string    `json:"-"`    // Hashed password, never sent in JSON
-	Role              string    `json:"role"` // "admin" or "user"
-	PreferredCurrency string    `json:"preferred_currency,omitempty"` // Fiat code (e.g. usd, eur); validated against supported list
-	Created           time.Time `json:"created"`
+	Username               string    `json:"username"`
+	Password               string    `json:"-"`    // Hashed password, never sent in JSON
+	Role                   string    `json:"role"` // "admin" or "user"
+	PreferredCurrency      string    `json:"preferred_currency,omitempty"`      // Fiat code (e.g. usd, eur); validated against supported list
+	Theme                  string    `json:"theme,omitempty"`                    // "light", "dark", "system"
+	Language               string    `json:"language,omitempty"`                // e.g. "en", "es"; validated against supported list
+	NotificationsEmail     bool      `json:"notifications_email"`                // Whether to receive email notifications
+	NotificationsPriceAlerts bool    `json:"notifications_price_alerts"`         // Whether to receive price alert notifications
+	DefaultLandingPage     string    `json:"default_landing_page,omitempty"`     // "explorer", "dashboard", "portfolios"
+	Created                time.Time `json:"created"`
 }
 
 type PortfolioItem struct {
@@ -585,7 +604,12 @@ func userProfileHandler(c *gin.Context) {
 
 // updateProfileRequest is the body for PATCH /api/user/profile (profile settings).
 type updateProfileRequest struct {
-	PreferredCurrency *string `json:"preferred_currency"` // Fiat code (e.g. usd, eur); empty string clears preference
+	PreferredCurrency       *string `json:"preferred_currency"`        // Fiat code (e.g. usd, eur); empty string clears preference
+	Theme                   *string `json:"theme"`                    // "light", "dark", "system"
+	Language                *string `json:"language"`                // e.g. "en", "es"
+	NotificationsEmail      *bool   `json:"notifications_email"`
+	NotificationsPriceAlerts *bool  `json:"notifications_price_alerts"`
+	DefaultLandingPage      *string `json:"default_landing_page"`      // "explorer", "dashboard", "portfolios"
 }
 
 // updateProfileHandler updates the authenticated user's profile settings (e.g. preferred_currency).
@@ -616,6 +640,36 @@ func updateProfileHandler(c *gin.Context) {
 			return
 		}
 		user.PreferredCurrency = code
+	}
+	if body.Theme != nil {
+		v := strings.ToLower(strings.TrimSpace(*body.Theme))
+		if v != "" && !supportedThemes[v] {
+			errorResponse(c, http.StatusBadRequest, "invalid_theme", "Theme must be one of: light, dark, system")
+			return
+		}
+		user.Theme = v
+	}
+	if body.Language != nil {
+		v := strings.ToLower(strings.TrimSpace(*body.Language))
+		if v != "" && !supportedLangs[v] {
+			errorResponse(c, http.StatusBadRequest, "invalid_language", "Unsupported language code; use a supported code (e.g. en, es)")
+			return
+		}
+		user.Language = v
+	}
+	if body.NotificationsEmail != nil {
+		user.NotificationsEmail = *body.NotificationsEmail
+	}
+	if body.NotificationsPriceAlerts != nil {
+		user.NotificationsPriceAlerts = *body.NotificationsPriceAlerts
+	}
+	if body.DefaultLandingPage != nil {
+		v := strings.ToLower(strings.TrimSpace(*body.DefaultLandingPage))
+		if v != "" && !supportedLandingPages[v] {
+			errorResponse(c, http.StatusBadRequest, "invalid_default_landing_page", "Default landing page must be one of: explorer, dashboard, portfolios")
+			return
+		}
+		user.DefaultLandingPage = v
 	}
 
 	userMutex.Lock()
