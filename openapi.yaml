@@ -264,16 +264,38 @@ paths:
   /api/v1/price-history:
     get:
       tags: [Market Data]
-      summary: Historical BTC/USD price points for charts
+      summary: Historical BTC price in selected fiat for portfolio performance charts
+      description: Returns time-series of BTC price in a consistent fiat (stored by metrics job). Use for rendering portfolio charts in chosen currency over time.
+      parameters:
+        - name: currency
+          in: query
+          schema:
+            type: string
+            default: usd
+          description: Fiat code (usd, eur, gbp, etc.). Historical FX is stored per currency by the metrics job.
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            default: 288
+            maximum: 8640
+          description: Max points to return (288 = 24h at 5-min, 8640 = 30d). Default 288.
       responses:
         '200':
-          description: Array of historical price points
+          description: Array of historical price points (oldest-first order in response)
+          headers:
+            X-Price-History-Currency:
+              schema:
+                type: string
+              description: Fiat currency of the returned prices
           content:
             application/json:
               schema:
                 type: array
                 items:
                   $ref: '#/components/schemas/PricePoint'
+        '500':
+          $ref: '#/components/responses/InternalError'
 
   /api/v1/feedback:
     post:

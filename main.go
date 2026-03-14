@@ -2975,14 +2975,40 @@ func networkStatusHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, data)
 }
 
+// Default and max points for price history (5-min interval: 288 = 24h, 8640 = 30d).
+const priceHistoryDefaultPoints = 288
+const priceHistoryMaxPoints = 8640
+
 func priceHistoryHandler(c *gin.Context) {
 	if rdb == nil {
 		handleError(c, errors.New("redis not available"), http.StatusInternalServerError)
 		return
 	}
 
-	// Get history for the last 24 hours (288 data points at 5-minute intervals)
-	history, err := rdb.ZRevRangeWithScores(ctx, "btc_price_history", 0, 287).Result()
+	currency := strings.ToLower(strings.TrimSpace(c.DefaultQuery("currency", "usd")))
+	if !pricing.SupportedFiatCurrencies[currency] {
+		currency = "usd"
+	}
+	limit := priceHistoryDefaultPoints
+	if l := c.Query("limit"); l != "" {
+		if n, err := strconv.Atoi(l); err == nil && n > 0 {
+			if n > priceHistoryMaxPoints {
+				n = priceHistoryMaxPoints
+			}
+			limit = n
+		}
+	}
+
+	key := btcPriceHistoryKey(currency)
+	if currency == "usd" {
+		// Prefer legacy key if per-currency key is empty (backfill)
+		n, _ := rdb.ZCard(ctx, key).Result()
+		if n == 0 {
+			key = "btc_price_history"
+		}
+	}
+
+	history, err := rdb.ZRevRangeWithScores(ctx, key, 0, int64(limit-1)).Result()
 	if err != nil {
 		handleError(c, err, http.StatusInternalServerError)
 		return
@@ -3006,6 +3032,7 @@ func priceHistoryHandler(c *gin.Context) {
 		})
 	}
 
+	c.Header("X-Price-History-Currency", currency)
 	c.JSON(http.StatusOK, result)
 }
 
@@ -3658,17 +3685,56 @@ func callBlockchain(ctx context.Context, method string, params []interface{}) (*
 	return blockchairRequest(method, params)
 }
 
-// collectMetrics collects historical metrics for charts
+// Redis key for historical BTC price in a fiat currency (e.g. btc_price_history:usd).
+func btcPriceHistoryKey(currency string) string {
+	return "btc_price_history:" + strings.ToLower(currency)
+}
+
+const btcPriceHistoryMaxPoints = 8640 // ~30 days at 5-min interval
+
+// collectMetrics collects historical metrics for charts, including multi-currency FX for portfolio performance.
 func collectMetrics() {
-	// Use a float64 timestamp for Redis scores
+	ctx := context.Background()
 	now := float64(time.Now().Unix())
 
-	// Collect Bitcoin price for history
+	// Collect Bitcoin price in multiple fiats for consistent portfolio charts over time
 	if pricingClient != nil {
-		if usd, err := pricingClient.GetBTCUSD(context.Background()); err == nil {
-			rdb.ZAdd(context.Background(), "btc_price_history", redis.Z{Score: now, Member: usd})
-			// Keep only last 30 days of 5-minute data (roughly 8640 points)
-			rdb.ZRemRangeByRank(context.Background(), "btc_price_history", 0, -8641)
+		rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, pricing.DefaultFiatCurrencies)
+		if err != nil {
+			// Fallback: at least store USD
+			if usd, err2 := pricingClient.GetBTCUSD(ctx); err2 == nil {
+				s := strconv.FormatFloat(usd, 'f', -1, 64)
+				rdb.ZAdd(ctx, "btc_price_history", redis.Z{Score: now, Member: s})
+				rdb.ZAdd(ctx, btcPriceHistoryKey("usd"), redis.Z{Score: now, Member: s})
+				rdb.ZRemRangeByRank(ctx, "btc_price_history", 0, -(btcPriceHistoryMaxPoints + 1))
+				rdb.ZRemRangeByRank(ctx, btcPriceHistoryKey("usd"), 0, -(btcPriceHistoryMaxPoints + 1))
+			}
+		} else {
+			btc, _ := rates["bitcoin"].(map[string]interface{})
+			for _, c := range pricing.DefaultFiatCurrencies {
+				if btc == nil {
+					break
+				}
+				var price float64
+				switch v := btc[c].(type) {
+				case float64:
+					price = v
+				case int:
+					price = float64(v)
+				default:
+					continue
+				}
+				key := btcPriceHistoryKey(c)
+				rdb.ZAdd(ctx, key, redis.Z{Score: now, Member: strconv.FormatFloat(price, 'f', -1, 64)})
+				rdb.ZRemRangeByRank(ctx, key, 0, -(btcPriceHistoryMaxPoints + 1))
+			}
+			// Legacy key for backward compatibility (USD)
+			if btc != nil {
+				if v, ok := btc["usd"].(float64); ok {
+					rdb.ZAdd(ctx, "btc_price_history", redis.Z{Score: now, Member: strconv.FormatFloat(v, 'f', -1, 64)})
+					rdb.ZRemRangeByRank(ctx, "btc_price_history", 0, -(btcPriceHistoryMaxPoints + 1))
+				}
+			}
 		}
 	}
 

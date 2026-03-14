@@ -458,13 +458,32 @@
         });
     }
 
-    // Fetch BTC price
+    // Fetch BTC price (fallback when no history)
     async function fetchBTCPrice() {
         try {
-            // Use a mock price for demo - in production, fetch from an API
-            btcPrice = 65000 + (Math.random() * 5000 - 2500);
+            const res = await fetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
+            if (res.ok) {
+                const data = await res.json();
+                const btc = data.bitcoin;
+                if (btc && typeof btc[currentCurrency] === 'number') btcPrice = btc[currentCurrency];
+                else btcPrice = 65000;
+            } else {
+                btcPrice = 65000;
+            }
         } catch (err) {
             btcPrice = 65000;
+        }
+    }
+
+    // Fetch historical FX for portfolio performance chart (consistent fiat over time)
+    async function fetchPriceHistory(currency, limit) {
+        try {
+            const res = await fetch('/api/price-history?currency=' + encodeURIComponent(currency) + '&limit=' + (limit || 288), { credentials: 'include' });
+            if (!res.ok) return [];
+            const data = await res.json();
+            return Array.isArray(data) ? data : [];
+        } catch (err) {
+            return [];
         }
     }
 
@@ -497,10 +516,11 @@
                 },
                 scales: {
                     y: {
-                        beginAtZero: true,
+                        beginAtZero: false,
                         ticks: {
                             callback: function(value) {
-                                return '$' + value.toLocaleString();
+                                const sym = CURRENCY_SYMBOLS[currentCurrency] || currentCurrency.toUpperCase() + ' ';
+                                return sym + value.toLocaleString();
                             }
                         }
                     }
@@ -647,33 +667,78 @@
         btcChangeEl.textContent = (btcChange >= 0 ? '+' : '') + btcChange + '%';
         btcChangeEl.className = 'text-sm font-medium ' + (btcChange >= 0 ? 'text-green-500' : 'text-red-500');
 
-        // Update charts
-        updatePerformanceChart();
+        // Update charts (performance uses historical FX in selected currency)
+        await updatePerformanceChart(totalBtc);
         updateAllocationChart(allAddresses);
         updateTxVolumeChart();
         updateAddressChart(allAddresses);
         updateRecentTransactions(allAddresses);
     }
 
-    // Update performance chart
-    function updatePerformanceChart() {
+    // Points for price history by time range (5-min interval: 288=24h, 2016=7d, 8640=30d)
+    function getPriceHistoryLimit() {
         const days = getDaysFromRange(currentTimeRange);
-        const labels = [];
-        const data = [];
-        
-        let baseValue = 50000;
-        for (let i = days; i >= 0; i--) {
-            const date = new Date();
-            date.setDate(date.getDate() - i);
-            labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
-            
-            // Generate mock performance data
-            baseValue = baseValue * (1 + (Math.random() * 0.06 - 0.03));
-            data.push(baseValue);
-        }
+        const points = Math.min(days * 24 * (60 / 5), 8640);
+        return Math.max(288, points);
+    }
 
-        performanceChart.data.labels = labels;
-        performanceChart.data.datasets[0].data = data;
+    // Update performance chart using historical FX in selected currency; optional totalBtc for estimated portfolio value line
+    async function updatePerformanceChart(totalBtcForValue) {
+        const limit = getPriceHistoryLimit();
+        const history = await fetchPriceHistory(currentCurrency, limit);
+        const sym = CURRENCY_SYMBOLS[currentCurrency] || currentCurrency.toUpperCase() + ' ';
+
+        if (history.length === 0) {
+            // Fallback: mock series when no historical FX yet
+            performanceChart.data.datasets = performanceChart.data.datasets.slice(0, 1);
+            const days = getDaysFromRange(currentTimeRange);
+            const labels = [];
+            const data = [];
+            let baseValue = btcPrice * 0.9;
+            for (let i = days; i >= 0; i--) {
+                const date = new Date();
+                date.setDate(date.getDate() - i);
+                labels.push(date.toLocaleDateString('en-US', { month: 'short', day: 'numeric' }));
+                baseValue = baseValue * (1 + (Math.random() * 0.02 - 0.01));
+                data.push(Math.round(baseValue * 100) / 100);
+            }
+            performanceChart.data.labels = labels;
+            performanceChart.data.datasets[0].label = 'BTC price (' + currentCurrency.toUpperCase() + ')';
+            performanceChart.data.datasets[0].data = data;
+        } else {
+            // Reverse so oldest first for display
+            const ordered = [...history].sort((a, b) => (a.timestamp || 0) - (b.timestamp || 0));
+            performanceChart.data.labels = ordered.map(p => {
+                const d = new Date((p.timestamp || 0) * 1000);
+                return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric', hour: d.getHours() ? '2-digit' : undefined });
+            });
+            performanceChart.data.datasets[0].label = 'BTC price (' + currentCurrency.toUpperCase() + ')';
+            performanceChart.data.datasets[0].data = ordered.map(p => p.price);
+
+            // Optional second series: estimated portfolio value (current BTC holdings * historical price)
+            const valueData = ordered.map(p => (totalBtcForValue * (p.price || 0)));
+            if (totalBtcForValue > 0) {
+                if (performanceChart.data.datasets.length < 2) {
+                    performanceChart.data.datasets.push({
+                        label: 'Portfolio value est. (' + currentCurrency.toUpperCase() + ')',
+                        data: valueData,
+                        borderColor: '#10b981',
+                        backgroundColor: 'rgba(16, 185, 129, 0.1)',
+                        fill: true,
+                        tension: 0.4
+                    });
+                } else {
+                    performanceChart.data.datasets[1].label = 'Portfolio value est. (' + currentCurrency.toUpperCase() + ')';
+                    performanceChart.data.datasets[1].data = valueData;
+                    performanceChart.data.datasets[1].hidden = false;
+                }
+            } else if (performanceChart.data.datasets.length > 1) {
+                performanceChart.data.datasets.pop();
+            }
+        }
+        performanceChart.options.scales.y.ticks.callback = function(value) {
+            return sym + value.toLocaleString();
+        };
         performanceChart.update();
     }
 
