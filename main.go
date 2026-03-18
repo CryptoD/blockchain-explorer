@@ -1707,21 +1707,28 @@ func listPriceAlertsHandler(c *gin.Context) {
 		return
 	}
 
-	keys, err := rdb.Keys(ctx, priceAlertKeyPrefix+username+":*").Result()
-	if err != nil {
-		errorResponse(c, http.StatusInternalServerError, "alerts_fetch_failed", "Failed to fetch alerts")
-		return
-	}
-
-	alerts := make([]PriceAlert, 0, len(keys))
-	for _, key := range keys {
-		raw, err := rdb.Get(ctx, key).Result()
-		if err != nil || raw == "" {
-			continue
+	alerts := make([]PriceAlert, 0, 32)
+	var cursor uint64
+	pattern := priceAlertKeyPrefix + username + ":*"
+	for {
+		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "alerts_fetch_failed", "Failed to fetch alerts")
+			return
 		}
-		var a PriceAlert
-		if err := json.Unmarshal([]byte(raw), &a); err == nil {
-			alerts = append(alerts, a)
+		cursor = next
+		for _, key := range keys {
+			raw, err := rdb.Get(ctx, key).Result()
+			if err != nil || raw == "" {
+				continue
+			}
+			var a PriceAlert
+			if err := json.Unmarshal([]byte(raw), &a); err == nil {
+				alerts = append(alerts, a)
+			}
+		}
+		if cursor == 0 {
+			break
 		}
 	}
 
@@ -2094,29 +2101,36 @@ func listNotificationsHandler(c *gin.Context) {
 	unreadOnly := strings.ToLower(strings.TrimSpace(c.Query("unread_only"))) == "true"
 	limit := apiutil.ParsePagination(c, 20, 100).PageSize
 
-	keys, err := rdb.Keys(ctx, notificationKeyPrefix+username+":*").Result()
-	if err != nil {
-		errorResponse(c, http.StatusInternalServerError, "notifications_fetch_failed", "Failed to fetch notifications")
-		return
-	}
-
-	items := make([]Notification, 0, len(keys))
-	for _, key := range keys {
-		raw, err := rdb.Get(ctx, key).Result()
-		if err != nil || raw == "" {
-			continue
+	items := make([]Notification, 0, 64)
+	var cursor uint64
+	pattern := notificationKeyPrefix + username + ":*"
+	for {
+		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			errorResponse(c, http.StatusInternalServerError, "notifications_fetch_failed", "Failed to fetch notifications")
+			return
 		}
-		var n Notification
-		if err := json.Unmarshal([]byte(raw), &n); err != nil {
-			continue
+		cursor = next
+		for _, key := range keys {
+			raw, err := rdb.Get(ctx, key).Result()
+			if err != nil || raw == "" {
+				continue
+			}
+			var n Notification
+			if err := json.Unmarshal([]byte(raw), &n); err != nil {
+				continue
+			}
+			if !includeDismissed && n.DismissedAt != nil {
+				continue
+			}
+			if unreadOnly && n.ReadAt != nil {
+				continue
+			}
+			items = append(items, n)
 		}
-		if !includeDismissed && n.DismissedAt != nil {
-			continue
+		if cursor == 0 {
+			break
 		}
-		if unreadOnly && n.ReadAt != nil {
-			continue
-		}
-		items = append(items, n)
 	}
 
 	sort.Slice(items, func(i, j int) bool {
