@@ -26,6 +26,17 @@ A comprehensive web-based application for exploring the Bitcoin blockchain with 
 - **Address Search**: Search by Bitcoin address
 - **Autocomplete**: Real-time suggestions as you type
 
+### Financial News & Contextual Data
+- **Provider**: TheNewsAPI (`https://www.thenewsapi.com/`)
+- **Why this provider**:
+  - Clear plan-based quotas (Free: 100 requests/day; paid tiers scale to thousands/day)
+  - Supports symbol/keyword filtering via a structured `search` query parameter (AND/OR/NOT, phrases, grouping)
+- **Configuration**: copy `.env.example` to `.env` and set:
+  - `NEWS_PROVIDER=thenewsapi`
+  - `THENEWSAPI_API_TOKEN=...`
+  - `THENEWSAPI_BASE_URL=https://api.thenewsapi.com`
+  - Optional defaults: `THENEWSAPI_DEFAULT_SEARCH`, `THENEWSAPI_DEFAULT_LANGUAGE`, `THENEWSAPI_DEFAULT_LOCALE`, `THENEWSAPI_DEFAULT_CATEGORIES`
+
 ### Real-time Data Display
 - **Latest Blocks**: View the most recent blocks with key statistics
 - **Latest Transactions**: See recent transaction activity
