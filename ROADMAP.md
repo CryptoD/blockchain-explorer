@@ -38,7 +38,22 @@
 - [x] **DONE** — Dashboard watchlist panel (prices, links, group-by)
 - [x] **DONE** — Reorder (up/down) and grouping (asset type, custom group); Group field persisted
 
-## Phase 7 — Future
-- [ ] Price alerts (notifications)
+## Phase 7 — Financial news & contextual data
+- [x] **DONE** — News provider selection + documentation (TheNewsAPI)
+- [x] **DONE** — News service with Redis caching (fresh TTL + stale fallback on provider error/rate-limit)
+- [x] **DONE** — News endpoints (legacy and versioned): `GET /api/news/:symbol`, `GET /api/news/portfolio/:id`
+- [x] **DONE** — Frontend news widgets (dashboard + symbols) with loading/error states + filters
+- [x] **DONE** — User preferences for favorite/muted news sources (profile UI + backend filtering)
+
+## Phase 8 — Notifications & alerts
+- [x] **DONE** — PriceAlert model + Redis persistence + CRUD endpoints
+- [x] **DONE** — Background evaluation job (efficient Redis SCAN, metrics logging, triggered alert handling)
+- [x] **DONE** — In-app notifications (Redis-backed) + notification center UI (read/dismiss)
+- [x] **DONE** — Email delivery via SMTP (templated welcome/alert/admin-critical) + user opt-in preferences
+- [x] **DONE** — Profile settings updated (email field + granular email toggles)
+
+## Phase 9 — Future
+- [ ] Replace placeholder RPC/pricing keys with real provider credentials for full data fidelity
+- [ ] Make HTML routes resilient to API rate limiting (avoid returning JSON rate-limit responses for pages)
 - [ ] Additional watchlist/portfolio enhancements
 - [ ] Further UX and performance improvements
