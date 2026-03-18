@@ -264,15 +264,17 @@ type Portfolio struct {
 }
 
 type PriceAlert struct {
-	ID          string     `json:"id"`
-	Username    string     `json:"username"`
-	Asset       string     `json:"asset"` // e.g., "bitcoin"
-	TargetPrice float64    `json:"target_price"`
-	Currency    string     `json:"currency"`  // e.g., "usd"
-	Condition   string     `json:"condition"` // "above" or "below"
-	IsActive    bool       `json:"is_active"`
-	TriggeredAt *time.Time `json:"triggered_at"`
-	Created     time.Time  `json:"created"`
+	ID             string     `json:"id"`
+	Username       string     `json:"username"`
+	Symbol         string     `json:"symbol"`            // e.g., "bitcoin", "btc"
+	Currency       string     `json:"currency"`          // e.g., "usd"
+	Threshold      float64    `json:"threshold"`         // price threshold in Currency
+	Direction      string     `json:"direction"`         // "above" or "below"
+	DeliveryMethod string     `json:"delivery_method"`   // "in_app" or "email"
+	IsActive       bool       `json:"is_active"`
+	TriggeredAt    *time.Time `json:"triggered_at,omitempty"`
+	Created        time.Time  `json:"created"`
+	Updated        time.Time  `json:"updated"`
 }
 
 // WatchlistEntry is a single item in a watchlist (symbol or address with optional tags/notes and group).
@@ -1081,6 +1083,10 @@ func main() {
 		{
 			userV1.GET("/profile", userProfileHandler)
 			userV1.PATCH("/profile", updateProfileHandler)
+			userV1.GET("/alerts", listPriceAlertsHandler)
+			userV1.POST("/alerts", createPriceAlertHandler)
+			userV1.PUT("/alerts/:id", updatePriceAlertHandler)
+			userV1.DELETE("/alerts/:id", deletePriceAlertHandler)
 			userV1.GET("/portfolios", listPortfoliosHandler)
 			userV1.GET("/portfolios/export", exportPortfoliosHandler)
 			userV1.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
@@ -1148,6 +1154,10 @@ func main() {
 	{
 		user.GET("/profile", userProfileHandler)
 		user.PATCH("/profile", updateProfileHandler)
+		user.GET("/alerts", listPriceAlertsHandler)
+		user.POST("/alerts", createPriceAlertHandler)
+		user.PUT("/alerts/:id", updatePriceAlertHandler)
+		user.DELETE("/alerts/:id", deletePriceAlertHandler)
 		user.GET("/portfolios", listPortfoliosHandler)
 		user.GET("/portfolios/export", exportPortfoliosHandler)
 		user.GET("/portfolios/:id/export/csv", exportPortfolioCSVHandler)
@@ -1571,6 +1581,277 @@ func applyUserNewsPrefs(articles []news.Article, user *User, favoritesOnly bool)
 		}
 	}
 	return out
+}
+
+// -----------------------------
+// Price alerts (Redis-backed)
+// -----------------------------
+
+const (
+	priceAlertKeyPrefix = "alert:"
+)
+
+type createPriceAlertRequest struct {
+	Symbol         string  `json:"symbol"`
+	Currency       string  `json:"currency"`
+	Threshold      float64 `json:"threshold"`
+	Direction      string  `json:"direction"`        // above|below
+	DeliveryMethod string  `json:"delivery_method"`  // in_app|email
+	IsActive       *bool   `json:"is_active,omitempty"`
+}
+
+type updatePriceAlertRequest struct {
+	Symbol         *string  `json:"symbol,omitempty"`
+	Currency       *string  `json:"currency,omitempty"`
+	Threshold      *float64 `json:"threshold,omitempty"`
+	Direction      *string  `json:"direction,omitempty"`
+	DeliveryMethod *string  `json:"delivery_method,omitempty"`
+	IsActive       *bool    `json:"is_active,omitempty"`
+}
+
+func listPriceAlertsHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
+		return
+	}
+
+	keys, err := rdb.Keys(ctx, priceAlertKeyPrefix+username+":*").Result()
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "alerts_fetch_failed", "Failed to fetch alerts")
+		return
+	}
+
+	alerts := make([]PriceAlert, 0, len(keys))
+	for _, key := range keys {
+		raw, err := rdb.Get(ctx, key).Result()
+		if err != nil || raw == "" {
+			continue
+		}
+		var a PriceAlert
+		if err := json.Unmarshal([]byte(raw), &a); err == nil {
+			alerts = append(alerts, a)
+		}
+	}
+
+	// Newest first
+	sort.Slice(alerts, func(i, j int) bool {
+		return alerts[i].Created.After(alerts[j].Created)
+	})
+
+	c.JSON(http.StatusOK, gin.H{"data": alerts})
+}
+
+func createPriceAlertHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
+		return
+	}
+
+	var req createPriceAlertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	alert, err := buildPriceAlertFromCreate(username, req)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_alert", err.Error())
+		return
+	}
+
+	key := priceAlertKeyPrefix + username + ":" + alert.ID
+	data, _ := json.Marshal(alert)
+	if err := rdb.Set(ctx, key, data, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "alert_save_failed", "Failed to save alert")
+		return
+	}
+	c.JSON(http.StatusCreated, alert)
+}
+
+func updatePriceAlertHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" || len(id) > 64 {
+		errorResponse(c, http.StatusBadRequest, "invalid_alert_id", "Alert id must be 1-64 characters")
+		return
+	}
+
+	key := priceAlertKeyPrefix + username + ":" + id
+	raw, err := rdb.Get(ctx, key).Result()
+	if err != nil || raw == "" {
+		errorResponse(c, http.StatusNotFound, "alert_not_found", "Alert not found")
+		return
+	}
+
+	var existing PriceAlert
+	if err := json.Unmarshal([]byte(raw), &existing); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "alert_decode_failed", "Failed to load alert")
+		return
+	}
+
+	var req updatePriceAlertRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	updated, err := applyPriceAlertUpdate(existing, req)
+	if err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_alert", err.Error())
+		return
+	}
+	updated.Updated = time.Now().UTC()
+
+	data, _ := json.Marshal(updated)
+	if err := rdb.Set(ctx, key, data, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "alert_save_failed", "Failed to save alert")
+		return
+	}
+	c.JSON(http.StatusOK, updated)
+}
+
+func deletePriceAlertHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
+		return
+	}
+
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" || len(id) > 64 {
+		errorResponse(c, http.StatusBadRequest, "invalid_alert_id", "Alert id must be 1-64 characters")
+		return
+	}
+
+	key := priceAlertKeyPrefix + username + ":" + id
+	n, err := rdb.Del(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "alert_delete_failed", "Failed to delete alert")
+		return
+	}
+	if n == 0 {
+		errorResponse(c, http.StatusNotFound, "alert_not_found", "Alert not found")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"deleted": true})
+}
+
+func buildPriceAlertFromCreate(username string, req createPriceAlertRequest) (PriceAlert, error) {
+	symbol := strings.ToLower(strings.TrimSpace(req.Symbol))
+	if symbol == "" || len(symbol) > 50 {
+		return PriceAlert{}, fmt.Errorf("symbol must be 1-50 characters")
+	}
+	symbol = sanitizeText(symbol, 50)
+	currency := strings.ToLower(strings.TrimSpace(req.Currency))
+	if currency == "" {
+		currency = "usd"
+	}
+	if !pricing.SupportedFiatCurrencies[currency] {
+		return PriceAlert{}, fmt.Errorf("unsupported currency")
+	}
+	if req.Threshold <= 0 || req.Threshold > 1e12 {
+		return PriceAlert{}, fmt.Errorf("threshold must be a positive number")
+	}
+	direction := strings.ToLower(strings.TrimSpace(req.Direction))
+	if direction != "above" && direction != "below" {
+		return PriceAlert{}, fmt.Errorf("direction must be \"above\" or \"below\"")
+	}
+	method := strings.ToLower(strings.TrimSpace(req.DeliveryMethod))
+	if method == "" {
+		method = "in_app"
+	}
+	if method != "in_app" && method != "email" {
+		return PriceAlert{}, fmt.Errorf("delivery_method must be \"in_app\" or \"email\"")
+	}
+	active := true
+	if req.IsActive != nil {
+		active = *req.IsActive
+	}
+	now := time.Now().UTC()
+	return PriceAlert{
+		ID:             fmt.Sprintf("%d", time.Now().UnixNano()),
+		Username:       username,
+		Symbol:         symbol,
+		Currency:       currency,
+		Threshold:      req.Threshold,
+		Direction:      direction,
+		DeliveryMethod: method,
+		IsActive:       active,
+		Created:        now,
+		Updated:        now,
+	}, nil
+}
+
+func applyPriceAlertUpdate(existing PriceAlert, req updatePriceAlertRequest) (PriceAlert, error) {
+	out := existing
+	if req.Symbol != nil {
+		symbol := strings.ToLower(strings.TrimSpace(*req.Symbol))
+		if symbol == "" || len(symbol) > 50 {
+			return PriceAlert{}, fmt.Errorf("symbol must be 1-50 characters")
+		}
+		out.Symbol = sanitizeText(symbol, 50)
+	}
+	if req.Currency != nil {
+		currency := strings.ToLower(strings.TrimSpace(*req.Currency))
+		if currency == "" {
+			currency = "usd"
+		}
+		if !pricing.SupportedFiatCurrencies[currency] {
+			return PriceAlert{}, fmt.Errorf("unsupported currency")
+		}
+		out.Currency = currency
+	}
+	if req.Threshold != nil {
+		if *req.Threshold <= 0 || *req.Threshold > 1e12 {
+			return PriceAlert{}, fmt.Errorf("threshold must be a positive number")
+		}
+		out.Threshold = *req.Threshold
+	}
+	if req.Direction != nil {
+		direction := strings.ToLower(strings.TrimSpace(*req.Direction))
+		if direction != "above" && direction != "below" {
+			return PriceAlert{}, fmt.Errorf("direction must be \"above\" or \"below\"")
+		}
+		out.Direction = direction
+	}
+	if req.DeliveryMethod != nil {
+		method := strings.ToLower(strings.TrimSpace(*req.DeliveryMethod))
+		if method != "in_app" && method != "email" {
+			return PriceAlert{}, fmt.Errorf("delivery_method must be \"in_app\" or \"email\"")
+		}
+		out.DeliveryMethod = method
+	}
+	if req.IsActive != nil {
+		out.IsActive = *req.IsActive
+	}
+	return out, nil
 }
 
 // loginHandler handles user authentication

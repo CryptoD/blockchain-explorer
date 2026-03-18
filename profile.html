@@ -170,6 +170,80 @@
                     </div>
                 </section>
 
+                <section class="bg-bg-secondary border border-border rounded-lg p-6" aria-labelledby="heading-alerts">
+                    <div class="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3 mb-4">
+                        <div>
+                            <h2 id="heading-alerts" class="text-xl font-semibold">Price alerts</h2>
+                            <p class="text-text-secondary text-sm">Create alerts for price thresholds (stored in your account).</p>
+                        </div>
+                        <button type="button" id="alerts-refresh" class="bg-bg border border-border rounded px-3 py-2 text-sm hover:bg-hover">Refresh</button>
+                    </div>
+
+                    <div id="alerts-error" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3" role="alert"></div>
+                    <div id="alerts-empty" class="hidden text-text-secondary text-sm mb-3">No alerts yet.</div>
+
+                    <div class="overflow-x-auto">
+                        <table class="w-full text-sm">
+                            <thead>
+                                <tr class="text-left text-text-secondary border-b border-border">
+                                    <th class="py-2 pr-3">Symbol</th>
+                                    <th class="py-2 pr-3">Direction</th>
+                                    <th class="py-2 pr-3">Threshold</th>
+                                    <th class="py-2 pr-3">Currency</th>
+                                    <th class="py-2 pr-3">Delivery</th>
+                                    <th class="py-2 pr-3">Active</th>
+                                    <th class="py-2 pr-3"></th>
+                                </tr>
+                            </thead>
+                            <tbody id="alerts-list" class="divide-y divide-border"></tbody>
+                        </table>
+                    </div>
+
+                    <div class="mt-6 border-t border-border pt-4">
+                        <h3 class="font-semibold mb-3">Create alert</h3>
+                        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                            <div>
+                                <label for="alert-symbol" class="block text-xs text-text-secondary mb-1">Symbol</label>
+                                <input id="alert-symbol" type="text" class="w-full p-2 border border-border rounded bg-bg text-text" placeholder="bitcoin" />
+                            </div>
+                            <div>
+                                <label for="alert-direction" class="block text-xs text-text-secondary mb-1">Direction</label>
+                                <select id="alert-direction" class="w-full p-2 border border-border rounded bg-bg text-text">
+                                    <option value="above">Above</option>
+                                    <option value="below">Below</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="alert-threshold" class="block text-xs text-text-secondary mb-1">Threshold</label>
+                                <input id="alert-threshold" type="number" step="any" min="0" class="w-full p-2 border border-border rounded bg-bg text-text" placeholder="50000" />
+                            </div>
+                            <div>
+                                <label for="alert-currency" class="block text-xs text-text-secondary mb-1">Currency</label>
+                                <select id="alert-currency" class="w-full p-2 border border-border rounded bg-bg text-text">
+                                    <option value="usd">USD</option>
+                                    <option value="eur">EUR</option>
+                                    <option value="gbp">GBP</option>
+                                    <option value="jpy">JPY</option>
+                                    <option value="cad">CAD</option>
+                                    <option value="aud">AUD</option>
+                                    <option value="chf">CHF</option>
+                                </select>
+                            </div>
+                            <div>
+                                <label for="alert-delivery" class="block text-xs text-text-secondary mb-1">Delivery</label>
+                                <select id="alert-delivery" class="w-full p-2 border border-border rounded bg-bg text-text">
+                                    <option value="in_app">In-app</option>
+                                    <option value="email">Email</option>
+                                </select>
+                            </div>
+                            <div class="flex items-end">
+                                <button type="button" id="alert-create-btn" class="w-full bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark">Add alert</button>
+                            </div>
+                        </div>
+                        <p class="text-text-secondary text-xs mt-2">Note: Delivery is stored now; actual sending will be implemented in the notifications job.</p>
+                    </div>
+                </section>
+
                 <div class="flex flex-wrap items-center gap-4">
                     <button type="submit" id="profile-save-btn" class="bg-primary text-white px-6 py-2 rounded hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
                         Save changes
@@ -353,6 +427,7 @@
                 applyColorScheme(user.theme || '');
                 applyLanguage(user.language || '');
                 installSystemThemeListener();
+                await loadAlerts();
             } else {
                 document.getElementById('auth-buttons').classList.remove('hidden');
                 document.getElementById('user-info').classList.add('hidden');
@@ -366,10 +441,149 @@
             document.getElementById('profile-guest').classList.remove('hidden');
         }
     }
+
+    async function loadAlerts() {
+        const listEl = document.getElementById('alerts-list');
+        const errEl = document.getElementById('alerts-error');
+        const emptyEl = document.getElementById('alerts-empty');
+        if (!listEl) return;
+        errEl.classList.add('hidden');
+        emptyEl.classList.add('hidden');
+        listEl.innerHTML = '<tr><td class="py-3 text-text-secondary" colspan="7">Loading…</td></tr>';
+        try {
+            const res = await authFetch(API_BASE + '/user/alerts');
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const payload = await res.json();
+            const alerts = (payload && Array.isArray(payload.data)) ? payload.data : [];
+            if (alerts.length === 0) {
+                listEl.innerHTML = '';
+                emptyEl.classList.remove('hidden');
+                return;
+            }
+            listEl.innerHTML = alerts.map(a => `
+                <tr>
+                    <td class="py-2 pr-3 font-medium">${escapeHtml(a.symbol || '')}</td>
+                    <td class="py-2 pr-3">${escapeHtml(a.direction || '')}</td>
+                    <td class="py-2 pr-3">${escapeHtml(String(a.threshold ?? ''))}</td>
+                    <td class="py-2 pr-3">${escapeHtml((a.currency || '').toUpperCase())}</td>
+                    <td class="py-2 pr-3">${escapeHtml(a.delivery_method || '')}</td>
+                    <td class="py-2 pr-3">
+                        <label class="inline-flex items-center gap-2">
+                            <input type="checkbox" class="alert-active-toggle rounded border-border" data-id="${escapeHtml(a.id)}" ${a.is_active ? 'checked' : ''} />
+                            <span class="text-xs text-text-secondary">${a.is_active ? 'On' : 'Off'}</span>
+                        </label>
+                    </td>
+                    <td class="py-2 pr-3 text-right">
+                        <button type="button" class="alert-delete text-red-600 hover:underline" data-id="${escapeHtml(a.id)}">Delete</button>
+                    </td>
+                </tr>
+            `).join('');
+
+            listEl.querySelectorAll('.alert-delete').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-id');
+                    if (!id) return;
+                    await deleteAlert(id);
+                });
+            });
+            listEl.querySelectorAll('.alert-active-toggle').forEach(cb => {
+                cb.addEventListener('change', async () => {
+                    const id = cb.getAttribute('data-id');
+                    if (!id) return;
+                    await updateAlert(id, { is_active: cb.checked });
+                });
+            });
+        } catch (e) {
+            listEl.innerHTML = '';
+            errEl.textContent = 'Failed to load alerts.';
+            errEl.classList.remove('hidden');
+        }
+    }
+
+    async function createAlert() {
+        const errEl = document.getElementById('alerts-error');
+        errEl.classList.add('hidden');
+        const symbol = (document.getElementById('alert-symbol').value || '').trim();
+        const direction = document.getElementById('alert-direction').value;
+        const threshold = parseFloat(document.getElementById('alert-threshold').value);
+        const currency = document.getElementById('alert-currency').value;
+        const delivery_method = document.getElementById('alert-delivery').value;
+        try {
+            const res = await authFetch(API_BASE + '/user/alerts', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ symbol, direction, threshold, currency, delivery_method, is_active: true })
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                errEl.textContent = data.error || data.code || 'Failed to create alert';
+                errEl.classList.remove('hidden');
+                return;
+            }
+            document.getElementById('alert-threshold').value = '';
+            await loadAlerts();
+        } catch (e) {
+            errEl.textContent = 'Network error creating alert.';
+            errEl.classList.remove('hidden');
+        }
+    }
+
+    async function updateAlert(id, patch) {
+        const errEl = document.getElementById('alerts-error');
+        errEl.classList.add('hidden');
+        try {
+            const res = await authFetch(API_BASE + '/user/alerts/' + encodeURIComponent(id), {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(patch || {})
+            });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                errEl.textContent = data.error || data.code || 'Failed to update alert';
+                errEl.classList.remove('hidden');
+                await loadAlerts();
+            }
+        } catch (e) {
+            errEl.textContent = 'Network error updating alert.';
+            errEl.classList.remove('hidden');
+            await loadAlerts();
+        }
+    }
+
+    async function deleteAlert(id) {
+        const errEl = document.getElementById('alerts-error');
+        errEl.classList.add('hidden');
+        try {
+            const res = await authFetch(API_BASE + '/user/alerts/' + encodeURIComponent(id), { method: 'DELETE' });
+            if (!res.ok) {
+                const data = await res.json().catch(() => ({}));
+                errEl.textContent = data.error || data.code || 'Failed to delete alert';
+                errEl.classList.remove('hidden');
+                return;
+            }
+            await loadAlerts();
+        } catch (e) {
+            errEl.textContent = 'Network error deleting alert.';
+            errEl.classList.remove('hidden');
+        }
+    }
+
+    function escapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
     document.getElementById('logout-btn').addEventListener('click', async () => {
         await authFetch(API_BASE + '/logout', { method: 'POST' });
         window.location.href = '/';
     });
+    const alertsRefresh = document.getElementById('alerts-refresh');
+    if (alertsRefresh) alertsRefresh.addEventListener('click', loadAlerts);
+    const alertCreateBtn = document.getElementById('alert-create-btn');
+    if (alertCreateBtn) alertCreateBtn.addEventListener('click', createAlert);
     init();
     </script>
 </body>
