@@ -242,6 +242,38 @@
                 <p id="watchlist-alerts-note" class="mt-4 text-text-secondary text-xs border-t border-border pt-3">Price alerts — coming soon.</p>
             </div>
 
+            <!-- News panel -->
+            <section id="dashboard-news-panel" class="mb-8 bg-bg-secondary p-6 rounded-lg shadow border border-border" aria-live="polite">
+                <div class="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-4">
+                    <div>
+                        <h3 class="text-lg font-semibold">News</h3>
+                        <p class="text-text-secondary text-sm">Recent stories for <span id="dashboard-news-scope" class="font-medium">Market (BTC)</span></p>
+                    </div>
+                    <div class="flex flex-wrap items-center gap-3">
+                        <label class="inline-flex items-center gap-2 text-sm text-text-secondary">
+                            <input id="dashboard-news-filter-major" type="checkbox" class="rounded border-border bg-bg" />
+                            Major outlets only
+                        </label>
+                        <label class="inline-flex items-center gap-2 text-sm text-text-secondary">
+                            <input id="dashboard-news-filter-24h" type="checkbox" class="rounded border-border bg-bg" checked />
+                            Last 24 hours
+                        </label>
+                        <button id="dashboard-news-refresh" type="button" class="bg-bg border border-border rounded px-3 py-2 text-sm hover:bg-hover">
+                            Refresh
+                        </button>
+                    </div>
+                </div>
+
+                <div id="dashboard-news-loading" class="hidden flex items-center gap-3 text-text-secondary text-sm">
+                    <span class="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                    Loading news…
+                </div>
+                <div id="dashboard-news-error" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3" role="alert"></div>
+                <div id="dashboard-news-empty" class="hidden text-text-secondary text-sm">No recent articles found.</div>
+                <ul id="dashboard-news-list" class="space-y-3"></ul>
+                <p id="dashboard-news-meta" class="mt-4 text-xs text-text-secondary"></p>
+            </section>
+
             <!-- Breakdown by asset class (in selected fiat) -->
             <div id="breakdown-by-class" class="mb-8 bg-bg-secondary p-6 rounded-lg shadow border border-border">
                 <h3 class="text-lg font-semibold mb-4">Valuation by asset class</h3>
@@ -419,6 +451,7 @@
         initCharts();
         updateDashboard();
         loadWatchlistPanel();
+        loadDashboardNews();
     }
 
     // Watchlist panel: fetch lists, show selected watchlist entries with price and links
@@ -1116,12 +1149,151 @@
     document.getElementById('portfolio-selector').addEventListener('change', (e) => {
         currentPortfolio = e.target.value;
         updateDashboard();
+        loadDashboardNews();
     });
 
     document.getElementById('time-range-selector').addEventListener('change', (e) => {
         currentTimeRange = e.target.value;
         updateDashboard();
     });
+
+    // -----------------------------
+    // News widget (dashboard)
+    // -----------------------------
+    const DASH_MAJOR_OUTLETS = new Set([
+        'reuters.com', 'bloomberg.com', 'wsj.com', 'ft.com', 'cnbc.com',
+        'coindesk.com', 'cointelegraph.com', 'theblock.co', 'decrypt.co'
+    ]);
+
+    let dashboardLastArticles = [];
+    let dashboardLastMeta = null;
+    let dashboardLastScope = { kind: 'market', label: 'Market (BTC)' };
+
+    const dashNewsLoadingEl = document.getElementById('dashboard-news-loading');
+    const dashNewsErrorEl = document.getElementById('dashboard-news-error');
+    const dashNewsEmptyEl = document.getElementById('dashboard-news-empty');
+    const dashNewsListEl = document.getElementById('dashboard-news-list');
+    const dashNewsMetaEl = document.getElementById('dashboard-news-meta');
+    const dashNewsScopeEl = document.getElementById('dashboard-news-scope');
+    const dashMajorOnlyEl = document.getElementById('dashboard-news-filter-major');
+    const dashLast24hEl = document.getElementById('dashboard-news-filter-24h');
+    const dashRefreshBtn = document.getElementById('dashboard-news-refresh');
+
+    function dashSetNewsState({ loading, error, empty }) {
+        if (dashNewsLoadingEl) dashNewsLoadingEl.classList.toggle('hidden', !loading);
+        if (dashNewsErrorEl) dashNewsErrorEl.classList.toggle('hidden', !error);
+        if (dashNewsEmptyEl) dashNewsEmptyEl.classList.toggle('hidden', !empty);
+    }
+
+    function dashEscapeHtml(str) {
+        return String(str || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    function dashParsePublishedAt(a) {
+        const d = new Date(a.published_at);
+        return isNaN(d.getTime()) ? null : d;
+    }
+
+    function dashApplyFilters(articles) {
+        let out = Array.isArray(articles) ? articles.slice() : [];
+        const majorOnly = !!(dashMajorOnlyEl && dashMajorOnlyEl.checked);
+        const last24h = !!(dashLast24hEl && dashLast24hEl.checked);
+        const now = Date.now();
+        if (last24h) {
+            out = out.filter(a => {
+                const d = dashParsePublishedAt(a);
+                return d && (now - d.getTime()) <= 24 * 60 * 60 * 1000;
+            });
+        }
+        if (majorOnly) {
+            out = out.filter(a => DASH_MAJOR_OUTLETS.has(String(a.source || '').toLowerCase().trim()));
+        }
+        return out;
+    }
+
+    function renderDashboardNews() {
+        if (!dashNewsListEl) return;
+        dashNewsListEl.innerHTML = '';
+        const filtered = dashApplyFilters(dashboardLastArticles);
+        if (filtered.length === 0) {
+            dashSetNewsState({ loading: false, error: false, empty: true });
+        } else {
+            dashSetNewsState({ loading: false, error: false, empty: false });
+            filtered.slice(0, 8).forEach((a, idx) => {
+                const li = document.createElement('li');
+                li.className = 'p-3 rounded-lg border border-border hover:bg-hover transition-colors';
+                const d = dashParsePublishedAt(a);
+                const time = d ? d.toLocaleString() : '';
+                li.innerHTML = `
+                    <div class="flex items-start justify-between gap-3">
+                        <div class="min-w-0">
+                            <a href="${a.url}" target="_blank" rel="noopener noreferrer" class="font-semibold ${idx === 0 ? 'text-primary' : 'text-text'} hover:underline break-words">
+                                ${dashEscapeHtml(a.headline || '')}
+                            </a>
+                            ${a.summary ? `<p class="mt-1 text-sm text-text-secondary max-h-16 overflow-hidden">${dashEscapeHtml(a.summary)}</p>` : ''}
+                            <p class="mt-2 text-xs text-text-secondary">${dashEscapeHtml(String(a.source || ''))}${time ? ` • ${dashEscapeHtml(time)}` : ''}</p>
+                        </div>
+                        ${a.image_url ? `<img src="${a.image_url}" alt="" class="hidden sm:block w-16 h-16 object-cover rounded border border-border" loading="lazy" />` : ''}
+                    </div>
+                `;
+                dashNewsListEl.appendChild(li);
+            });
+        }
+        if (dashNewsMetaEl) {
+            const m = dashboardLastMeta || {};
+            const cachedText = m.cached ? (m.stale ? 'cached (stale)' : 'cached') : 'live';
+            dashNewsMetaEl.textContent = m.provider ? `Source: ${m.provider} • ${cachedText}` : '';
+        }
+        if (dashNewsScopeEl) {
+            dashNewsScopeEl.textContent = dashboardLastScope.label || 'Market (BTC)';
+        }
+    }
+
+    async function loadDashboardNews() {
+        if (!dashNewsListEl) return;
+        dashSetNewsState({ loading: true, error: false, empty: false });
+        if (dashNewsErrorEl) dashNewsErrorEl.textContent = '';
+
+        // Prefer portfolio news when a specific portfolio is selected and user is authenticated.
+        const selectedId = (document.getElementById('portfolio-selector') && document.getElementById('portfolio-selector').value) ? document.getElementById('portfolio-selector').value : '';
+        let url = '/api/news/bitcoin';
+        let scope = { kind: 'market', label: 'Market (BTC)' };
+        if (selectedId) {
+            url = '/api/news/portfolio/' + encodeURIComponent(selectedId);
+            scope = { kind: 'portfolio', label: 'Portfolio ' + selectedId };
+        }
+
+        try {
+            let res = await fetch(url, { credentials: 'include' });
+            // If portfolio endpoint requires auth and we're signed out, fall back to public market news.
+            if (!res.ok && selectedId) {
+                res = await fetch('/api/news/bitcoin');
+                scope = { kind: 'market', label: 'Market (BTC)' };
+            }
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const payload = await res.json();
+            dashboardLastArticles = Array.isArray(payload.data) ? payload.data : [];
+            dashboardLastMeta = payload.meta || {};
+            dashboardLastScope = scope;
+            renderDashboardNews();
+        } catch (e) {
+            dashboardLastArticles = [];
+            dashboardLastMeta = null;
+            if (dashNewsErrorEl) {
+                dashNewsErrorEl.textContent = 'Failed to load news. Please try again.';
+            }
+            dashSetNewsState({ loading: false, error: true, empty: false });
+        }
+    }
+
+    if (dashMajorOnlyEl) dashMajorOnlyEl.addEventListener('change', renderDashboardNews);
+    if (dashLast24hEl) dashLast24hEl.addEventListener('change', renderDashboardNews);
+    if (dashRefreshBtn) dashRefreshBtn.addEventListener('click', loadDashboardNews);
 
     document.getElementById('logout-btn').addEventListener('click', async () => {
         await fetch('/api/logout', { method: 'POST' });
