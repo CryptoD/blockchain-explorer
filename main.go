@@ -25,6 +25,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/getsentry/sentry-go"
@@ -234,6 +235,7 @@ type User struct {
 	Username               string    `json:"username"`
 	Password               string    `json:"-"`    // Hashed password, never sent in JSON
 	Role                   string    `json:"role"` // "admin" or "user"
+	Email                  string    `json:"email,omitempty"`                   // Optional email for notifications/onboarding
 	PreferredCurrency      string    `json:"preferred_currency,omitempty"`      // Fiat code (e.g. usd, eur); validated against supported list
 	Theme                  string    `json:"theme,omitempty"`                    // "light", "dark", "system"
 	Language               string    `json:"language,omitempty"`                // e.g. "en", "es"; validated against supported list
@@ -564,7 +566,7 @@ func initializeDefaultAdmin() {
 }
 
 // createUser adds a new user to the system
-func createUser(username, password, role string) error {
+func createUser(username, password, role, email string) error {
 	userMutex.Lock()
 	defer userMutex.Unlock()
 
@@ -581,6 +583,7 @@ func createUser(username, password, role string) error {
 		Username: username,
 		Password: string(hashedPassword),
 		Role:     role,
+		Email:    strings.TrimSpace(email),
 		Created:  time.Now(),
 	}
 
@@ -633,6 +636,7 @@ func userProfileHandler(c *gin.Context) {
 
 // updateProfileRequest is the body for PATCH /api/user/profile (profile settings).
 type updateProfileRequest struct {
+	Email                   *string `json:"email"`
 	PreferredCurrency       *string `json:"preferred_currency"`        // Fiat code (e.g. usd, eur); empty string clears preference
 	Theme                   *string `json:"theme"`                    // "light", "dark", "system"
 	Language                *string `json:"language"`                // e.g. "en", "es"
@@ -662,6 +666,22 @@ func updateProfileHandler(c *gin.Context) {
 	if !exists {
 		errorResponse(c, http.StatusNotFound, "user_profile_not_found", "User profile not found")
 		return
+	}
+
+	if body.Email != nil {
+		v := strings.TrimSpace(*body.Email)
+		if v != "" {
+			if len(v) > 254 {
+				errorResponse(c, http.StatusBadRequest, "invalid_email", "Email must be at most 254 characters")
+				return
+			}
+			emailPattern := regexp.MustCompile(`^[^@\s]+@[^@\s]+\.[^@\s]+$`)
+			if !emailPattern.MatchString(v) {
+				errorResponse(c, http.StatusBadRequest, "invalid_email", "Invalid email format")
+				return
+			}
+		}
+		user.Email = v
 	}
 
 	if body.PreferredCurrency != nil {
@@ -1032,6 +1052,26 @@ func main() {
 		}
 	} else {
 		log.WithField("provider", cfg.NewsProvider).Warn("News provider not configured; news endpoints will be unavailable")
+	}
+
+	// Initialize email service (SMTP)
+	if cfg.EmailProvider == "" {
+		cfg.EmailProvider = "smtp"
+	}
+	if cfg.EmailProvider == "smtp" && strings.TrimSpace(cfg.EmailFrom) != "" && strings.TrimSpace(cfg.SMTPHost) != "" {
+		sender := &email.SMTPSender{
+			Host:        cfg.SMTPHost,
+			Port:        cfg.SMTPPort,
+			Username:    cfg.SMTPUsername,
+			Password:    cfg.SMTPPassword,
+			UseSTARTTLS: cfg.SMTPStartTLS,
+			SkipVerify:  cfg.SMTPSkipVerify,
+		}
+		emailService = email.NewService(sender, email.Address{Email: cfg.EmailFrom, Name: cfg.EmailFromName})
+		emailTemplates = email.NewTemplates(cfg.AppBaseURL)
+		log.WithFields(log.Fields{"provider": sender.Name(), "from": cfg.EmailFrom}).Info("Email service initialized")
+	} else {
+		log.WithField("provider", cfg.EmailProvider).Warn("Email service not configured; emails disabled")
 	}
 
 	// Initialize default admin user
@@ -1960,6 +2000,14 @@ func evaluatePriceAlerts() {
 				continue
 			}
 			triggered++
+
+			// Best-effort email delivery for triggered alerts.
+			if strings.ToLower(strings.TrimSpace(a.DeliveryMethod)) == "email" {
+				user, ok := getUser(a.Username)
+				if ok && user.NotificationsEmail && strings.TrimSpace(user.Email) != "" {
+					sendAlertTriggeredEmail(user, a)
+				}
+			}
 		}
 		if cursor == 0 {
 			break
@@ -1977,6 +2025,57 @@ func evaluatePriceAlerts() {
 		"update_errors": updateErrors,
 		"duration_ms":   elapsed.Milliseconds(),
 	}).Info("Price alert evaluation cycle complete")
+}
+
+func sendWelcomeEmail(username, toEmail string) {
+	if emailService == nil || emailTemplates == nil || !emailService.Enabled() {
+		return
+	}
+	subj, textBody, htmlBody := emailTemplates.Welcome(email.WelcomeData{Username: username})
+	emailService.Enqueue(email.Message{
+		To:      email.Address{Email: toEmail},
+		Subject: subj,
+		Text:    textBody,
+		HTML:    htmlBody,
+		Tags:    map[string]string{"type": "welcome"},
+	})
+}
+
+func sendAlertTriggeredEmail(user User, alert PriceAlert) {
+	if emailService == nil || emailTemplates == nil || !emailService.Enabled() {
+		return
+	}
+	subj, textBody, htmlBody := emailTemplates.AlertTriggered(email.AlertTriggeredData{
+		Username:  user.Username,
+		Symbol:    alert.Symbol,
+		Currency:  strings.ToUpper(alert.Currency),
+		Direction: alert.Direction,
+		Threshold: alert.Threshold,
+	})
+	ok := emailService.Enqueue(email.Message{
+		To:      email.Address{Email: user.Email, Name: user.Username},
+		Subject: subj,
+		Text:    textBody,
+		HTML:    htmlBody,
+		Tags:    map[string]string{"type": "alert_triggered", "symbol": alert.Symbol},
+	})
+	if !ok {
+		log.WithFields(log.Fields{"username": user.Username, "symbol": alert.Symbol}).Warn("Email queue full; dropping alert email")
+	}
+}
+
+func sendAdminCriticalEmail(title, message string) {
+	if emailService == nil || emailTemplates == nil || !emailService.Enabled() || appConfig == nil || strings.TrimSpace(appConfig.AdminEmail) == "" {
+		return
+	}
+	subj, textBody, htmlBody := emailTemplates.AdminCritical(email.AdminCriticalData{Title: title, Message: message})
+	emailService.Enqueue(email.Message{
+		To:      email.Address{Email: appConfig.AdminEmail},
+		Subject: subj,
+		Text:    textBody,
+		HTML:    htmlBody,
+		Tags:    map[string]string{"type": "admin_critical"},
+	})
 }
 
 // loginHandler handles user authentication
@@ -2145,7 +2244,7 @@ func registerHandler(c *gin.Context) {
 	}
 
 	// Create user with default "user" role
-	err := createUser(registerReq.Username, registerReq.Password, "user")
+	err := createUser(registerReq.Username, registerReq.Password, "user", registerReq.Email)
 	if err != nil {
 		if err.Error() == "user already exists" {
 			errorResponse(c, http.StatusConflict, "username_taken", "Username already exists")
@@ -2158,6 +2257,11 @@ func registerHandler(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully"})
 	log.WithField("username", registerReq.Username).Info("New user registered")
+
+	// Best-effort onboarding email if configured and email provided.
+	if strings.TrimSpace(registerReq.Email) != "" {
+		sendWelcomeEmail(registerReq.Username, registerReq.Email)
+	}
 }
 
 // feedbackHandler handles user feedback submissions
@@ -4643,6 +4747,9 @@ var (
 	assetPricer pricing.AssetPricer
 	// newsService fetches and caches contextual financial news.
 	newsService *news.Service
+	// emailService sends templated emails for onboarding/alerts.
+	emailService *email.Service
+	emailTemplates *email.Templates
 	// appConfig holds the parsed application configuration.
 	appConfig *config.Config
 )

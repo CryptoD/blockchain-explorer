@@ -19,6 +19,19 @@ type Config struct {
 	GetBlockAccessToken string
 	SentryDSN          string
 
+	// Email delivery
+	EmailProvider   string
+	EmailFrom       string
+	EmailFromName   string
+	AdminEmail      string
+	SMTPHost        string
+	SMTPPort        int
+	SMTPUsername    string
+	SMTPPassword    string
+	SMTPStartTLS    bool
+	SMTPSkipVerify  bool
+	AppBaseURL      string
+
 	// News provider (contextual / financial news)
 	NewsProvider string
 	TheNewsAPIBaseURL          string
@@ -62,6 +75,17 @@ func Load() (*Config, error) {
 		GetBlockBaseURL:       strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
 		GetBlockAccessToken:   strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
 		SentryDSN:             strings.TrimSpace(os.Getenv("SENTRY_DSN")),
+		EmailProvider:         strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_PROVIDER"))),
+		EmailFrom:             strings.TrimSpace(os.Getenv("EMAIL_FROM")),
+		EmailFromName:         strings.TrimSpace(os.Getenv("EMAIL_FROM_NAME")),
+		AdminEmail:            strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
+		SMTPHost:              strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:              GetEnvIntWithDefault("SMTP_PORT", 587),
+		SMTPUsername:          strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:          strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPStartTLS:          strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_STARTTLS"))) == "true",
+		SMTPSkipVerify:        strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_VERIFY"))) == "true",
+		AppBaseURL:            strings.TrimSpace(os.Getenv("APP_BASE_URL")),
 		NewsProvider:          strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
 		TheNewsAPIBaseURL:     strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
 		TheNewsAPIToken:       strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),

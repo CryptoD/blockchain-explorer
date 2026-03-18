@@ -115,6 +115,11 @@
                     <h2 id="heading-general" class="text-xl font-semibold mb-4">General</h2>
                     <div class="space-y-4">
                         <div>
+                            <label for="profile-email" class="block text-sm font-medium text-text mb-1">Email (for alerts)</label>
+                            <input id="profile-email" name="email" type="email" class="w-full max-w-md p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="you@example.com" />
+                            <p class="text-text-secondary text-sm mt-1">Used for onboarding and alert emails when enabled.</p>
+                        </div>
+                        <div>
                             <label for="profile-currency" class="block text-sm font-medium text-text mb-1">Preferred currency</label>
                             <select id="profile-currency" name="preferred_currency" class="w-full max-w-xs p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary">
                                 <option value="">None</option>
@@ -304,6 +309,7 @@
     function populateForm(user) {
         const themeSel = document.getElementById('profile-theme');
         const langSel = document.getElementById('profile-language');
+        const emailEl = document.getElementById('profile-email');
         const currencySel = document.getElementById('profile-currency');
         const landingSel = document.getElementById('profile-landing');
         const emailCb = document.getElementById('profile-notify-email');
@@ -312,6 +318,7 @@
         const blockedTa = document.getElementById('profile-news-blocked');
         if (themeSel && user.theme) themeSel.value = user.theme;
         if (langSel && user.language) langSel.value = user.language;
+        if (emailEl) emailEl.value = user.email || '';
         if (currencySel && user.preferred_currency) currencySel.value = user.preferred_currency;
         if (landingSel && user.default_landing_page) landingSel.value = user.default_landing_page;
         if (emailCb) emailCb.checked = !!user.notifications_email;
@@ -344,6 +351,7 @@
         err.classList.add('hidden');
         const theme = document.getElementById('profile-theme').value || null;
         const language = document.getElementById('profile-language').value || null;
+        const emailValue = document.getElementById('profile-email') ? (document.getElementById('profile-email').value || '').trim() : null;
         const preferred_currency = document.getElementById('profile-currency').value || null;
         const default_landing_page = document.getElementById('profile-landing').value || null;
         const notifications_email = document.getElementById('profile-notify-email').checked;
@@ -353,6 +361,8 @@
         const body = {};
         if (theme !== null) body.theme = theme;
         if (language !== null) body.language = language;
+        // Email is stored on the user profile; validate server-side.
+        if (emailValue !== null) body.email = emailValue;
         if (preferred_currency !== null) body.preferred_currency = preferred_currency;
         if (default_landing_page !== null) body.default_landing_page = default_landing_page;
         body.notifications_email = notifications_email;
