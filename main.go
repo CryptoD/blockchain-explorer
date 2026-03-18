@@ -25,6 +25,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -986,6 +987,30 @@ func main() {
 		Bond:      &pricing.StaticBondSource{PricePer100: pricing.DefaultBondPrices()},
 	}
 
+	// Initialize news service (provider + Redis cache).
+	// Symbol endpoint can operate without auth; portfolio endpoint requires auth.
+	if cfg.NewsProvider == "" {
+		cfg.NewsProvider = "thenewsapi"
+	}
+	if cfg.NewsProvider == "thenewsapi" && cfg.TheNewsAPIToken != "" {
+		prov := &news.TheNewsAPIProvider{
+			BaseURL:           cfg.TheNewsAPIBaseURL,
+			Token:             cfg.TheNewsAPIToken,
+			Client:            httpClient,
+			DefaultLanguage:   cfg.TheNewsAPIDefaultLanguage,
+			DefaultLocale:     cfg.TheNewsAPIDefaultLocale,
+			DefaultCategories: cfg.TheNewsAPIDefaultCategories,
+		}
+		newsService = &news.Service{
+			Provider: prov,
+			Cache:    &news.RedisCache{RDB: rdb},
+			FreshTTL: time.Duration(cfg.NewsCacheTTLSeconds) * time.Second,
+			StaleTTL: time.Duration(cfg.NewsStaleTTLSeconds) * time.Second,
+		}
+	} else {
+		log.WithField("provider", cfg.NewsProvider).Warn("News provider not configured; news endpoints will be unavailable")
+	}
+
 	// Initialize default admin user
 	initializeDefaultAdmin()
 
@@ -1021,6 +1046,9 @@ func main() {
 		apiV1.GET("/price-history", priceHistoryHandler)
 		apiV1.POST("/feedback", feedbackHandler)
 
+		// Public contextual news (by symbol/keyword)
+		apiV1.GET("/news/:symbol", newsBySymbolHandler)
+
 		// Authentication routes
 		apiV1.POST("/login", loginHandler)
 		apiV1.POST("/logout", logoutHandler)
@@ -1047,6 +1075,13 @@ func main() {
 			userV1.POST("/watchlists/:id/entries", addWatchlistEntryHandler)
 			userV1.PUT("/watchlists/:id/entries/:index", updateWatchlistEntryHandler)
 			userV1.DELETE("/watchlists/:id/entries/:index", deleteWatchlistEntryHandler)
+		}
+
+		// Portfolio news requires auth because portfolio IDs are per-user.
+		newsV1 := apiV1.Group("/news")
+		newsV1.Use(authMiddleware)
+		{
+			newsV1.GET("/portfolio/:id", newsByPortfolioHandler)
 		}
 
 		// Admin routes (require authentication and admin role)
@@ -1076,6 +1111,9 @@ func main() {
 	r.GET("/api/rates", ratesHandler)
 	r.GET("/api/price-history", priceHistoryHandler)
 
+	// Public contextual news (by symbol/keyword)
+	r.GET("/api/news/:symbol", newsBySymbolHandler)
+
 	r.POST("/api/feedback", feedbackHandler)
 
 	// Authentication routes
@@ -1104,6 +1142,13 @@ func main() {
 		user.POST("/watchlists/:id/entries", addWatchlistEntryHandler)
 		user.PUT("/watchlists/:id/entries/:index", updateWatchlistEntryHandler)
 		user.DELETE("/watchlists/:id/entries/:index", deleteWatchlistEntryHandler)
+	}
+
+	// Portfolio news requires auth because portfolio IDs are per-user.
+	newsLegacy := r.Group("/api/news")
+	newsLegacy.Use(authMiddleware)
+	{
+		newsLegacy.GET("/portfolio/:id", newsByPortfolioHandler)
 	}
 
 	// Admin routes (require authentication and admin role)
@@ -1201,6 +1246,190 @@ func fetchLatestTransactions(nBlocks, nTxs int) ([]map[string]interface{}, error
 		}
 	}
 	return transactions, nil
+}
+
+// GET /api/news/:symbol and GET /api/v1/news/:symbol
+// Public endpoint; returns deduplicated articles for the given symbol/keyword.
+func newsBySymbolHandler(c *gin.Context) {
+	if newsService == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "news_unavailable", "News service is not configured")
+		return
+	}
+	symbol := strings.TrimSpace(c.Param("symbol"))
+	if symbol == "" || len(symbol) > 50 {
+		errorResponse(c, http.StatusBadRequest, "invalid_symbol", "Symbol must be 1-50 characters")
+		return
+	}
+	symbol = sanitizeText(symbol, 50)
+
+	limit := apiutil.ParsePagination(c, 20, 50).PageSize
+
+	// Build query: caller symbol plus default search (if configured).
+	query := buildNewsQueryForSymbol(symbol, appConfig)
+	extras := newsExtrasFromConfig(appConfig)
+	key := news.CacheKey(newsService.ProviderName(), "news:symbol", query, extras)
+
+	articles, cached, stale, err := newsService.Get(c.Request.Context(), key, query, limit)
+	if err != nil {
+		// Provider error: we already attempted stale fallback inside service.
+		status := http.StatusBadGateway
+		if errors.Is(err, news.ErrRateLimited) {
+			status = http.StatusTooManyRequests
+		}
+		errorResponse(c, status, "news_fetch_failed", "Failed to fetch news")
+		return
+	}
+
+	c.JSON(http.StatusOK, news.ListResponse{
+		Data: articles,
+		Meta: news.Meta{
+			Provider: newsService.ProviderName(),
+			Cached:   cached,
+			Stale:    stale,
+			Query:    query,
+		},
+	})
+}
+
+// GET /api/news/portfolio/:id and GET /api/v1/news/portfolio/:id
+// Authenticated endpoint; returns deduplicated articles relevant to the portfolio's assets.
+func newsByPortfolioHandler(c *gin.Context) {
+	if newsService == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "news_unavailable", "News service is not configured")
+		return
+	}
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	portfolioID := strings.TrimSpace(c.Param("id"))
+	if portfolioID == "" || len(portfolioID) > 64 {
+		errorResponse(c, http.StatusBadRequest, "invalid_portfolio_id", "Portfolio id must be 1-64 characters")
+		return
+	}
+
+	key := "portfolio:" + username + ":" + portfolioID
+	data, err := rdb.Get(ctx, key).Result()
+	if err != nil {
+		errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
+		return
+	}
+	var p Portfolio
+	if err := json.Unmarshal([]byte(data), &p); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "portfolio_decode_failed", "Failed to load portfolio")
+		return
+	}
+
+	limit := apiutil.ParsePagination(c, 20, 50).PageSize
+
+	query := buildNewsQueryForPortfolio(&p, appConfig)
+	if query == "" {
+		errorResponse(c, http.StatusBadRequest, "portfolio_empty", "Portfolio has no searchable assets")
+		return
+	}
+	extras := newsExtrasFromConfig(appConfig)
+	cacheKey := news.CacheKey(newsService.ProviderName(), "news:portfolio:"+portfolioID, query, extras)
+
+	articles, cached, stale, err := newsService.Get(c.Request.Context(), cacheKey, query, limit)
+	if err != nil {
+		status := http.StatusBadGateway
+		if errors.Is(err, news.ErrRateLimited) {
+			status = http.StatusTooManyRequests
+		}
+		errorResponse(c, status, "news_fetch_failed", "Failed to fetch news")
+		return
+	}
+
+	c.JSON(http.StatusOK, news.ListResponse{
+		Data: articles,
+		Meta: news.Meta{
+			Provider: newsService.ProviderName(),
+			Cached:   cached,
+			Stale:    stale,
+			Query:    query,
+		},
+	})
+}
+
+func buildNewsQueryForSymbol(symbol string, cfg *config.Config) string {
+	s := strings.TrimSpace(symbol)
+	if s == "" {
+		return ""
+	}
+	// TheNewsAPI query language uses | for OR and quotes for phrases.
+	// We keep it simple: symbol or quoted symbol plus optional default search.
+	quoted := `"` + strings.ReplaceAll(s, `"`, "") + `"`
+	q := "(" + s + " | " + quoted + ")"
+	if cfg != nil {
+		if base := strings.TrimSpace(cfg.TheNewsAPIDefaultSearch); base != "" {
+			q = q + " + (" + base + ")"
+		}
+	}
+	return q
+}
+
+func buildNewsQueryForPortfolio(p *Portfolio, cfg *config.Config) string {
+	if p == nil || len(p.Items) == 0 {
+		return ""
+	}
+	terms := make([]string, 0, len(p.Items))
+	seen := make(map[string]bool, len(p.Items))
+	for _, it := range p.Items {
+		// Prefer symbol; fall back to label.
+		sym := strings.TrimSpace(it.Symbol)
+		if sym == "" {
+			sym = strings.TrimSpace(it.Label)
+		}
+		sym = sanitizeText(sym, 50)
+		sym = strings.TrimSpace(sym)
+		if sym == "" {
+			continue
+		}
+		k := strings.ToLower(sym)
+		if seen[k] {
+			continue
+		}
+		seen[k] = true
+		terms = append(terms, sym)
+		if len(terms) >= 10 {
+			break
+		}
+	}
+	if len(terms) == 0 {
+		return ""
+	}
+	// Build OR query: (a | "a" | b | "b" ...)
+	var parts []string
+	for _, t := range terms {
+		clean := strings.ReplaceAll(t, `"`, "")
+		parts = append(parts, clean, `"`+clean+`"`)
+	}
+	q := "(" + strings.Join(parts, " | ") + ")"
+	if cfg != nil {
+		if base := strings.TrimSpace(cfg.TheNewsAPIDefaultSearch); base != "" {
+			q = q + " + (" + base + ")"
+		}
+	}
+	return q
+}
+
+func newsExtrasFromConfig(cfg *config.Config) map[string]string {
+	if cfg == nil {
+		return nil
+	}
+	out := map[string]string{}
+	if v := strings.TrimSpace(cfg.TheNewsAPIDefaultLanguage); v != "" {
+		out["language"] = v
+	}
+	if v := strings.TrimSpace(cfg.TheNewsAPIDefaultLocale); v != "" {
+		out["locale"] = v
+	}
+	if v := strings.TrimSpace(cfg.TheNewsAPIDefaultCategories); v != "" {
+		out["categories"] = v
+	}
+	return out
 }
 
 // loginHandler handles user authentication
@@ -3865,6 +4094,8 @@ var (
 	pricingClient pricing.Client
 	// assetPricer unifies crypto, commodity, and bond pricing for portfolio valuation.
 	assetPricer pricing.AssetPricer
+	// newsService fetches and caches contextual financial news.
+	newsService *news.Service
 	// appConfig holds the parsed application configuration.
 	appConfig *config.Config
 )

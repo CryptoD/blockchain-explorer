@@ -19,6 +19,17 @@ type Config struct {
 	GetBlockAccessToken string
 	SentryDSN          string
 
+	// News provider (contextual / financial news)
+	NewsProvider string
+	TheNewsAPIBaseURL          string
+	TheNewsAPIToken            string
+	TheNewsAPIDefaultSearch    string
+	TheNewsAPIDefaultLanguage  string
+	TheNewsAPIDefaultLocale    string
+	TheNewsAPIDefaultCategories string
+	NewsCacheTTLSeconds        int // "fresh" cache TTL; default 300 (5m)
+	NewsStaleTTLSeconds        int // "stale fallback" TTL; default 3600 (1h)
+
 	// Security / cookies
 	SecureCookies bool
 
@@ -51,6 +62,15 @@ func Load() (*Config, error) {
 		GetBlockBaseURL:       strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
 		GetBlockAccessToken:   strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
 		SentryDSN:             strings.TrimSpace(os.Getenv("SENTRY_DSN")),
+		NewsProvider:          strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
+		TheNewsAPIBaseURL:     strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
+		TheNewsAPIToken:       strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),
+		TheNewsAPIDefaultSearch: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_SEARCH")),
+		TheNewsAPIDefaultLanguage: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LANGUAGE")),
+		TheNewsAPIDefaultLocale: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LOCALE")),
+		TheNewsAPIDefaultCategories: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_CATEGORIES")),
+		NewsCacheTTLSeconds:   GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
+		NewsStaleTTLSeconds:   GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
 		SecureCookies:         UseSecureCookies(),
 		RateLimitWindowSeconds:     GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitPerIP:             GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
