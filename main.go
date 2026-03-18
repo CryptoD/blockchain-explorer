@@ -1238,6 +1238,17 @@ func main() {
 		}
 	}()
 
+	// Start background job to evaluate price alerts
+	go func() {
+		log.Info("Starting background price alert evaluation job")
+		ticker := time.NewTicker(60 * time.Second)
+		defer ticker.Stop()
+		for {
+			evaluatePriceAlerts()
+			<-ticker.C
+		}
+	}()
+
 	defer sentry.Flush(2 * time.Second)
 
 	r.Run(":8080")
@@ -1852,6 +1863,120 @@ func applyPriceAlertUpdate(existing PriceAlert, req updatePriceAlertRequest) (Pr
 		out.IsActive = *req.IsActive
 	}
 	return out, nil
+}
+
+// evaluatePriceAlerts periodically checks active alerts against current prices
+// and marks triggered alerts in Redis.
+func evaluatePriceAlerts() {
+	start := time.Now()
+	if rdb == nil || assetPricer == nil {
+		return
+	}
+
+	ctx := context.Background()
+	var (
+		scannedKeys   int
+		evaluated     int
+		triggered     int
+		skipped       int
+		decodeErrors  int
+		priceErrors   int
+		updateErrors  int
+	)
+
+	// Per-cycle price cache to avoid repeated upstream calls.
+	priceCache := make(map[string]float64) // key: symbol|currency
+	priceOK := make(map[string]bool)
+
+	var cursor uint64
+	pattern := priceAlertKeyPrefix + "*"
+	for {
+		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
+		if err != nil {
+			log.WithError(err).Warn("alert evaluation scan failed")
+			break
+		}
+		cursor = next
+		scannedKeys += len(keys)
+		for _, key := range keys {
+			raw, err := rdb.Get(ctx, key).Result()
+			if err != nil || raw == "" {
+				continue
+			}
+			var a PriceAlert
+			if err := json.Unmarshal([]byte(raw), &a); err != nil {
+				decodeErrors++
+				continue
+			}
+			if !a.IsActive || a.Symbol == "" || a.Currency == "" || a.Threshold <= 0 || (a.Direction != "above" && a.Direction != "below") {
+				skipped++
+				continue
+			}
+			if a.TriggeredAt != nil {
+				skipped++
+				continue
+			}
+
+			evaluated++
+			symbol := strings.ToLower(strings.TrimSpace(a.Symbol))
+			currency := strings.ToLower(strings.TrimSpace(a.Currency))
+			cacheKey := symbol + "|" + currency
+
+			var price float64
+			ok := false
+			if v, exists := priceCache[cacheKey]; exists {
+				price = v
+				ok = priceOK[cacheKey]
+			} else {
+				// Currently we treat alerts as crypto pricing (CoinGecko-backed).
+				if p, ok2 := assetPricer.GetAssetPriceInFiat(ctx, pricing.AssetClassCrypto, symbol, currency, 1); ok2 && p > 0 {
+					price = p
+					ok = true
+				} else {
+					ok = false
+				}
+				priceCache[cacheKey] = price
+				priceOK[cacheKey] = ok
+			}
+
+			if !ok {
+				priceErrors++
+				continue
+			}
+
+			isTriggered := (a.Direction == "above" && price >= a.Threshold) || (a.Direction == "below" && price <= a.Threshold)
+			if !isTriggered {
+				continue
+			}
+
+			now := time.Now().UTC()
+			a.IsActive = false
+			a.TriggeredAt = &now
+			a.Updated = now
+
+			b, _ := json.Marshal(a)
+			if err := rdb.Set(ctx, key, b, 0).Err(); err != nil {
+				updateErrors++
+				continue
+			}
+			triggered++
+		}
+		if cursor == 0 {
+			break
+		}
+	}
+
+	elapsed := time.Since(start)
+	log.WithFields(log.Fields{
+		"scanned_keys":  scannedKeys,
+		"evaluated":     evaluated,
+		"triggered":     triggered,
+		"skipped":       skipped,
+		"decode_errors": decodeErrors,
+		"price_errors":  priceErrors,
+		"update_errors": updateErrors,
+		"duration_ms":   elapsed.Milliseconds(),
+	}).Info("Price alert evaluation cycle complete")
 }
 
 // loginHandler handles user authentication
