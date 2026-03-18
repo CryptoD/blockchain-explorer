@@ -58,6 +58,10 @@
             <div id="auth-section" class="flex items-center gap-4">
                 <div id="user-info" class="hidden text-sm text-text-secondary">
                     Welcome, <span id="username-display"></span>!
+                    <button id="notif-btn" class="ml-3 inline-flex items-center gap-2 px-2 py-1 rounded hover:bg-hover border border-border" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+                        <span aria-hidden="true">🔔</span>
+                        <span id="notif-badge" class="hidden text-xs bg-primary text-white rounded-full px-2 py-0.5">0</span>
+                    </button>
                     <button id="logout-btn" class="ml-2 text-red-600 hover:text-red-800">Logout</button>
                 </div>
                 <div id="auth-buttons" class="flex items-center gap-2">
@@ -96,6 +100,29 @@
             </div>
         </div>
     </header>
+
+    <!-- Notification center (popover) -->
+    <div id="notif-popover" class="hidden fixed inset-0 z-50" aria-hidden="true">
+        <div id="notif-backdrop" class="absolute inset-0 bg-black/30"></div>
+        <div class="absolute top-16 right-4 md:right-8 w-[92vw] max-w-md bg-bg-secondary border border-border rounded-lg shadow-xl overflow-hidden">
+            <div class="flex items-center justify-between px-4 py-3 border-b border-border">
+                <h2 class="font-semibold">Notifications</h2>
+                <div class="flex items-center gap-2">
+                    <button id="notif-mark-all-read" type="button" class="text-sm text-primary hover:underline">Mark all read</button>
+                    <button id="notif-close" type="button" class="text-sm text-text-secondary hover:text-text" aria-label="Close">✕</button>
+                </div>
+            </div>
+            <div class="px-4 py-3">
+                <div id="notif-loading" class="hidden flex items-center gap-3 text-text-secondary text-sm">
+                    <span class="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
+                    Loading…
+                </div>
+                <div id="notif-error" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3" role="alert"></div>
+                <div id="notif-empty" class="hidden text-text-secondary text-sm">No notifications.</div>
+                <ul id="notif-list" class="space-y-2 max-h-[60vh] overflow-auto"></ul>
+            </div>
+        </div>
+    </div>
 
     <!-- Main Dashboard Content -->
     <main class="flex-1 px-4 py-8">
@@ -458,6 +485,7 @@
         updateDashboard();
         loadWatchlistPanel();
         loadDashboardNews();
+        initNotificationCenter();
     }
 
     // Watchlist panel: fetch lists, show selected watchlist entries with price and links
@@ -1308,6 +1336,167 @@
         await fetch('/api/logout', { method: 'POST' });
         window.location.href = '/';
     });
+
+    // -----------------------------
+    // Notification center (in-app)
+    // -----------------------------
+    let notifItems = [];
+    function initNotificationCenter() {
+        const btn = document.getElementById('notif-btn');
+        const pop = document.getElementById('notif-popover');
+        if (!btn || !pop) return;
+
+        function open() {
+            pop.classList.remove('hidden');
+            pop.setAttribute('aria-hidden', 'false');
+            btn.setAttribute('aria-expanded', 'true');
+            loadNotifications();
+        }
+        function close() {
+            pop.classList.add('hidden');
+            pop.setAttribute('aria-hidden', 'true');
+            btn.setAttribute('aria-expanded', 'false');
+        }
+        btn.addEventListener('click', () => {
+            if (pop.classList.contains('hidden')) open();
+            else close();
+        });
+        document.getElementById('notif-close').addEventListener('click', close);
+        document.getElementById('notif-backdrop').addEventListener('click', close);
+        document.getElementById('notif-mark-all-read').addEventListener('click', async () => {
+            const unread = notifItems.filter(n => !n.read_at);
+            await Promise.all(unread.map(n => updateNotification(n.id, { read: true })));
+            await loadNotifications();
+        });
+
+        // Poll occasionally while signed in.
+        setInterval(() => {
+            if (!document.getElementById('user-info').classList.contains('hidden')) {
+                refreshUnreadBadge();
+            }
+        }, 15000);
+        refreshUnreadBadge();
+    }
+
+    function setNotifState({ loading, error, empty }) {
+        const l = document.getElementById('notif-loading');
+        const e = document.getElementById('notif-error');
+        const em = document.getElementById('notif-empty');
+        if (l) l.classList.toggle('hidden', !loading);
+        if (e) e.classList.toggle('hidden', !error);
+        if (em) em.classList.toggle('hidden', !empty);
+    }
+
+    function esc(s) {
+        return String(s || '')
+            .replace(/&/g, '&amp;')
+            .replace(/</g, '&lt;')
+            .replace(/>/g, '&gt;')
+            .replace(/"/g, '&quot;')
+            .replace(/'/g, '&#39;');
+    }
+
+    async function refreshUnreadBadge() {
+        const badge = document.getElementById('notif-badge');
+        if (!badge) return;
+        try {
+            const res = await fetch('/api/v1/user/notifications?unread_only=true&page_size=100', { credentials: 'include' });
+            if (!res.ok) {
+                badge.classList.add('hidden');
+                return;
+            }
+            const payload = await res.json();
+            const items = (payload && Array.isArray(payload.data)) ? payload.data : [];
+            const n = items.length;
+            if (n > 0) {
+                badge.textContent = String(n);
+                badge.classList.remove('hidden');
+            } else {
+                badge.classList.add('hidden');
+            }
+        } catch (e) {
+            badge.classList.add('hidden');
+        }
+    }
+
+    async function loadNotifications() {
+        const list = document.getElementById('notif-list');
+        const errEl = document.getElementById('notif-error');
+        if (!list) return;
+        errEl.classList.add('hidden');
+        errEl.textContent = '';
+        setNotifState({ loading: true, error: false, empty: false });
+        list.innerHTML = '';
+        try {
+            const res = await fetch('/api/v1/user/notifications?page_size=50', { credentials: 'include' });
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            const payload = await res.json();
+            notifItems = (payload && Array.isArray(payload.data)) ? payload.data : [];
+            if (notifItems.length === 0) {
+                setNotifState({ loading: false, error: false, empty: true });
+                await refreshUnreadBadge();
+                return;
+            }
+            setNotifState({ loading: false, error: false, empty: false });
+            list.innerHTML = notifItems.map(n => {
+                const unread = !n.read_at;
+                const created = n.created ? new Date(n.created).toLocaleString() : '';
+                return `
+                    <li class="p-3 rounded-lg border border-border ${unread ? 'bg-primary/5' : ''}">
+                        <div class="flex items-start justify-between gap-3">
+                            <div class="min-w-0">
+                                <p class="font-semibold ${unread ? 'text-text' : 'text-text-secondary'}">${esc(n.title || '')}</p>
+                                <p class="text-sm text-text-secondary mt-1 max-h-16 overflow-hidden">${esc(n.message || '')}</p>
+                                <p class="text-xs text-text-secondary mt-2">${esc(created)}</p>
+                            </div>
+                            <div class="flex flex-col items-end gap-2">
+                                ${unread ? `<button type="button" class="notif-read text-sm text-primary hover:underline" data-id="${esc(n.id)}">Mark read</button>` : ''}
+                                <button type="button" class="notif-dismiss text-sm text-red-600 hover:underline" data-id="${esc(n.id)}">Dismiss</button>
+                            </div>
+                        </div>
+                    </li>
+                `;
+            }).join('');
+
+            list.querySelectorAll('.notif-read').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-id');
+                    if (!id) return;
+                    await updateNotification(id, { read: true });
+                    await loadNotifications();
+                });
+            });
+            list.querySelectorAll('.notif-dismiss').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    const id = btn.getAttribute('data-id');
+                    if (!id) return;
+                    await dismissNotification(id);
+                    await loadNotifications();
+                });
+            });
+            await refreshUnreadBadge();
+        } catch (e) {
+            errEl.textContent = 'Failed to load notifications.';
+            errEl.classList.remove('hidden');
+            setNotifState({ loading: false, error: true, empty: false });
+        }
+    }
+
+    async function updateNotification(id, patch) {
+        await fetch('/api/v1/user/notifications/' + encodeURIComponent(id), {
+            method: 'PUT',
+            credentials: 'include',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(patch || {})
+        });
+    }
+
+    async function dismissNotification(id) {
+        await fetch('/api/v1/user/notifications/' + encodeURIComponent(id), {
+            method: 'DELETE',
+            credentials: 'include'
+        });
+    }
 
     // Mobile menu toggle
     const mobileMenuButton = document.getElementById('mobile-menu-button');

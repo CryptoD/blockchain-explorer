@@ -282,6 +282,19 @@ type PriceAlert struct {
 	Updated        time.Time  `json:"updated"`
 }
 
+// Notification is an in-app message for an authenticated user.
+// Stored in Redis under notification:{username}:{id}.
+type Notification struct {
+	ID          string     `json:"id"`
+	Username    string     `json:"username"`
+	Type        string     `json:"type"` // "price_alert" | "system"
+	Title       string     `json:"title"`
+	Message     string     `json:"message"`
+	Created     time.Time  `json:"created"`
+	ReadAt      *time.Time `json:"read_at,omitempty"`
+	DismissedAt *time.Time `json:"dismissed_at,omitempty"`
+}
+
 // WatchlistEntry is a single item in a watchlist (symbol or address with optional tags/notes and group).
 // Exactly one of Symbol or Address should be set; Type indicates which ("symbol" or "address").
 // Group is optional and used for grouping display (e.g. "Crypto", "High risk", or custom).
@@ -1138,6 +1151,9 @@ func main() {
 		{
 			userV1.GET("/profile", userProfileHandler)
 			userV1.PATCH("/profile", updateProfileHandler)
+			userV1.GET("/notifications", listNotificationsHandler)
+			userV1.PUT("/notifications/:id", updateNotificationHandler)
+			userV1.DELETE("/notifications/:id", dismissNotificationHandler)
 			userV1.GET("/alerts", listPriceAlertsHandler)
 			userV1.POST("/alerts", createPriceAlertHandler)
 			userV1.PUT("/alerts/:id", updatePriceAlertHandler)
@@ -1209,6 +1225,9 @@ func main() {
 	{
 		user.GET("/profile", userProfileHandler)
 		user.PATCH("/profile", updateProfileHandler)
+		user.GET("/notifications", listNotificationsHandler)
+		user.PUT("/notifications/:id", updateNotificationHandler)
+		user.DELETE("/notifications/:id", dismissNotificationHandler)
 		user.GET("/alerts", listPriceAlertsHandler)
 		user.POST("/alerts", createPriceAlertHandler)
 		user.PUT("/alerts/:id", updatePriceAlertHandler)
@@ -1655,6 +1674,7 @@ func applyUserNewsPrefs(articles []news.Article, user *User, favoritesOnly bool)
 
 const (
 	priceAlertKeyPrefix = "alert:"
+	notificationKeyPrefix = "notification:"
 )
 
 type createPriceAlertRequest struct {
@@ -2016,6 +2036,13 @@ func evaluatePriceAlerts() {
 			}
 			triggered++
 
+			// Always create an in-app notification for a triggered alert.
+			createUserNotification(a.Username, Notification{
+				Type:    "price_alert",
+				Title:   "Price alert triggered",
+				Message: fmt.Sprintf("%s %s %.6g %s", strings.ToUpper(a.Symbol), a.Direction, a.Threshold, strings.ToUpper(a.Currency)),
+			})
+
 			// Best-effort email delivery for triggered alerts.
 			if strings.ToLower(strings.TrimSpace(a.DeliveryMethod)) == "email" {
 				user, ok := getUser(a.Username)
@@ -2040,6 +2067,185 @@ func evaluatePriceAlerts() {
 		"update_errors": updateErrors,
 		"duration_ms":   elapsed.Milliseconds(),
 	}).Info("Price alert evaluation cycle complete")
+}
+
+// -----------------------------
+// Notifications (Redis-backed)
+// -----------------------------
+
+type updateNotificationRequest struct {
+	Read      *bool `json:"read,omitempty"`
+	Dismissed *bool `json:"dismissed,omitempty"`
+}
+
+func listNotificationsHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Notifications require Redis")
+		return
+	}
+
+	includeDismissed := strings.ToLower(strings.TrimSpace(c.Query("include_dismissed"))) == "true"
+	unreadOnly := strings.ToLower(strings.TrimSpace(c.Query("unread_only"))) == "true"
+	limit := apiutil.ParsePagination(c, 20, 100).PageSize
+
+	keys, err := rdb.Keys(ctx, notificationKeyPrefix+username+":*").Result()
+	if err != nil {
+		errorResponse(c, http.StatusInternalServerError, "notifications_fetch_failed", "Failed to fetch notifications")
+		return
+	}
+
+	items := make([]Notification, 0, len(keys))
+	for _, key := range keys {
+		raw, err := rdb.Get(ctx, key).Result()
+		if err != nil || raw == "" {
+			continue
+		}
+		var n Notification
+		if err := json.Unmarshal([]byte(raw), &n); err != nil {
+			continue
+		}
+		if !includeDismissed && n.DismissedAt != nil {
+			continue
+		}
+		if unreadOnly && n.ReadAt != nil {
+			continue
+		}
+		items = append(items, n)
+	}
+
+	sort.Slice(items, func(i, j int) bool {
+		return items[i].Created.After(items[j].Created)
+	})
+	if len(items) > limit {
+		items = items[:limit]
+	}
+	c.JSON(http.StatusOK, gin.H{"data": items})
+}
+
+func updateNotificationHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Notifications require Redis")
+		return
+	}
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" || len(id) > 64 {
+		errorResponse(c, http.StatusBadRequest, "invalid_notification_id", "Notification id must be 1-64 characters")
+		return
+	}
+
+	var req updateNotificationRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_request", "Invalid request body")
+		return
+	}
+
+	key := notificationKeyPrefix + username + ":" + id
+	raw, err := rdb.Get(ctx, key).Result()
+	if err != nil || raw == "" {
+		errorResponse(c, http.StatusNotFound, "notification_not_found", "Notification not found")
+		return
+	}
+	var n Notification
+	if err := json.Unmarshal([]byte(raw), &n); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "notification_decode_failed", "Failed to load notification")
+		return
+	}
+	now := time.Now().UTC()
+	if req.Read != nil {
+		if *req.Read {
+			if n.ReadAt == nil {
+				n.ReadAt = &now
+			}
+		} else {
+			n.ReadAt = nil
+		}
+	}
+	if req.Dismissed != nil {
+		if *req.Dismissed {
+			if n.DismissedAt == nil {
+				n.DismissedAt = &now
+			}
+		} else {
+			n.DismissedAt = nil
+		}
+	}
+
+	b, _ := json.Marshal(n)
+	if err := rdb.Set(ctx, key, b, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "notification_save_failed", "Failed to save notification")
+		return
+	}
+	c.JSON(http.StatusOK, n)
+}
+
+func dismissNotificationHandler(c *gin.Context) {
+	usernameVal, _ := c.Get("username")
+	username, _ := usernameVal.(string)
+	if strings.TrimSpace(username) == "" {
+		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rdb == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Notifications require Redis")
+		return
+	}
+	id := strings.TrimSpace(c.Param("id"))
+	if id == "" || len(id) > 64 {
+		errorResponse(c, http.StatusBadRequest, "invalid_notification_id", "Notification id must be 1-64 characters")
+		return
+	}
+	// Soft-dismiss by setting dismissed_at (keeps history for audit if needed).
+	key := notificationKeyPrefix + username + ":" + id
+	raw, err := rdb.Get(ctx, key).Result()
+	if err != nil || raw == "" {
+		errorResponse(c, http.StatusNotFound, "notification_not_found", "Notification not found")
+		return
+	}
+	var n Notification
+	if err := json.Unmarshal([]byte(raw), &n); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "notification_decode_failed", "Failed to load notification")
+		return
+	}
+	now := time.Now().UTC()
+	n.DismissedAt = &now
+	b, _ := json.Marshal(n)
+	if err := rdb.Set(ctx, key, b, 0).Err(); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "notification_save_failed", "Failed to save notification")
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{"dismissed": true})
+}
+
+func createUserNotification(username string, n Notification) {
+	username = strings.TrimSpace(username)
+	if username == "" || rdb == nil {
+		return
+	}
+	now := time.Now().UTC()
+	n.ID = fmt.Sprintf("%d", time.Now().UnixNano())
+	n.Username = username
+	if strings.TrimSpace(n.Type) == "" {
+		n.Type = "system"
+	}
+	n.Title = sanitizeText(n.Title, 120)
+	n.Message = sanitizeText(n.Message, 500)
+	n.Created = now
+	key := notificationKeyPrefix + username + ":" + n.ID
+	if b, err := json.Marshal(n); err == nil {
+		_ = rdb.Set(ctx, key, b, 0).Err()
+	}
 }
 
 func sendWelcomeEmail(username, toEmail string) {
