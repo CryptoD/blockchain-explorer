@@ -155,6 +155,22 @@
                             <input type="checkbox" id="profile-notify-alerts" name="notifications_price_alerts" class="rounded border-border text-primary focus:ring-primary" />
                             <span class="text-sm">Price alert notifications</span>
                         </label>
+                        <div class="mt-4 border-t border-border pt-4">
+                            <p class="text-text-secondary text-sm mb-3">Email preferences</p>
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" id="profile-email-price-alerts" class="rounded border-border text-primary focus:ring-primary" />
+                                <span class="text-sm">Price alerts</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" id="profile-email-portfolio-events" class="rounded border-border text-primary focus:ring-primary" />
+                                <span class="text-sm">Portfolio events</span>
+                            </label>
+                            <label class="flex items-center gap-3 cursor-pointer">
+                                <input type="checkbox" id="profile-email-product-updates" class="rounded border-border text-primary focus:ring-primary" />
+                                <span class="text-sm">Product updates</span>
+                            </label>
+                            <p class="text-text-secondary text-xs mt-2">Tip: “Email notifications” must be enabled for any email to send.</p>
+                        </div>
                     </div>
                 </section>
 
@@ -314,6 +330,9 @@
         const landingSel = document.getElementById('profile-landing');
         const emailCb = document.getElementById('profile-notify-email');
         const alertsCb = document.getElementById('profile-notify-alerts');
+        const emailPriceAlertsCb = document.getElementById('profile-email-price-alerts');
+        const emailPortfolioEventsCb = document.getElementById('profile-email-portfolio-events');
+        const emailProductUpdatesCb = document.getElementById('profile-email-product-updates');
         const favTa = document.getElementById('profile-news-favorite');
         const blockedTa = document.getElementById('profile-news-blocked');
         if (themeSel && user.theme) themeSel.value = user.theme;
@@ -323,6 +342,9 @@
         if (landingSel && user.default_landing_page) landingSel.value = user.default_landing_page;
         if (emailCb) emailCb.checked = !!user.notifications_email;
         if (alertsCb) alertsCb.checked = !!user.notifications_price_alerts;
+        if (emailPriceAlertsCb) emailPriceAlertsCb.checked = !!user.email_price_alerts;
+        if (emailPortfolioEventsCb) emailPortfolioEventsCb.checked = !!user.email_portfolio_events;
+        if (emailProductUpdatesCb) emailProductUpdatesCb.checked = !!user.email_product_updates;
         if (favTa) favTa.value = Array.isArray(user.news_sources_favorite) ? user.news_sources_favorite.join('\n') : '';
         if (blockedTa) blockedTa.value = Array.isArray(user.news_sources_blocked) ? user.news_sources_blocked.join('\n') : '';
     }
@@ -356,6 +378,9 @@
         const default_landing_page = document.getElementById('profile-landing').value || null;
         const notifications_email = document.getElementById('profile-notify-email').checked;
         const notifications_price_alerts = document.getElementById('profile-notify-alerts').checked;
+        const email_price_alerts = document.getElementById('profile-email-price-alerts') ? document.getElementById('profile-email-price-alerts').checked : false;
+        const email_portfolio_events = document.getElementById('profile-email-portfolio-events') ? document.getElementById('profile-email-portfolio-events').checked : false;
+        const email_product_updates = document.getElementById('profile-email-product-updates') ? document.getElementById('profile-email-product-updates').checked : false;
         const news_sources_favorite = parseDomains(document.getElementById('profile-news-favorite') ? document.getElementById('profile-news-favorite').value : '');
         const news_sources_blocked = parseDomains(document.getElementById('profile-news-blocked') ? document.getElementById('profile-news-blocked').value : '');
         const body = {};
@@ -367,6 +392,9 @@
         if (default_landing_page !== null) body.default_landing_page = default_landing_page;
         body.notifications_email = notifications_email;
         body.notifications_price_alerts = notifications_price_alerts;
+        body.email_price_alerts = email_price_alerts;
+        body.email_portfolio_events = email_portfolio_events;
+        body.email_product_updates = email_product_updates;
         body.news_sources_favorite = news_sources_favorite;
         body.news_sources_blocked = news_sources_blocked;
 

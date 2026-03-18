@@ -241,6 +241,9 @@ type User struct {
 	Language               string    `json:"language,omitempty"`                // e.g. "en", "es"; validated against supported list
 	NotificationsEmail     bool      `json:"notifications_email"`                // Whether to receive email notifications
 	NotificationsPriceAlerts bool    `json:"notifications_price_alerts"`         // Whether to receive price alert notifications
+	EmailPriceAlerts       bool      `json:"email_price_alerts"`                 // Whether to receive email notifications for price alerts
+	EmailPortfolioEvents   bool      `json:"email_portfolio_events"`             // Whether to receive email notifications for portfolio events
+	EmailProductUpdates    bool      `json:"email_product_updates"`              // Whether to receive email notifications for product updates
 	DefaultLandingPage     string    `json:"default_landing_page,omitempty"`     // "explorer", "dashboard", "portfolios"
 	NewsSourcesFavorite    []string  `json:"news_sources_favorite,omitempty"`    // preferred sources (domains)
 	NewsSourcesBlocked     []string  `json:"news_sources_blocked,omitempty"`     // muted sources (domains)
@@ -642,6 +645,9 @@ type updateProfileRequest struct {
 	Language                *string `json:"language"`                // e.g. "en", "es"
 	NotificationsEmail      *bool   `json:"notifications_email"`
 	NotificationsPriceAlerts *bool  `json:"notifications_price_alerts"`
+	EmailPriceAlerts        *bool   `json:"email_price_alerts"`
+	EmailPortfolioEvents    *bool   `json:"email_portfolio_events"`
+	EmailProductUpdates     *bool   `json:"email_product_updates"`
 	DefaultLandingPage      *string `json:"default_landing_page"`      // "explorer", "dashboard", "portfolios"
 	NewsSourcesFavorite     *[]string `json:"news_sources_favorite"`
 	NewsSourcesBlocked      *[]string `json:"news_sources_blocked"`
@@ -713,6 +719,15 @@ func updateProfileHandler(c *gin.Context) {
 	}
 	if body.NotificationsPriceAlerts != nil {
 		user.NotificationsPriceAlerts = *body.NotificationsPriceAlerts
+	}
+	if body.EmailPriceAlerts != nil {
+		user.EmailPriceAlerts = *body.EmailPriceAlerts
+	}
+	if body.EmailPortfolioEvents != nil {
+		user.EmailPortfolioEvents = *body.EmailPortfolioEvents
+	}
+	if body.EmailProductUpdates != nil {
+		user.EmailProductUpdates = *body.EmailProductUpdates
 	}
 	if body.DefaultLandingPage != nil {
 		v := strings.ToLower(strings.TrimSpace(*body.DefaultLandingPage))
@@ -2004,7 +2019,7 @@ func evaluatePriceAlerts() {
 			// Best-effort email delivery for triggered alerts.
 			if strings.ToLower(strings.TrimSpace(a.DeliveryMethod)) == "email" {
 				user, ok := getUser(a.Username)
-				if ok && user.NotificationsEmail && strings.TrimSpace(user.Email) != "" {
+				if ok && user.NotificationsEmail && user.EmailPriceAlerts && strings.TrimSpace(user.Email) != "" {
 					sendAlertTriggeredEmail(user, a)
 				}
 			}
