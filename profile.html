@@ -153,6 +153,23 @@
                     </div>
                 </section>
 
+                <section class="bg-bg-secondary border border-border rounded-lg p-6" aria-labelledby="heading-news">
+                    <h2 id="heading-news" class="text-xl font-semibold mb-4">News sources</h2>
+                    <p class="text-text-secondary text-sm mb-4">Tailor your news feed by favoriting sources you trust and muting sources you don't want to see. Use one domain per line (e.g. <span class="font-mono">reuters.com</span>).</p>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                        <div>
+                            <label for="profile-news-favorite" class="block text-sm font-medium text-text mb-1">Favorite sources</label>
+                            <textarea id="profile-news-favorite" rows="6" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="reuters.com&#10;bloomberg.com"></textarea>
+                            <p class="text-text-secondary text-xs mt-1">Favorites are shown first; you can also filter to favorites only.</p>
+                        </div>
+                        <div>
+                            <label for="profile-news-blocked" class="block text-sm font-medium text-text mb-1">Muted sources</label>
+                            <textarea id="profile-news-blocked" rows="6" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="example.com"></textarea>
+                            <p class="text-text-secondary text-xs mt-1">Muted sources are hidden from your news feed.</p>
+                        </div>
+                    </div>
+                </section>
+
                 <div class="flex flex-wrap items-center gap-4">
                     <button type="submit" id="profile-save-btn" class="bg-primary text-white px-6 py-2 rounded hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-primary focus:ring-offset-2">
                         Save changes
@@ -217,12 +234,32 @@
         const landingSel = document.getElementById('profile-landing');
         const emailCb = document.getElementById('profile-notify-email');
         const alertsCb = document.getElementById('profile-notify-alerts');
+        const favTa = document.getElementById('profile-news-favorite');
+        const blockedTa = document.getElementById('profile-news-blocked');
         if (themeSel && user.theme) themeSel.value = user.theme;
         if (langSel && user.language) langSel.value = user.language;
         if (currencySel && user.preferred_currency) currencySel.value = user.preferred_currency;
         if (landingSel && user.default_landing_page) landingSel.value = user.default_landing_page;
         if (emailCb) emailCb.checked = !!user.notifications_email;
         if (alertsCb) alertsCb.checked = !!user.notifications_price_alerts;
+        if (favTa) favTa.value = Array.isArray(user.news_sources_favorite) ? user.news_sources_favorite.join('\n') : '';
+        if (blockedTa) blockedTa.value = Array.isArray(user.news_sources_blocked) ? user.news_sources_blocked.join('\n') : '';
+    }
+
+    function parseDomains(text) {
+        const raw = String(text || '');
+        const parts = raw.split(/[\n,]/g).map(s => s.trim().toLowerCase()).filter(Boolean);
+        const seen = new Set();
+        const out = [];
+        for (const p of parts) {
+            if (p.length > 100) continue;
+            if (!/^[a-z0-9.-]+$/.test(p)) continue;
+            if (p.startsWith('.') || p.endsWith('.') || p.includes('..')) continue;
+            if (seen.has(p)) continue;
+            seen.add(p);
+            out.push(p);
+        }
+        return out;
     }
 
     document.getElementById('profile-form').addEventListener('submit', async (e) => {
@@ -237,6 +274,8 @@
         const default_landing_page = document.getElementById('profile-landing').value || null;
         const notifications_email = document.getElementById('profile-notify-email').checked;
         const notifications_price_alerts = document.getElementById('profile-notify-alerts').checked;
+        const news_sources_favorite = parseDomains(document.getElementById('profile-news-favorite') ? document.getElementById('profile-news-favorite').value : '');
+        const news_sources_blocked = parseDomains(document.getElementById('profile-news-blocked') ? document.getElementById('profile-news-blocked').value : '');
         const body = {};
         if (theme !== null) body.theme = theme;
         if (language !== null) body.language = language;
@@ -244,6 +283,8 @@
         if (default_landing_page !== null) body.default_landing_page = default_landing_page;
         body.notifications_email = notifications_email;
         body.notifications_price_alerts = notifications_price_alerts;
+        body.news_sources_favorite = news_sources_favorite;
+        body.news_sources_blocked = news_sources_blocked;
 
         try {
             const res = await authFetch(API_BASE + '/user/profile', {

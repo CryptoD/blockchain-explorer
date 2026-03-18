@@ -258,6 +258,10 @@
                             <input id="dashboard-news-filter-24h" type="checkbox" class="rounded border-border bg-bg" checked />
                             Last 24 hours
                         </label>
+                        <label class="inline-flex items-center gap-2 text-sm text-text-secondary">
+                            <input id="dashboard-news-filter-favs" type="checkbox" class="rounded border-border bg-bg" />
+                            Favorites only
+                        </label>
                         <button id="dashboard-news-refresh" type="button" class="bg-bg border border-border rounded px-3 py-2 text-sm hover:bg-hover">
                             Refresh
                         </button>
@@ -1177,6 +1181,7 @@
     const dashNewsScopeEl = document.getElementById('dashboard-news-scope');
     const dashMajorOnlyEl = document.getElementById('dashboard-news-filter-major');
     const dashLast24hEl = document.getElementById('dashboard-news-filter-24h');
+    const dashFavsOnlyEl = document.getElementById('dashboard-news-filter-favs');
     const dashRefreshBtn = document.getElementById('dashboard-news-refresh');
 
     function dashSetNewsState({ loading, error, empty }) {
@@ -1261,10 +1266,11 @@
 
         // Prefer portfolio news when a specific portfolio is selected and user is authenticated.
         const selectedId = (document.getElementById('portfolio-selector') && document.getElementById('portfolio-selector').value) ? document.getElementById('portfolio-selector').value : '';
-        let url = '/api/news/bitcoin';
+        const favOnly = !!(dashFavsOnlyEl && dashFavsOnlyEl.checked);
+        let url = '/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : '');
         let scope = { kind: 'market', label: 'Market (BTC)' };
         if (selectedId) {
-            url = '/api/news/portfolio/' + encodeURIComponent(selectedId);
+            url = '/api/news/portfolio/' + encodeURIComponent(selectedId) + (favOnly ? '?favorites_only=true' : '');
             scope = { kind: 'portfolio', label: 'Portfolio ' + selectedId };
         }
 
@@ -1272,7 +1278,7 @@
             let res = await fetch(url, { credentials: 'include' });
             // If portfolio endpoint requires auth and we're signed out, fall back to public market news.
             if (!res.ok && selectedId) {
-                res = await fetch('/api/news/bitcoin');
+                res = await fetch('/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : ''), { credentials: 'include' });
                 scope = { kind: 'market', label: 'Market (BTC)' };
             }
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -1293,6 +1299,7 @@
 
     if (dashMajorOnlyEl) dashMajorOnlyEl.addEventListener('change', renderDashboardNews);
     if (dashLast24hEl) dashLast24hEl.addEventListener('change', renderDashboardNews);
+    if (dashFavsOnlyEl) dashFavsOnlyEl.addEventListener('change', loadDashboardNews);
     if (dashRefreshBtn) dashRefreshBtn.addEventListener('click', loadDashboardNews);
 
     document.getElementById('logout-btn').addEventListener('click', async () => {

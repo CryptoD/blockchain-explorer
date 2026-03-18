@@ -217,6 +217,10 @@
                             <input id="asset-news-filter-24h" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" checked />
                             Last 24 hours
                         </label>
+                        <label class="inline-flex items-center gap-2 text-sm text-slate-700 dark:text-slate-300">
+                            <input id="asset-news-filter-favs" type="checkbox" class="rounded border-gray-300 dark:border-gray-600" />
+                            Favorites only
+                        </label>
                         <button id="asset-news-refresh" type="button" class="px-3 py-2 text-sm rounded-lg border border-gray-300 dark:border-gray-600 hover:bg-gray-50 dark:hover:bg-gray-700">
                             Refresh
                         </button>
@@ -569,6 +573,7 @@
             const newsMetaEl = document.getElementById('asset-news-meta');
             const majorOnlyEl = document.getElementById('asset-news-filter-major');
             const last24hEl = document.getElementById('asset-news-filter-24h');
+            const favsOnlyEl = document.getElementById('asset-news-filter-favs');
             const refreshBtn = document.getElementById('asset-news-refresh');
 
             function setSelectedAssetForNews(symbol) {
@@ -658,7 +663,9 @@
                 setNewsState({ loading: true, error: false, empty: false });
                 if (newsErrorEl) newsErrorEl.textContent = '';
                 try {
-                    const res = await fetch('/api/news/' + encodeURIComponent(selectedAssetSymbol));
+                    const favOnly = !!(favsOnlyEl && favsOnlyEl.checked);
+                    const url = '/api/news/' + encodeURIComponent(selectedAssetSymbol) + (favOnly ? '?favorites_only=true' : '');
+                    const res = await fetch(url, { credentials: 'include' });
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     const payload = await res.json();
                     lastFetchedArticles = Array.isArray(payload.data) ? payload.data : [];
@@ -676,6 +683,7 @@
 
             if (majorOnlyEl) majorOnlyEl.addEventListener('change', renderNews);
             if (last24hEl) last24hEl.addEventListener('change', renderNews);
+            if (favsOnlyEl) favsOnlyEl.addEventListener('change', fetchAssetNews);
             if (refreshBtn) refreshBtn.addEventListener('click', fetchAssetNews);
         })();
     </script>

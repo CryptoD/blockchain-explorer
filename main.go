@@ -240,6 +240,8 @@ type User struct {
 	NotificationsEmail     bool      `json:"notifications_email"`                // Whether to receive email notifications
 	NotificationsPriceAlerts bool    `json:"notifications_price_alerts"`         // Whether to receive price alert notifications
 	DefaultLandingPage     string    `json:"default_landing_page,omitempty"`     // "explorer", "dashboard", "portfolios"
+	NewsSourcesFavorite    []string  `json:"news_sources_favorite,omitempty"`    // preferred sources (domains)
+	NewsSourcesBlocked     []string  `json:"news_sources_blocked,omitempty"`     // muted sources (domains)
 	Created                time.Time `json:"created"`
 }
 
@@ -635,6 +637,8 @@ type updateProfileRequest struct {
 	NotificationsEmail      *bool   `json:"notifications_email"`
 	NotificationsPriceAlerts *bool  `json:"notifications_price_alerts"`
 	DefaultLandingPage      *string `json:"default_landing_page"`      // "explorer", "dashboard", "portfolios"
+	NewsSourcesFavorite     *[]string `json:"news_sources_favorite"`
+	NewsSourcesBlocked      *[]string `json:"news_sources_blocked"`
 }
 
 // updateProfileHandler updates the authenticated user's profile settings (e.g. preferred_currency).
@@ -695,6 +699,23 @@ func updateProfileHandler(c *gin.Context) {
 			return
 		}
 		user.DefaultLandingPage = v
+	}
+
+	if body.NewsSourcesFavorite != nil {
+		list, err := normalizeNewsSourceList(*body.NewsSourcesFavorite, 50)
+		if err != nil {
+			errorResponse(c, http.StatusBadRequest, "invalid_news_sources_favorite", err.Error())
+			return
+		}
+		user.NewsSourcesFavorite = list
+	}
+	if body.NewsSourcesBlocked != nil {
+		list, err := normalizeNewsSourceList(*body.NewsSourcesBlocked, 200)
+		if err != nil {
+			errorResponse(c, http.StatusBadRequest, "invalid_news_sources_blocked", err.Error())
+			return
+		}
+		user.NewsSourcesBlocked = list
 	}
 
 	userMutex.Lock()
@@ -1280,6 +1301,10 @@ func newsBySymbolHandler(c *gin.Context) {
 		return
 	}
 
+	user := getOptionalAuthenticatedUser(c)
+	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
+	articles = applyUserNewsPrefs(articles, user, favoritesOnly)
+
 	c.JSON(http.StatusOK, news.ListResponse{
 		Data: articles,
 		Meta: news.Meta{
@@ -1341,6 +1366,10 @@ func newsByPortfolioHandler(c *gin.Context) {
 		errorResponse(c, status, "news_fetch_failed", "Failed to fetch news")
 		return
 	}
+
+	u := getOptionalAuthenticatedUser(c)
+	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
+	articles = applyUserNewsPrefs(articles, u, favoritesOnly)
 
 	c.JSON(http.StatusOK, news.ListResponse{
 		Data: articles,
@@ -1428,6 +1457,118 @@ func newsExtrasFromConfig(cfg *config.Config) map[string]string {
 	}
 	if v := strings.TrimSpace(cfg.TheNewsAPIDefaultCategories); v != "" {
 		out["categories"] = v
+	}
+	return out
+}
+
+func normalizeNewsSourceList(in []string, maxItems int) ([]string, error) {
+	if maxItems <= 0 {
+		maxItems = 50
+	}
+	if len(in) > maxItems {
+		return nil, fmt.Errorf("too many sources (max %d)", maxItems)
+	}
+	seen := make(map[string]bool, len(in))
+	out := make([]string, 0, len(in))
+	for _, raw := range in {
+		s := strings.ToLower(strings.TrimSpace(raw))
+		if s == "" {
+			continue
+		}
+		if len(s) > 100 {
+			return nil, fmt.Errorf("source too long (max 100 chars)")
+		}
+		// Basic allowlist for host-like identifiers (domain or subdomain).
+		for _, r := range s {
+			if (r >= 'a' && r <= 'z') || (r >= '0' && r <= '9') || r == '.' || r == '-' {
+				continue
+			}
+			return nil, fmt.Errorf("invalid source %q (use domains like reuters.com)", raw)
+		}
+		if strings.HasPrefix(s, ".") || strings.HasSuffix(s, ".") || strings.Contains(s, "..") {
+			return nil, fmt.Errorf("invalid source %q (use domains like reuters.com)", raw)
+		}
+		if seen[s] {
+			continue
+		}
+		seen[s] = true
+		out = append(out, s)
+	}
+	// Keep stable order as provided by user.
+	return out, nil
+}
+
+func getOptionalAuthenticatedUser(c *gin.Context) *User {
+	if c == nil {
+		return nil
+	}
+	// If upstream middleware already set username, use it.
+	if v, ok := c.Get("username"); ok {
+		if username, ok2 := v.(string); ok2 && username != "" {
+			if u, ok3 := getUser(username); ok3 {
+				return &u
+			}
+		}
+		return nil
+	}
+	// Best-effort session cookie lookup; do not abort if missing/invalid.
+	sessionID, err := c.Cookie("session_id")
+	if err != nil || strings.TrimSpace(sessionID) == "" {
+		return nil
+	}
+	username, valid := validateSession(sessionID)
+	if !valid || strings.TrimSpace(username) == "" {
+		return nil
+	}
+	u, ok := getUser(username)
+	if !ok {
+		return nil
+	}
+	return &u
+}
+
+func applyUserNewsPrefs(articles []news.Article, user *User, favoritesOnly bool) []news.Article {
+	if user == nil || len(articles) == 0 {
+		return articles
+	}
+	blocked := make(map[string]bool, len(user.NewsSourcesBlocked))
+	for _, s := range user.NewsSourcesBlocked {
+		blocked[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+	favs := make(map[string]bool, len(user.NewsSourcesFavorite))
+	for _, s := range user.NewsSourcesFavorite {
+		favs[strings.ToLower(strings.TrimSpace(s))] = true
+	}
+
+	filtered := make([]news.Article, 0, len(articles))
+	for _, a := range articles {
+		src := strings.ToLower(strings.TrimSpace(a.Source))
+		if src != "" && blocked[src] {
+			continue
+		}
+		if favoritesOnly {
+			if src == "" || !favs[src] {
+				continue
+			}
+		}
+		filtered = append(filtered, a)
+	}
+	if favoritesOnly || len(favs) == 0 || len(filtered) == 0 {
+		return filtered
+	}
+	// Stable partition: favorites first, then the rest; keep relative order within groups.
+	out := make([]news.Article, 0, len(filtered))
+	for _, a := range filtered {
+		src := strings.ToLower(strings.TrimSpace(a.Source))
+		if src != "" && favs[src] {
+			out = append(out, a)
+		}
+	}
+	for _, a := range filtered {
+		src := strings.ToLower(strings.TrimSpace(a.Source))
+		if src == "" || !favs[src] {
+			out = append(out, a)
+		}
 	}
 	return out
 }
