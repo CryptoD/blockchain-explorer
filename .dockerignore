@@ -1,0 +1,13 @@
+.git
+.github
+node_modules
+npm-debug.log
+.tmp
+*.md
+!README.md
+monitoring
+e2e
+playwright-report
+test-results
+.env
+.env.*

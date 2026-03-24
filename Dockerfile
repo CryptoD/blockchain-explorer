@@ -1,5 +1,5 @@
-# Build stage
-FROM golang:1.22 AS builder
+# Build stage (keep in sync with go.mod / CI Go version)
+FROM golang:1.24 AS builder
 
 WORKDIR /app
 
