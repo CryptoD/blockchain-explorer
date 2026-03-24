@@ -1,0 +1,88 @@
+# Prometheus alerting rules for Bitcoin Explorer (Prometheus 2.x+).
+# Load via rule_files in prometheus.yml, e.g.:
+#   rule_files:
+#     - /etc/prometheus/rules/blockchain-explorer.yml
+
+groups:
+  - name: blockchain_explorer_recording
+    interval: 30s
+    rules:
+      - record: job:http_5xx:ratio_rate5m
+        expr: |
+          sum(rate(http_requests_total{status=~"5.."}[5m]))
+          /
+          clamp_min(sum(rate(http_requests_total[5m])), 1e-9)
+
+  - name: blockchain_explorer_alerts
+    interval: 30s
+    rules:
+      - alert: HighHTTP5xxRate
+        expr: job:http_5xx:ratio_rate5m > 0.05
+        for: 10m
+        labels:
+          severity: warning
+        annotations:
+          summary: Elevated HTTP 5xx rate (>5% over 10m)
+          description: >-
+            More than 5% of HTTP responses were 5xx. Check app logs, upstream RPC (GetBlock),
+            Redis, and dependency health.
+
+      - alert: CriticalHTTP5xxRate
+        expr: job:http_5xx:ratio_rate5m > 0.20
+        for: 5m
+        labels:
+          severity: critical
+        annotations:
+          summary: Critical HTTP 5xx rate (>20% over 5m)
+          description: >-
+            Majority of requests may be failing. Page on-call and check /healthz, /readyz, and Sentry.
+
+      - alert: HighLatencyP99
+        expr: |
+          histogram_quantile(0.99,
+            sum(rate(http_request_duration_seconds_bucket[5m])) by (le)
+          ) > 3
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: HTTP p99 latency above 3s (15m)
+          description: >-
+            End-to-end request latency is high. Inspect slow routes in Grafana and upstream providers.
+
+      - alert: PrefetchStale
+        expr: |
+          explorer_prefetch_last_success_unixtime > 0
+          and
+          (time() - explorer_prefetch_last_success_unixtime) > 120
+        for: 5m
+        labels:
+          severity: warning
+        annotations:
+          summary: Block/tx prefetch has not succeeded for over 2 minutes
+          description: >-
+            Background prefetch may be failing against the chain RPC. Check explorer_background_job_errors_total and logs.
+
+      - alert: PrefetchErrorsElevated
+        expr: |
+          sum(rate(explorer_background_job_errors_total{job="prefetch"}[10m])) > 0.05
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Prefetch errors above 0.05/s (10m rate)
+          description: >-
+            Repeated prefetch failures for blocks or transactions. Verify GetBlock credentials and network.
+
+      - alert: PriceAlertEvalSlow
+        expr: |
+          histogram_quantile(0.95,
+            sum(rate(explorer_alert_eval_duration_seconds_bucket[15m])) by (le)
+          ) > 30
+        for: 15m
+        labels:
+          severity: warning
+        annotations:
+          summary: Price alert evaluation p95 above 30s
+          description: >-
+            Redis scan or pricing calls may be slow. Check Redis latency and CoinGecko rate limits.

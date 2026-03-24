@@ -1,0 +1,14 @@
+# Example Prometheus scrape configuration (merge into prometheus.yml or use file_sd_configs).
+# Set METRICS_TOKEN in the environment and pass the header below if /metrics is protected.
+
+scrape_configs:
+  - job_name: blockchain-explorer
+    scrape_interval: 15s
+    metrics_path: /metrics
+    static_configs:
+      - targets:
+          - host.docker.internal:8080   # replace with your app host:port
+    # Uncomment if METRICS_TOKEN is set:
+    # authorization:
+    #   type: Bearer
+    #   credentials: "${METRICS_TOKEN}"

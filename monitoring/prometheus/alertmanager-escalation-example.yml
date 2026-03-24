@@ -1,0 +1,50 @@
+# Example Alertmanager configuration — copy relevant sections into alertmanager.yml.
+# Adjust receivers (Slack, PagerDuty, email) to your environment.
+
+global:
+  resolve_timeout: 5m
+
+route:
+  receiver: default
+  group_by: ["alertname", "severity"]
+  group_wait: 30s
+  group_interval: 5m
+  repeat_interval: 4h
+  routes:
+    # Critical: page + incident channel
+    - matchers:
+        - severity="critical"
+      receiver: pagerduty-and-slack-critical
+      continue: true
+    # Warning: Slack only (business-hours team can mute)
+    - matchers:
+        - severity="warning"
+      receiver: slack-warnings
+      continue: false
+
+receivers:
+  - name: default
+    # webhook_configs:
+    #   - url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+
+  - name: pagerduty-and-slack-critical
+    # pagerduty_configs:
+    #   - service_key: "<pagerduty-integration-key>"
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    #     channel: "#incidents"
+    #     title: "{{ .GroupLabels.alertname }}"
+    #     text: "{{ range .Alerts }}{{ .Annotations.description }}{{ end }}"
+
+  - name: slack-warnings
+    # slack_configs:
+    #   - api_url: "https://hooks.slack.com/services/XXX/YYY/ZZZ"
+    #     channel: "#blockchain-explorer-alerts"
+
+# Optional: suppress noisy warnings when critical is firing
+# inhibit_rules:
+#   - source_matchers:
+#       - severity="critical"
+#     target_matchers:
+#       - severity="warning"
+#     equal: ["alertname"]
