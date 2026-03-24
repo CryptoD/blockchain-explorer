@@ -25,6 +25,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
@@ -150,7 +151,13 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 				_ = rdb.Expire(ctx, ipKey, window).Err()
 			}
 			if ipCount > int64(perIP) {
-				log.WithFields(log.Fields{"ip": ip, "export": prefix}).Warn("Export rate limit exceeded (IP)")
+				log.WithFields(log.Fields{
+					logging.FieldComponent: logging.ComponentRateLimit,
+					logging.FieldEvent:       "export_rate_limit",
+					logging.FieldIP:          ip,
+					logging.FieldExport:      prefix,
+					"backend":                "redis",
+				}).Warn("Export rate limit exceeded (IP)")
 				errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 				c.Abort()
 				return false
@@ -164,7 +171,13 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 					_ = rdb.Expire(ctx, userKey, window).Err()
 				}
 				if userCount > int64(perUser) {
-					log.WithFields(log.Fields{"username": username, "export": prefix}).Warn("Export rate limit exceeded (user)")
+					log.WithFields(log.Fields{
+						logging.FieldComponent: logging.ComponentRateLimit,
+						logging.FieldEvent:       "export_rate_limit",
+						logging.FieldUsername:    username,
+						logging.FieldExport:      prefix,
+						"backend":                "redis",
+					}).Warn("Export rate limit exceeded (user)")
 					errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 					c.Abort()
 					return false
@@ -189,7 +202,13 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 	}
 	exportRateLimitCount[ipKey]++
 	if exportRateLimitCount[ipKey] > perIP {
-		log.WithFields(log.Fields{"ip": ip, "export": prefix}).Warn("Export rate limit exceeded (in-memory)")
+		log.WithFields(log.Fields{
+			logging.FieldComponent: logging.ComponentRateLimit,
+			logging.FieldEvent:       "export_rate_limit",
+			logging.FieldIP:          ip,
+			logging.FieldExport:      prefix,
+			"backend":                "memory",
+		}).Warn("Export rate limit exceeded (in-memory)")
 		errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 		c.Abort()
 		return false
@@ -206,7 +225,13 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 		}
 		exportRateLimitCount[userKey]++
 		if exportRateLimitCount[userKey] > perUser {
-			log.WithFields(log.Fields{"username": username, "export": prefix}).Warn("Export rate limit exceeded (in-memory)")
+			log.WithFields(log.Fields{
+				logging.FieldComponent: logging.ComponentRateLimit,
+				logging.FieldEvent:       "export_rate_limit",
+				logging.FieldUsername:    username,
+				logging.FieldExport:      prefix,
+				"backend":                "memory",
+			}).Warn("Export rate limit exceeded (in-memory)")
 			errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 			c.Abort()
 			return false
@@ -227,6 +252,8 @@ func logLargeExport(c *gin.Context, endpoint string, details map[string]interfac
 	for k, v := range details {
 		fields[k] = v
 	}
+	fields[logging.FieldComponent] = logging.ComponentExport
+	fields[logging.FieldEvent] = "large_export"
 	log.WithFields(fields).Info("Large or intensive export request")
 }
 
@@ -405,7 +432,7 @@ func createOrUpdateCSRFToken(sessionID string) (string, error) {
 
 	if rdb != nil {
 		if err := rdb.Set(ctx, "csrf:"+sessionID, token, 24*time.Hour).Err(); err != nil {
-			log.WithError(err).Warn("Failed to store CSRF token in Redis")
+			logging.WithComponent(logging.ComponentAuth).WithError(err).Warn("Failed to store CSRF token in Redis")
 		}
 	}
 
@@ -446,13 +473,13 @@ func loadUsersFromRedis() error {
 		username := strings.TrimPrefix(key, "user:")
 		data, err := rdb.Get(ctx, key).Result()
 		if err != nil {
-			log.WithError(err).WithField("username", username).Warn("Failed to load user from Redis")
+			logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to load user from Redis")
 			continue
 		}
 
 		var user User
 		if err := json.Unmarshal([]byte(data), &user); err != nil {
-			log.WithError(err).WithField("username", username).Warn("Failed to unmarshal user from Redis")
+			logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to unmarshal user from Redis")
 			continue
 		}
 
@@ -524,7 +551,7 @@ func isStrongPassword(pw string) bool {
 func initializeDefaultAdmin() {
 	// First try to load existing users from Redis
 	if err := loadUsersFromRedis(); err != nil {
-		log.WithError(err).Warn("Failed to load users from Redis")
+		logging.WithComponent(logging.ComponentAuth).WithError(err).Warn("Failed to load users from Redis")
 	}
 
 	appEnv := config.GetAppEnv()
@@ -544,17 +571,17 @@ func initializeDefaultAdmin() {
 		}
 	} else {
 		if adminUsername == "" || adminPassword == "" {
-			log.Fatal("ADMIN_USERNAME and ADMIN_PASSWORD must be set in non-development environments")
+			logging.WithComponent(logging.ComponentAdmin).Fatal("ADMIN_USERNAME and ADMIN_PASSWORD must be set in non-development environments")
 		}
 		if !isStrongPassword(adminPassword) {
-			log.Fatal("ADMIN_PASSWORD must be 8-128 characters and include at least one letter and one digit in non-development environments")
+			logging.WithComponent(logging.ComponentAdmin).Fatal("ADMIN_PASSWORD must be 8-128 characters and include at least one letter and one digit in non-development environments")
 		}
 	}
 
 	if _, exists := users[adminUsername]; !exists {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
 		if err != nil {
-			log.WithError(err).Fatal("Failed to hash default admin password")
+			logging.WithComponent(logging.ComponentAdmin).WithError(err).Fatal("Failed to hash default admin password")
 		}
 
 		adminUser := User{
@@ -568,15 +595,16 @@ func initializeDefaultAdmin() {
 
 		// Save to Redis
 		if err := saveUserToRedis(adminUser); err != nil {
-			log.WithError(err).Warn("Failed to save default admin to Redis")
+			logging.WithComponent(logging.ComponentAdmin).WithError(err).Warn("Failed to save default admin to Redis")
 		}
 
 		if appEnv == "development" && (os.Getenv("ADMIN_USERNAME") == "" || os.Getenv("ADMIN_PASSWORD") == "") {
-			log.WithField("env", appEnv).Warn("Default admin credentials (admin/admin123) are being used in development")
+			logging.WithComponent(logging.ComponentAdmin).WithField(logging.FieldEnv, appEnv).Warn("Default admin credentials (admin/admin123) are being used in development")
 		}
-		log.WithFields(log.Fields{
-			"username": adminUsername,
-			"env":      appEnv,
+		logging.WithComponent(logging.ComponentAdmin).WithFields(log.Fields{
+			logging.FieldEvent:    "default_admin_initialized",
+			logging.FieldUsername: adminUsername,
+			logging.FieldEnv:      appEnv,
 		}).Info("Default admin user initialized")
 	}
 }
@@ -773,7 +801,7 @@ func updateProfileHandler(c *gin.Context) {
 	userMutex.Unlock()
 
 	if err := saveUserToRedis(user); err != nil {
-		log.WithError(err).WithField("username", username).Warn("Failed to persist profile to Redis")
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to persist profile to Redis")
 		errorResponse(c, http.StatusInternalServerError, "save_failed", "Failed to save profile")
 		return
 	}
@@ -878,7 +906,7 @@ func rateLimitMiddleware(c *gin.Context) {
 					exceeded = true
 				}
 			} else {
-				log.WithError(err).Warn("Redis rate limit per IP failed, falling back to in-memory limiter")
+				logging.WithComponent(logging.ComponentRateLimit).WithError(err).WithField(logging.FieldEvent, "redis_incr_failed").Warn("redis rate limit per IP failed; falling back to in-memory limiter")
 			}
 		}
 
@@ -894,14 +922,17 @@ func rateLimitMiddleware(c *gin.Context) {
 					exceeded = true
 				}
 			} else {
-				log.WithError(err).Warn("Redis rate limit per user failed, falling back to in-memory limiter")
+				logging.WithComponent(logging.ComponentRateLimit).WithError(err).WithField(logging.FieldEvent, "redis_incr_failed").Warn("redis rate limit per user failed; falling back to in-memory limiter")
 			}
 		}
 
 		if exceeded {
 			log.WithFields(log.Fields{
-				"ip":       ip,
-				"username": username,
+				logging.FieldComponent: logging.ComponentRateLimit,
+				logging.FieldEvent:       "api_rate_limit",
+				logging.FieldIP:          ip,
+				logging.FieldUsername:    username,
+				"backend":                "redis",
 			}).Warn("Rate limit exceeded (Redis)")
 			errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 			c.Abort()
@@ -931,7 +962,12 @@ func rateLimitMiddleware(c *gin.Context) {
 	}
 	rateLimitCount[ip]++
 	if rateLimitCount[ip] > perIPLimit {
-		log.WithField("ip", ip).Warn("Rate limit exceeded (in-memory)")
+		log.WithFields(log.Fields{
+			logging.FieldComponent: logging.ComponentRateLimit,
+			logging.FieldEvent:       "api_rate_limit",
+			logging.FieldIP:          ip,
+			"backend":                "memory",
+		}).Warn("Rate limit exceeded (in-memory)")
 		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 		c.Abort()
 		return
@@ -993,18 +1029,26 @@ func fetchLatestBlocks(n int) ([]map[string]interface{}, error) {
 
 // updated main function background job to use rdb client
 func main() {
-	log.SetFormatter(&log.JSONFormatter{})
-	log.SetLevel(log.InfoLevel)
+	logging.Configure()
 
 	// Load and validate configuration
 	cfg, err := config.Load()
 	if err != nil {
-		log.WithError(err).Fatal("Failed to load configuration")
+		logging.WithComponent(logging.ComponentServer).WithError(err).Fatal("Failed to load configuration")
 	}
 	appConfig = cfg
 
 	appEnv := cfg.AppEnv
-	log.WithField("env", appEnv).Info("Starting Bitcoin Explorer server")
+	if appEnv == "development" {
+		gin.SetMode(gin.DebugMode)
+	} else {
+		gin.SetMode(gin.ReleaseMode)
+	}
+
+	logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
+		logging.FieldEvent: "startup",
+		logging.FieldEnv:   appEnv,
+	}).Info("Application starting")
 
 	// Initialize GetBlock settings from configuration.
 	baseURL = cfg.GetBlockBaseURL
@@ -1012,7 +1056,7 @@ func main() {
 
 	pong, err := rdb.Ping(context.Background()).Result()
 	if err != nil {
-		log.WithField("redis", "ping").Warnf("Redis ping failed: %v", err)
+		logging.WithComponent(logging.ComponentRedis).WithError(err).WithField(logging.FieldEvent, "ping_failed").Warn("redis ping failed before startup")
 	}
 
 	// Initialize Sentry
@@ -1023,12 +1067,11 @@ func main() {
 			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
 			TracesSampleRate: 1.0,
 		}); initErr != nil {
-			log.WithError(initErr).Fatal("sentry.Init failed")
+			logging.WithComponent(logging.ComponentSentry).WithError(initErr).Fatal("sentry.Init failed")
 		}
-		defer sentry.Flush(2 * time.Second)
-		log.Info("Sentry initialized successfully")
+		logging.WithComponent(logging.ComponentSentry).Info("sentry initialized")
 	} else {
-		log.Warn("SENTRY_DSN not set, Sentry not initialized")
+		logging.WithComponent(logging.ComponentSentry).Warn("sentry disabled: SENTRY_DSN not set")
 	}
 
 	r := gin.Default()
@@ -1036,8 +1079,6 @@ func main() {
 	r.Use(sentrygin.New(sentrygin.Options{}))
 	r.Use(rateLimitMiddleware)
 	r.Use(csrfMiddleware)
-
-	log.Info("Starting Bitcoin Explorer server")
 
 	// Initialize Redis client
 	rdb = redis.NewClient(&redis.Options{
@@ -1079,7 +1120,7 @@ func main() {
 			StaleTTL: time.Duration(cfg.NewsStaleTTLSeconds) * time.Second,
 		}
 	} else {
-		log.WithField("provider", cfg.NewsProvider).Warn("News provider not configured; news endpoints will be unavailable")
+		logging.WithComponent(logging.ComponentNews).WithField(logging.FieldProvider, cfg.NewsProvider).Warn("news provider not configured; news endpoints will be unavailable")
 	}
 
 	// Initialize email service (SMTP)
@@ -1097,9 +1138,12 @@ func main() {
 		}
 		emailService = email.NewService(sender, email.Address{Email: cfg.EmailFrom, Name: cfg.EmailFromName})
 		emailTemplates = email.NewTemplates(cfg.AppBaseURL)
-		log.WithFields(log.Fields{"provider": sender.Name(), "from": cfg.EmailFrom}).Info("Email service initialized")
+		logging.WithComponent(logging.ComponentEmail).WithFields(log.Fields{
+			logging.FieldProvider: sender.Name(),
+			"from_configured":     strings.TrimSpace(cfg.EmailFrom) != "",
+		}).Info("email service initialized")
 	} else {
-		log.WithField("provider", cfg.EmailProvider).Warn("Email service not configured; emails disabled")
+		logging.WithComponent(logging.ComponentEmail).WithField(logging.FieldProvider, cfg.EmailProvider).Warn("email service not configured; emails disabled")
 	}
 
 	// Initialize default admin user
@@ -1272,7 +1316,7 @@ func main() {
 
 	// Start background job to prefetch latest blocks and transactions
 	go func() {
-		log.Info("Starting background prefetch job")
+		logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "prefetch_started").Info("background prefetch job started")
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -1280,21 +1324,23 @@ func main() {
 			func() {
 				const numBlocks = 5
 				const numTxs = 10
-				blocks, err := fetchLatestBlocks(numBlocks)
-				if err == nil {
+				blocks, blocksErr := fetchLatestBlocks(numBlocks)
+				if blocksErr == nil {
 					blocksJSON, _ := json.Marshal(blocks)
 					rdb.Set(context.Background(), "latest_blocks", blocksJSON, 5*time.Minute)
 				} else {
-					log.WithError(err).Error("Failed to prefetch latest blocks")
+					logging.WithComponent(logging.ComponentBackground).WithError(blocksErr).WithField(logging.FieldEvent, "prefetch_blocks_failed").Error("failed to prefetch latest blocks")
 				}
-				txs, err := fetchLatestTransactions(numBlocks, numTxs)
-				if err == nil {
+				txs, txsErr := fetchLatestTransactions(numBlocks, numTxs)
+				if txsErr == nil {
 					txsJSON, _ := json.Marshal(txs)
 					rdb.Set(context.Background(), "latest_transactions", txsJSON, 5*time.Minute)
 				} else {
-					log.WithError(err).Error("Failed to prefetch latest transactions")
+					logging.WithComponent(logging.ComponentBackground).WithError(txsErr).WithField(logging.FieldEvent, "prefetch_txs_failed").Error("failed to prefetch latest transactions")
 				}
-				log.Info("Prefetched latest blocks and transactions")
+				if blocksErr == nil && txsErr == nil {
+					logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "prefetch_tick_ok").Debug("prefetch tick completed")
+				}
 			}()
 			<-ticker.C
 		}
@@ -1302,19 +1348,19 @@ func main() {
 
 	// Start background job to collect metrics for charts
 	go func() {
-		log.Info("Starting background metrics collection job")
+		logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "metrics_started").Info("background metrics collection job started")
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
 			collectMetrics()
-			log.Info("Collected metrics for charts")
+			logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "metrics_collected").Debug("collected metrics for charts")
 			<-ticker.C
 		}
 	}()
 
 	// Start background job to evaluate price alerts
 	go func() {
-		log.Info("Starting background price alert evaluation job")
+		logging.WithComponent(logging.ComponentAlerts).WithField(logging.FieldEvent, "alert_eval_started").Info("background price alert evaluation job started")
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -1323,7 +1369,14 @@ func main() {
 		}
 	}()
 
-	defer sentry.Flush(2 * time.Second)
+	if cfg.SentryDSN != "" {
+		defer sentry.Flush(2 * time.Second)
+	}
+
+	logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
+		logging.FieldEvent: "listen",
+		"addr":             ":8080",
+	}).Info("HTTP server listening")
 
 	r.Run(":8080")
 }
@@ -1975,7 +2028,7 @@ func evaluatePriceAlerts() {
 	for {
 		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
 		if err != nil {
-			log.WithError(err).Warn("alert evaluation scan failed")
+			logging.WithComponent(logging.ComponentAlerts).WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("alert evaluation scan failed")
 			break
 		}
 		cursor = next
@@ -2064,16 +2117,17 @@ func evaluatePriceAlerts() {
 	}
 
 	elapsed := time.Since(start)
-	log.WithFields(log.Fields{
-		"scanned_keys":  scannedKeys,
-		"evaluated":     evaluated,
-		"triggered":     triggered,
-		"skipped":       skipped,
-		"decode_errors": decodeErrors,
-		"price_errors":  priceErrors,
-		"update_errors": updateErrors,
-		"duration_ms":   elapsed.Milliseconds(),
-	}).Info("Price alert evaluation cycle complete")
+	logging.WithComponent(logging.ComponentAlerts).WithFields(log.Fields{
+		logging.FieldEvent: "alert_eval_cycle",
+		"scanned_keys":     scannedKeys,
+		"evaluated":        evaluated,
+		"triggered":        triggered,
+		"skipped":          skipped,
+		"decode_errors":    decodeErrors,
+		"price_errors":     priceErrors,
+		"update_errors":    updateErrors,
+		"duration_ms":      elapsed.Milliseconds(),
+	}).Info("price alert evaluation cycle complete")
 }
 
 // -----------------------------
@@ -2295,7 +2349,11 @@ func sendAlertTriggeredEmail(user User, alert PriceAlert) {
 		Tags:    map[string]string{"type": "alert_triggered", "symbol": alert.Symbol},
 	})
 	if !ok {
-		log.WithFields(log.Fields{"username": user.Username, "symbol": alert.Symbol}).Warn("Email queue full; dropping alert email")
+		logging.WithComponent(logging.ComponentEmail).WithFields(log.Fields{
+			logging.FieldUsername: user.Username,
+			"symbol":              alert.Symbol,
+			logging.FieldEvent:    "queue_full",
+		}).Warn("email queue full; dropping alert email")
 	}
 }
 
@@ -2343,20 +2401,23 @@ func loginHandler(c *gin.Context) {
 	user, authenticated := authenticateUser(loginReq.Username, loginReq.Password)
 	if !authenticated {
 		errorResponse(c, http.StatusUnauthorized, "invalid_credentials", "Invalid credentials")
-		log.WithField("username", loginReq.Username).Warn("Failed login attempt")
+		logging.WithComponent(logging.ComponentAuth).WithFields(log.Fields{
+			logging.FieldUsername: loginReq.Username,
+			logging.FieldEvent:    "login_failed",
+		}).Warn("failed login attempt")
 		return
 	}
 
 	sessionID, err := createSession(loginReq.Username)
 	if err != nil {
-		log.WithError(err).Error("Failed to create session")
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldEvent, "session_create_failed").Error("failed to create session")
 		errorResponse(c, http.StatusInternalServerError, "session_creation_failed", "Failed to create session")
 		return
 	}
 
 	csrfToken, err := createOrUpdateCSRFToken(sessionID)
 	if err != nil {
-		log.WithError(err).Error("Failed to create CSRF token")
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldEvent, "csrf_create_failed").Error("failed to create CSRF token")
 		errorResponse(c, http.StatusInternalServerError, "csrf_creation_failed", "Failed to create CSRF token")
 		return
 	}
@@ -2368,10 +2429,11 @@ func loginHandler(c *gin.Context) {
 		"role":      user.Role,
 		"csrfToken": csrfToken,
 	})
-	log.WithFields(log.Fields{
-		"username": loginReq.Username,
-		"role":     user.Role,
-	}).Info("User logged in successfully")
+	logging.WithComponent(logging.ComponentAuth).WithFields(log.Fields{
+		logging.FieldUsername: loginReq.Username,
+		"role":                user.Role,
+		logging.FieldEvent:    "login_success",
+	}).Info("user logged in successfully")
 }
 
 // logoutHandler handles user logout
@@ -2484,14 +2546,17 @@ func registerHandler(c *gin.Context) {
 		if err.Error() == "user already exists" {
 			errorResponse(c, http.StatusConflict, "username_taken", "Username already exists")
 		} else {
-			log.WithError(err).Error("Failed to create user")
+			logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldEvent, "user_create_failed").Error("failed to create user")
 			errorResponse(c, http.StatusInternalServerError, "user_creation_failed", "Failed to create user")
 		}
 		return
 	}
 
 	c.JSON(http.StatusCreated, gin.H{"message": "User registered successfully"})
-	log.WithField("username", registerReq.Username).Info("New user registered")
+	logging.WithComponent(logging.ComponentAuth).WithFields(log.Fields{
+		logging.FieldUsername: registerReq.Username,
+		logging.FieldEvent:    "register_success",
+	}).Info("new user registered")
 
 	// Best-effort onboarding email if configured and email provided.
 	if strings.TrimSpace(registerReq.Email) != "" {
@@ -2550,28 +2615,24 @@ func feedbackHandler(c *gin.Context) {
 
 	jsonData, err := json.Marshal(feedbackData)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal feedback data")
+		logging.WithComponent(logging.ComponentFeedback).WithError(err).WithField(logging.FieldEvent, "marshal_failed").Error("failed to marshal feedback data")
 		errorResponse(c, http.StatusInternalServerError, "feedback_processing_failed", "Failed to process feedback")
 		return
 	}
 
 	err = rdb.Set(ctx, feedbackKey, jsonData, 30*24*time.Hour).Err() // Store for 30 days
 	if err != nil {
-		log.WithError(err).Error("Failed to store feedback in Redis")
+		logging.WithComponent(logging.ComponentFeedback).WithError(err).WithField(logging.FieldEvent, "redis_set_failed").Error("failed to store feedback in Redis")
 		errorResponse(c, http.StatusInternalServerError, "feedback_save_failed", "Failed to save feedback")
 		return
 	}
 
-	log.WithFields(log.Fields{
-		"name":  feedbackReq.Name,
-		"email": feedbackReq.Email,
-		"message": func() string {
-			if len(feedbackReq.Message) > 100 {
-				return feedbackReq.Message[:100]
-			}
-			return feedbackReq.Message
-		}(),
-	}).Info("Feedback received")
+	logging.WithComponent(logging.ComponentFeedback).WithFields(log.Fields{
+		logging.FieldEvent: "feedback_stored",
+		"message_len":      len(feedbackReq.Message),
+		"has_email":        feedbackReq.Email != "",
+		"has_name":         feedbackReq.Name != "",
+	}).Info("feedback stored")
 
 	c.JSON(http.StatusOK, gin.H{"message": "Thank you for your feedback!"})
 }
@@ -2609,7 +2670,7 @@ func getActiveRateLimitCount() int {
 			count++
 		}
 		if err := iter.Err(); err != nil {
-			log.WithError(err).Warn("Failed to scan rate limit keys from Redis")
+			logging.WithComponent(logging.ComponentRateLimit).WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("failed to scan rate limit keys from Redis")
 		}
 		return count
 	}
@@ -2637,7 +2698,10 @@ func adminCacheHandler(c *gin.Context) {
 			rdb.Del(ctx, keys...)
 		}
 
-		log.WithField("username", username).Info("Cache cleared by admin")
+		logging.WithComponent(logging.ComponentAdmin).WithFields(log.Fields{
+			logging.FieldUsername: username,
+			logging.FieldEvent:    "cache_cleared",
+		}).Info("cache cleared by admin")
 		c.JSON(http.StatusOK, gin.H{"message": "Cache cleared successfully", "keys_removed": len(keys)})
 
 	case "stats":
@@ -3434,7 +3498,7 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	}
 	w.Flush()
 	if err := w.Error(); err != nil {
-		log.WithError(err).Error("CSV export write failed")
+		logging.WithComponent(logging.ComponentExport).WithError(err).WithField(logging.FieldEvent, "csv_write_failed").Error("CSV export write failed")
 	}
 }
 
@@ -3640,7 +3704,7 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 	c.Header("Content-Type", "application/pdf")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
 	if err := generatePortfolioPDF(&p, c.Writer, valuationCurrency, usdPerFiat); err != nil {
-		log.WithError(err).Error("portfolio PDF export failed")
+		logging.WithComponent(logging.ComponentExport).WithError(err).WithField(logging.FieldEvent, "pdf_export_failed").Error("portfolio PDF export failed")
 		errorResponse(c, http.StatusInternalServerError, "pdf_generation_failed", "Failed to generate PDF")
 		return
 	}
@@ -3755,7 +3819,7 @@ func exportBlocksCSVHandler(c *gin.Context) {
 	}
 	w.Flush()
 	if w.Error() != nil {
-		log.WithError(w.Error()).Error("blocks CSV export write failed")
+		logging.WithComponent(logging.ComponentExport).WithError(w.Error()).WithField(logging.FieldEvent, "csv_write_failed").Error("blocks CSV export write failed")
 	}
 }
 
@@ -3866,7 +3930,7 @@ func exportTransactionsCSVHandler(c *gin.Context) {
 	}
 	w.Flush()
 	if w.Error() != nil {
-		log.WithError(w.Error()).Error("transactions CSV export write failed")
+		logging.WithComponent(logging.ComponentExport).WithError(w.Error()).WithField(logging.FieldEvent, "csv_write_failed").Error("transactions CSV export write failed")
 	}
 }
 
@@ -4059,20 +4123,23 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 // Fix 1: Refactor searchHandler to use Gin's context
 func searchHandler(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
-	log.WithField("query", query).Info("Search request received")
+	qf := logging.QueryLogFields(query)
+	if query != "" {
+		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_request").Debug("search request received")
+	}
 	if query == "" {
-		log.Warn("Search request with empty query")
+		logging.WithComponent(logging.ComponentSearch).WithField(logging.FieldEvent, "search_empty_query").Warn("search request with empty query")
 		errorResponse(c, http.StatusBadRequest, "missing_query", "Missing query parameter")
 		return
 	}
 	if len(query) > 100 {
-		log.WithField("query", query).Warn("Search request query too long")
+		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_query_too_long").Warn("search request query too long")
 		errorResponse(c, http.StatusBadRequest, "query_too_long", "Query too long")
 		return
 	}
 	resultType, result, err := searchBlockchain(query)
 	if err != nil {
-		log.WithFields(log.Fields{"query": query, "error": err}).Error("Search failed")
+		logging.WithComponent(logging.ComponentSearch).WithError(err).WithFields(qf).WithField(logging.FieldEvent, "search_failed").Error("search failed")
 		if err == ErrNotFound {
 			errorResponse(c, http.StatusNotFound, "not_found", "Not found")
 		} else {
@@ -4083,7 +4150,7 @@ func searchHandler(c *gin.Context) {
 	// Marshal the result to JSON for ETag calculation
 	jsonBytes, err := json.Marshal(result)
 	if err != nil {
-		log.WithError(err).Error("Failed to marshal search response")
+		logging.WithComponent(logging.ComponentSearch).WithError(err).WithFields(qf).WithField(logging.FieldEvent, "marshal_failed").Error("failed to marshal search response")
 		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
 		return
 	}
@@ -4091,11 +4158,14 @@ func searchHandler(c *gin.Context) {
 	c.Header("ETag", etag)
 	c.Header("Cache-Control", "public, max-age=60")
 	if match := c.GetHeader("If-None-Match"); match == etag {
-		log.WithField("query", query).Info("Search cache hit")
+		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_cache_hit").Debug("search cache hit")
 		c.Status(304)
 		return
 	}
-	log.WithFields(log.Fields{"query": query, "type": resultType}).Info("Search successful")
+	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithFields(log.Fields{
+		logging.FieldResult: resultType,
+		logging.FieldEvent:  "search_success",
+	}).Info("search completed")
 	c.JSON(200, gin.H{"type": resultType, "result": result})
 }
 
@@ -4380,7 +4450,8 @@ func sortSymbols(symbols []SymbolInfo, sort SortOptions) {
 // advancedSearchHandler handles advanced symbol search with filters and sorting
 func advancedSearchHandler(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
-	log.WithField("query", query).Info("Advanced search request received")
+	qf := logging.QueryLogFields(query)
+	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "advanced_search_request").Debug("advanced search request received")
 
 	// Parse pagination (reused primitive)
 	pagination := apiutil.ParsePagination(c, 20, 100)
@@ -4444,14 +4515,14 @@ func advancedSearchHandler(c *gin.Context) {
 		categoryList = append(categoryList, c)
 	}
 
-	log.WithFields(log.Fields{
-		"query":      query,
-		"results":    len(paginatedResults),
-		"total":      total,
-		"page":       pagination.Page,
-		"sort_by":    sort.Field,
-		"sort_dir":   sort.Direction,
-	}).Info("Advanced search completed")
+	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithFields(log.Fields{
+		logging.FieldEvent: "advanced_search_completed",
+		"result_count":     len(paginatedResults),
+		"total":            total,
+		"page":             pagination.Page,
+		"sort_by":          sort.Field,
+		"sort_dir":         sort.Direction,
+	}).Info("advanced search completed")
 
 	c.JSON(http.StatusOK, gin.H{
 		"data":       paginatedResults,
@@ -5191,7 +5262,7 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	resultJSON, _ := json.Marshal(result)
 	err = rdb.Set(context.Background(), cacheKey, resultJSON, 1*time.Minute).Err()
 	if err != nil {
-		log.WithError(err).WithField("cache_key", cacheKey).Warn("Redis set error in getNetworkStatus")
+		logging.WithComponent(logging.ComponentNetwork).WithError(err).WithField(logging.FieldEvent, "cache_set_failed").Warn("redis set failed in getNetworkStatus")
 	}
 	return result, nil
 }
