@@ -4,6 +4,7 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
+	"encoding/hex"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/csv"
@@ -27,6 +28,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
+	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
@@ -1067,21 +1069,22 @@ func main() {
 	// Initialize Sentry
 	_ = pong
 	if cfg.SentryDSN != "" {
-		if initErr := sentry.Init(sentry.ClientOptions{
-			Dsn: cfg.SentryDSN,
-			// Set traces sample rate to 1.0 to capture 100% of transactions for performance monitoring.
-			TracesSampleRate: 1.0,
-		}); initErr != nil {
+		if initErr := sentryutil.Init(cfg); initErr != nil {
 			logging.WithComponent(logging.ComponentSentry).WithError(initErr).Fatal("sentry.Init failed")
 		}
-		logging.WithComponent(logging.ComponentSentry).Info("sentry initialized")
+		logging.WithComponent(logging.ComponentSentry).WithFields(log.Fields{
+			"traces_sample_rate": cfg.SentryTracesSampleRate,
+			"error_sample_rate":  cfg.SentryErrorSampleRate,
+		}).Info("sentry initialized")
 	} else {
 		logging.WithComponent(logging.ComponentSentry).Warn("sentry disabled: SENTRY_DSN not set")
 	}
 
 	r := gin.Default()
 
-	r.Use(sentrygin.New(sentrygin.Options{}))
+	r.Use(sentrygin.New(sentrygin.Options{Repanic: true, Timeout: 2 * time.Second}))
+	r.Use(requestIDMiddleware())
+	r.Use(sentryUserScopeMiddleware())
 	if cfg.MetricsEnabled {
 		r.Use(metrics.Middleware())
 	}
@@ -5145,6 +5148,121 @@ func SetPricingClient(c pricing.Client) {
 	}
 }
 
+// requestIDMiddleware sets X-Request-ID and a Sentry tag for log/trace correlation.
+func requestIDMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		rid := strings.TrimSpace(c.GetHeader("X-Request-ID"))
+		if rid == "" {
+			b := make([]byte, 16)
+			if _, err := rand.Read(b); err == nil {
+				rid = hex.EncodeToString(b)
+			} else {
+				rid = strconv.FormatInt(time.Now().UnixNano(), 36)
+			}
+		}
+		c.Set("request_id", rid)
+		c.Header("X-Request-ID", rid)
+		if hub := sentrygin.GetHubFromContext(c); hub != nil {
+			hub.ConfigureScope(func(scope *sentry.Scope) {
+				scope.SetTag("request_id", rid)
+			})
+		}
+		c.Next()
+	}
+}
+
+// sentryUserScopeMiddleware attaches client metadata and optional authenticated user to Sentry scopes.
+func sentryUserScopeMiddleware() gin.HandlerFunc {
+	return func(c *gin.Context) {
+		if hub := sentrygin.GetHubFromContext(c); hub != nil {
+			hub.ConfigureScope(func(scope *sentry.Scope) {
+				scope.SetTag("client_ip", c.ClientIP())
+				if ua := c.GetHeader("User-Agent"); ua != "" {
+					if len(ua) > 512 {
+						ua = ua[:512]
+					}
+					scope.SetTag("user_agent", ua)
+				}
+			})
+		}
+		if sid, err := c.Cookie("session_id"); err == nil && sid != "" {
+			if username, ok := validateSession(sid); ok {
+				if hub := sentrygin.GetHubFromContext(c); hub != nil {
+					hub.ConfigureScope(func(scope *sentry.Scope) {
+						scope.SetUser(sentry.User{ID: username, Username: username})
+						if u, exists := getUser(username); exists {
+							scope.SetTag("user_role", u.Role)
+						}
+					})
+				}
+			}
+		}
+		c.Next()
+	}
+}
+
+func sentryRouteForContext(c *gin.Context) string {
+	if r := c.FullPath(); r != "" {
+		return r
+	}
+	if c.Request != nil && c.Request.URL != nil {
+		return c.Request.URL.Path
+	}
+	return ""
+}
+
+func sentryLevelForHTTPStatus(status int) sentry.Level {
+	if status >= 500 {
+		return sentry.LevelError
+	}
+	if status >= 400 {
+		return sentry.LevelWarning
+	}
+	return sentry.LevelInfo
+}
+
+// captureSentryException records err on the request hub with tags and HTTP context.
+func captureSentryException(c *gin.Context, err error, status int, extraTags map[string]string) {
+	if err == nil {
+		return
+	}
+	apply := func(scope *sentry.Scope) {
+		for k, v := range extraTags {
+			if k != "" && v != "" {
+				scope.SetTag(k, v)
+			}
+		}
+		if rid, exists := c.Get("request_id"); exists {
+			if rs, ok := rid.(string); ok && rs != "" {
+				scope.SetTag("request_id", rs)
+			}
+		}
+		route := sentryRouteForContext(c)
+		if route != "" {
+			scope.SetTag("route", route)
+		}
+		scope.SetTag("http.status_code", strconv.Itoa(status))
+		scope.SetLevel(sentryLevelForHTTPStatus(status))
+		scope.SetContext("http", map[string]interface{}{
+			"method":      c.Request.Method,
+			"path":        route,
+			"status_code": status,
+		})
+	}
+	hub := sentrygin.GetHubFromContext(c)
+	if hub == nil {
+		sentry.WithScope(func(scope *sentry.Scope) {
+			apply(scope)
+			sentry.CaptureException(err)
+		})
+		return
+	}
+	hub.WithScope(func(scope *sentry.Scope) {
+		apply(scope)
+		hub.CaptureException(err)
+	})
+}
+
 // defaultErrorCode derives a generic error code from an HTTP status code.
 func defaultErrorCode(status int) string {
 	switch status {
@@ -5184,7 +5302,7 @@ func abortErrorResponse(c *gin.Context, status int, code, message string) {
 
 // handleError captures an error with Sentry and returns a standardized payload.
 func handleError(c *gin.Context, err error, status int) {
-	sentry.CaptureException(err)
+	captureSentryException(c, err, status, map[string]string{"source": "handleError"})
 	errorResponse(c, status, defaultErrorCode(status), err.Error())
 }
 

@@ -66,6 +66,12 @@ type Config struct {
 	// Prometheus metrics at GET /metrics
 	MetricsEnabled bool
 	MetricsToken   string // optional; if set, require Authorization: Bearer <token> or X-Metrics-Token
+
+	// Sentry (optional; DSN from SENTRY_DSN)
+	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
+	SentryRelease          string  // SENTRY_RELEASE (build/version)
+	SentryTracesSampleRate float64 // SENTRY_TRACES_SAMPLE_RATE; default 1.0 dev, 0.15 prod
+	SentryErrorSampleRate  float64 // SENTRY_SAMPLE_RATE for error events; default 1.0
 }
 
 // Load parses environment variables into a Config struct and validates
@@ -111,6 +117,10 @@ func Load() (*Config, error) {
 		RatesCacheTTLSeconds:       GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
 		MetricsEnabled:             metricsEnabledFromEnv(),
 		MetricsToken:               strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		SentryEnvironment:          strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
+		SentryRelease:              strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
+		SentryTracesSampleRate:     sentryTracesSampleRateForEnv(appEnv),
+		SentryErrorSampleRate:      sentryErrorSampleRateFromEnv(),
 	}
 
 	// Required in all environments: GetBlock configuration for core blockchain operations.
@@ -119,6 +129,32 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func sentryTracesSampleRateForEnv(appEnv string) float64 {
+	s := strings.TrimSpace(os.Getenv("SENTRY_TRACES_SAMPLE_RATE"))
+	if s != "" {
+		v, err := strconv.ParseFloat(s, 64)
+		if err == nil && v >= 0 && v <= 1 {
+			return v
+		}
+	}
+	if appEnv == "development" {
+		return 1.0
+	}
+	return 0.15
+}
+
+func sentryErrorSampleRateFromEnv() float64 {
+	s := strings.TrimSpace(os.Getenv("SENTRY_SAMPLE_RATE"))
+	if s == "" {
+		return 1.0
+	}
+	v, err := strconv.ParseFloat(s, 64)
+	if err != nil || v < 0 || v > 1 {
+		return 1.0
+	}
+	return v
 }
 
 func metricsEnabledFromEnv() bool {
