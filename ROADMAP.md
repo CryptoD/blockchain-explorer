@@ -52,7 +52,14 @@
 - [x] **DONE** — Email delivery via SMTP (templated welcome/alert/admin-critical) + user opt-in preferences
 - [x] **DONE** — Profile settings updated (email field + granular email toggles)
 
-## Phase 9 — Future
+## Phase 9 — Observability & operations *(concluded)*
+- [x] **DONE** — Structured logging (`internal/logging`): JSON logs, `LOG_LEVEL`, shared fields (`component`, `event`, safe search query hashing)
+- [x] **DONE** — Prometheus-compatible `GET /metrics` (`internal/metrics`): HTTP latency/counts, cache and background-job metrics; optional `METRICS_TOKEN`; rate-limit exemption for scrapers
+- [x] **DONE** — Sentry integration (`internal/sentryutil`): environment, release, trace/error sample rates, request/user scope, `BeforeSend` scrubbing of sensitive headers
+- [x] **DONE** — Correlation IDs (`internal/correlation`): propagate `X-Correlation-ID` / `X-Request-ID`, response headers and JSON on errors/health; per-run IDs for background jobs
+- [x] **DONE** — Monitoring playbook: `monitoring/README.md`, Grafana dashboard JSON, Prometheus alert rules, Alertmanager escalation example, `promtool` check script
+
+## Phase 10 — Future
 - [ ] Replace placeholder RPC/pricing keys with real provider credentials for full data fidelity
 - [ ] Make HTML routes resilient to API rate limiting (avoid returning JSON rate-limit responses for pages)
 - [ ] Additional watchlist/portfolio enhancements
