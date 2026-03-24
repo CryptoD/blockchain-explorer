@@ -17,7 +17,7 @@ func TestCallBlockchain_APIErrorStatus(t *testing.T) {
 	resetCache()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
-		w.Write([]byte("oops"))
+		_, _ = w.Write([]byte("oops"))
 	}))
 	defer ts.Close()
 
@@ -35,7 +35,7 @@ func TestGetBlockDetails_InvalidJSON(t *testing.T) {
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte("not-json"))
+		_, _ = w.Write([]byte("not-json"))
 	}))
 	defer ts.Close()
 
@@ -114,7 +114,7 @@ func TestCallBlockchain_TimeoutRetryBehavior(t *testing.T) {
 		time.Sleep(150 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`))
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`))
 	}))
 	defer ts.Close()
 
@@ -138,7 +138,7 @@ func TestCallBlockchain_RetrySucceedsAfterFailures(t *testing.T) {
 		}
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
-		w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`))
+		_, _ = w.Write([]byte(`{"jsonrpc":"2.0","id":"1","result":{"ok":true}}`))
 	}))
 	defer ts.Close()
 

@@ -146,7 +146,7 @@ func TestPortfolio_Create_List_Update_Delete_Redis(t *testing.T) {
 		t.Fatalf("list data mismatch: %+v", listOut.Data)
 	}
 
-	upd := fmt.Sprintf(`{"name":"Main2","description":"x","items":[{"type":"crypto","label":"L","address":"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"}]}`)
+	upd := `{"name":"Main2","description":"x","items":[{"type":"crypto","label":"L","address":"3J98t1WpEZ73CNmQviecrnyiWrnqRhWNLy"}]}`
 	wu := reqJSON(t, r, http.MethodPut, "/api/v1/user/portfolios/"+created.ID, upd, authHeader(cookie, csrf))
 	if wu.Code != http.StatusOK {
 		t.Fatalf("update: %d %s", wu.Code, wu.Body.String())
@@ -210,7 +210,9 @@ func TestPortfolio_CrossUser_NotFound(t *testing.T) {
 	c1, cs1 := loginV1(t, r, "owner", "Str0ngPass")
 	w := reqJSON(t, r, http.MethodPost, "/api/v1/user/portfolios", validPortfolioJSON("mine"), authHeader(c1, cs1))
 	var p Portfolio
-	json.Unmarshal(w.Body.Bytes(), &p)
+	if err := json.Unmarshal(w.Body.Bytes(), &p); err != nil {
+		t.Fatalf("unmarshal portfolio: %v", err)
+	}
 
 	c2, cs2 := loginV1(t, r, "other", "Str0ngPass")
 	wg := reqJSON(t, r, http.MethodPut, "/api/v1/user/portfolios/"+p.ID, validPortfolioJSON("stolen"), authHeader(c2, cs2))
@@ -227,7 +229,9 @@ func TestWatchlist_CrossUser_NotFound(t *testing.T) {
 	c1, cs1 := loginV1(t, r, "wOwner", "Str0ngPass")
 	w := reqJSON(t, r, http.MethodPost, "/api/v1/user/watchlists", `{"name":"w","entries":[]}`, authHeader(c1, cs1))
 	var wl Watchlist
-	json.Unmarshal(w.Body.Bytes(), &wl)
+	if err := json.Unmarshal(w.Body.Bytes(), &wl); err != nil {
+		t.Fatalf("unmarshal watchlist: %v", err)
+	}
 	c2, cs2 := loginV1(t, r, "wOther", "Str0ngPass")
 	wg := getReq(t, r, "/api/v1/user/watchlists/"+wl.ID, authHeader(c2, cs2))
 	if wg.Code != http.StatusNotFound {
@@ -270,7 +274,9 @@ func TestWatchlist_CRUD_Entries_Redis(t *testing.T) {
 	var listOut struct {
 		Data []Watchlist `json:"data"`
 	}
-	json.Unmarshal(list.Body.Bytes(), &listOut)
+	if err := json.Unmarshal(list.Body.Bytes(), &listOut); err != nil {
+		t.Fatalf("unmarshal watchlist list: %v", err)
+	}
 	if len(listOut.Data) != 1 {
 		t.Fatalf("list len %d", len(listOut.Data))
 	}
@@ -287,7 +293,9 @@ func TestWatchlist_CRUD_Entries_Redis(t *testing.T) {
 		t.Fatalf("add entry: %d %s", wa.Code, wa.Body.String())
 	}
 	var wl2 Watchlist
-	json.Unmarshal(wa.Body.Bytes(), &wl2)
+	if err := json.Unmarshal(wa.Body.Bytes(), &wl2); err != nil {
+		t.Fatalf("unmarshal watchlist after add entry: %v", err)
+	}
 	if len(wl2.Entries) != 2 {
 		t.Fatalf("entries len %d", len(wl2.Entries))
 	}
@@ -346,7 +354,9 @@ func TestWatchlist_EntryIndex_OutOfRange(t *testing.T) {
 	cookie, csrf := loginV1(t, r, "wlidx", "Str0ngPass")
 	w := reqJSON(t, r, http.MethodPost, "/api/v1/user/watchlists", `{"name":"e","entries":[{"type":"symbol","symbol":"eth"}]}`, authHeader(cookie, csrf))
 	var wl Watchlist
-	json.Unmarshal(w.Body.Bytes(), &wl)
+	if err := json.Unmarshal(w.Body.Bytes(), &wl); err != nil {
+		t.Fatalf("unmarshal watchlist: %v", err)
+	}
 
 	w2 := reqJSON(t, r, http.MethodPut, "/api/v1/user/watchlists/"+wl.ID+"/entries/99", `{"type":"symbol","symbol":"x"}`, authHeader(cookie, csrf))
 	if w2.Code != http.StatusNotFound || apiErrCode(t, w2.Body.Bytes()) != "entry_not_found" {
@@ -388,7 +398,9 @@ func TestWatchlist_EntryQuota_MaxEntries(t *testing.T) {
 		t.Fatalf("create full: %d %s", w.Code, w.Body.String())
 	}
 	var wl Watchlist
-	json.Unmarshal(w.Body.Bytes(), &wl)
+	if err := json.Unmarshal(w.Body.Bytes(), &wl); err != nil {
+		t.Fatalf("unmarshal watchlist: %v", err)
+	}
 	w2 := reqJSON(t, r, http.MethodPost, "/api/v1/user/watchlists/"+wl.ID+"/entries", `{"type":"symbol","symbol":"extra"}`, authHeader(cookie, csrf))
 	if w2.Code != http.StatusTooManyRequests || apiErrCode(t, w2.Body.Bytes()) != "entry_quota_exceeded" {
 		t.Fatalf("want entry_quota_exceeded: %d %s", w2.Code, w2.Body.String())

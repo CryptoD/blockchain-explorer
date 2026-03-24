@@ -158,4 +158,3 @@ func normalizeURL(raw string) string {
 type ErrUnavailable string
 
 func (e ErrUnavailable) Error() string { return string(e) }
-

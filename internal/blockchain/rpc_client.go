@@ -65,4 +65,3 @@ func (c *GetBlockRPCClient) Call(ctx context.Context, method string, params []in
 	}
 	return resp, nil
 }
-

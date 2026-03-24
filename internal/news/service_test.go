@@ -26,8 +26,14 @@ type memCache struct {
 	stale map[string][]Article
 }
 
-func (m *memCache) GetFresh(ctx context.Context, key string) ([]Article, bool) { v, ok := m.fresh[key]; return v, ok }
-func (m *memCache) GetStale(ctx context.Context, key string) ([]Article, bool) { v, ok := m.stale[key]; return v, ok }
+func (m *memCache) GetFresh(ctx context.Context, key string) ([]Article, bool) {
+	v, ok := m.fresh[key]
+	return v, ok
+}
+func (m *memCache) GetStale(ctx context.Context, key string) ([]Article, bool) {
+	v, ok := m.stale[key]
+	return v, ok
+}
 func (m *memCache) SetFresh(ctx context.Context, key string, articles []Article, ttl time.Duration) error {
 	if m.fresh == nil {
 		m.fresh = map[string][]Article{}
@@ -92,4 +98,3 @@ func TestService_ReturnsErrorWhenUnconfigured(t *testing.T) {
 		t.Fatalf("expected error")
 	}
 }
-

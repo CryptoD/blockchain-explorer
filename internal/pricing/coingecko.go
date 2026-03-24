@@ -135,4 +135,3 @@ func (c *CoinGeckoClient) GetCryptoPriceInFiat(ctx context.Context, coinID, fiat
 		return 0, false
 	}
 }
-

@@ -52,6 +52,7 @@ docker-compose.override.yml
 *.log
 logs/
 coverage.out
+coverage.html
 
 ################################
 # OS / editor junk             #

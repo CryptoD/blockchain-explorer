@@ -1,0 +1,15 @@
+# https://docs.codecov.com/docs/codecov-yaml
+# Requires uploading coverage from CI (see .github/workflows/ci.yml) and a
+# repository secret CODECOV_TOKEN from https://app.codecov.io
+
+codecov:
+  require_ci_to_pass: true
+
+coverage:
+  status:
+    project:
+      default:
+        informational: true
+    patch:
+      default:
+        target: 70%

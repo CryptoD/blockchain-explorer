@@ -27,4 +27,3 @@ type Meta struct {
 	Stale    bool   `json:"stale"`
 	Query    string `json:"query,omitempty"`
 }
-

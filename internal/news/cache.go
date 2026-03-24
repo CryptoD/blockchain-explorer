@@ -12,4 +12,3 @@ type Cache interface {
 	SetFresh(ctx context.Context, key string, articles []Article, ttl time.Duration) error
 	SetStale(ctx context.Context, key string, articles []Article, ttl time.Duration) error
 }
-

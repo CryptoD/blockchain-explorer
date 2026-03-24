@@ -7,7 +7,56 @@ on:
     branches: [ main, master ]
 
 jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Verify gofmt (simplified)
+      run: |
+        set -euo pipefail
+        out=$(gofmt -s -l .)
+        if [ -n "$out" ]; then
+          echo "::error::Run gofmt -s -w on: $out"
+          echo "$out"
+          exit 1
+        fi
+
+    - name: Verify goimports
+      run: |
+        set -euo pipefail
+        go install golang.org/x/tools/cmd/goimports@v0.30.0
+        export PATH="$(go env GOPATH)/bin:$PATH"
+        out=$(goimports -l .)
+        if [ -n "$out" ]; then
+          echo "::error::Run goimports -w on: $out"
+          echo "$out"
+          exit 1
+        fi
+
+    - name: golangci-lint
+      uses: golangci/golangci-lint-action@v9
+      with:
+        version: v2.11.4
+
   test:
+    needs: lint
     runs-on: ubuntu-latest
 
     steps:
@@ -29,8 +78,41 @@ jobs:
     - name: Download dependencies
       run: go mod download
 
-    - name: Run tests
-      run: go test ./...
+    - name: Run tests with coverage
+      run: |
+        set -euo pipefail
+        go test -coverprofile=coverage.out -covermode=atomic ./...
+
+    - name: Coverage summary
+      run: |
+        echo "## Go test coverage" >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        go tool cover -func=coverage.out | tail -1 >> "$GITHUB_STEP_SUMMARY"
+        echo '```' >> "$GITHUB_STEP_SUMMARY"
+        echo "" >> "$GITHUB_STEP_SUMMARY"
+        echo "Full per-file breakdown is in the uploaded \`coverage.out\` artifact." >> "$GITHUB_STEP_SUMMARY"
+
+    - name: Generate HTML coverage report
+      run: go tool cover -html=coverage.out -o coverage.html
+
+    - name: Upload coverage artifacts
+      uses: actions/upload-artifact@v4
+      with:
+        name: go-coverage
+        path: |
+          coverage.out
+          coverage.html
+        retention-days: 14
+
+    - name: Upload coverage to Codecov
+      if: ${{ secrets.CODECOV_TOKEN != '' }}
+      uses: codecov/codecov-action@v5
+      with:
+        token: ${{ secrets.CODECOV_TOKEN }}
+        files: coverage.out
+        disable_search: true
+        fail_ci_if_error: true
 
     - name: Build
       run: go build -v ./...

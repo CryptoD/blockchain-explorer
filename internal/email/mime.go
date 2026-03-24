@@ -56,4 +56,3 @@ func encodeHeader(s string) string {
 	// Many SMTP servers/clients handle UTF-8 in Subject well enough.
 	return strings.ReplaceAll(s, "\r", "")
 }
-

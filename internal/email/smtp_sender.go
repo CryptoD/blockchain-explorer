@@ -11,12 +11,12 @@ import (
 )
 
 type SMTPSender struct {
-	Host       string
-	Port       int
-	Username   string
-	Password   string
+	Host        string
+	Port        int
+	Username    string
+	Password    string
 	UseSTARTTLS bool
-	SkipVerify bool
+	SkipVerify  bool
 }
 
 func (s *SMTPSender) Name() string { return "smtp" }
@@ -44,7 +44,7 @@ func (s *SMTPSender) Send(ctx context.Context, from Address, msg Message) error 
 	if err != nil {
 		return err
 	}
-	defer conn.Close()
+	defer func() { _ = conn.Close() }()
 
 	c, err := smtp.NewClient(conn, s.Host)
 	if err != nil {
@@ -83,4 +83,3 @@ func (s *SMTPSender) Send(ctx context.Context, from Address, msg Message) error 
 	}
 	return w.Close()
 }
-

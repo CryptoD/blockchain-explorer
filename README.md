@@ -1,5 +1,8 @@
 # Bitcoin Blockchain Explorer
 
+[![CI](https://github.com/CryptoD/blockchain-explorer/actions/workflows/ci.yml/badge.svg)](https://github.com/CryptoD/blockchain-explorer/actions/workflows/ci.yml)
+[![codecov](https://codecov.io/gh/CryptoD/blockchain-explorer/branch/main/graph/badge.svg)](https://codecov.io/gh/CryptoD/blockchain-explorer)
+
 A comprehensive web-based application for exploring the Bitcoin blockchain with real-time access to blocks, transactions, and address information.
 
 ## Table of Contents
@@ -14,6 +17,8 @@ A comprehensive web-based application for exploring the Bitcoin blockchain with 
   - [Project Structure](#project-structure)
   - [Technology Stack](#technology-stack)
   - [Development Setup](#development-setup)
+  - [Code style (Go)](#code-style-go)
+  - [Code coverage](#code-coverage)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -230,9 +235,10 @@ bitcoin-explorer/
 
 1. Install development dependencies:
    ```bash
-   # Install Go tools
-   go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
-   
+   # Go formatting / imports (match CI versions)
+   go install golang.org/x/tools/cmd/goimports@v0.30.0
+   go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.11.4
+
    # Install frontend dependencies
    npm install
    ```
@@ -247,6 +253,35 @@ bitcoin-explorer/
    go run main.go
    ```
 
+### Code style (Go)
+
+CI runs **`gofmt -s`**, **`goimports`**, and **[golangci-lint](https://golangci-lint.run/)** using [`.golangci.yml`](.golangci.yml) (standard preset). Formatting or lint failures fail the build.
+
+Before committing Go changes:
+
+```bash
+gofmt -s -w .
+goimports -w .
+golangci-lint run ./...
+go test ./...
+```
+
+Ensure `$(go env GOPATH)/bin` is on your `PATH` so `goimports` and `golangci-lint` resolve.
+
+### Code coverage
+
+Generate a merged profile and an HTML report (same flags as CI):
+
+```bash
+go test -coverprofile=coverage.out -covermode=atomic ./...
+go tool cover -func=coverage.out
+go tool cover -html=coverage.out -o coverage.html
+```
+
+`coverage.out` and `coverage.html` are gitignored.
+
+On pull requests, [Codecov](https://codecov.io) can enforce a **minimum coverage on new/changed lines** (patch coverage in `codecov.yml`). To enable uploads and the README badge, add a repository secret **CODECOV_TOKEN** from your Codecov project settings and ensure the repo slug in Codecov matches `CryptoD/blockchain-explorer` (or adjust badge URLs). If the secret is absent, CI still runs tests and uploads `coverage.out` / `coverage.html` as workflow artifacts.
+
 ### Admin credentials, environments, and rotation
 
 - In **development** (`APP_ENV=development` or unset), the application will fall back to `admin` / `admin123` if `ADMIN_USERNAME` / `ADMIN_PASSWORD` are not provided. This is for local convenience only and must not be used in shared or production deployments.
@@ -260,6 +295,8 @@ bitcoin-explorer/
 ## Contributing
 
 We welcome contributions to improve the Bitcoin Explorer. Please follow standard Go and web development practices.
+
+Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **frontend** CSS build must succeed; **Docker** image must build. Run the commands in [Code style (Go)](#code-style-go) and `go test ./...` locally before opening a PR.
 
 ## License
 

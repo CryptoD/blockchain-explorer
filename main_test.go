@@ -167,7 +167,7 @@ func TestSearchBlockchain_AddressTransactionBlockAndNotFound(t *testing.T) {
 	// Use a valid 64-char hex txid
 	txid := strings.Repeat("b", 60) + "0a0b"
 	setCache("tx:"+txid, map[string]interface{}{"hash": txid})
-	typeStr, res, err = searchBlockchain(txid)
+	typeStr, _, err = searchBlockchain(txid)
 	if err != nil {
 		t.Fatalf("searchBlockchain(tx) returned error: %v", err)
 	}
@@ -178,7 +178,7 @@ func TestSearchBlockchain_AddressTransactionBlockAndNotFound(t *testing.T) {
 	// Block height
 	height := "12345"
 	setCache("block:"+height, map[string]interface{}{"result": map[string]interface{}{"height": 12345}})
-	typeStr, res, err = searchBlockchain(height)
+	typeStr, _, err = searchBlockchain(height)
 	if err != nil {
 		t.Fatalf("searchBlockchain(block) returned error: %v", err)
 	}
@@ -261,12 +261,14 @@ func TestCallBlockchain_SuccessWithTestServer(t *testing.T) {
 		}
 		body, _ := io.ReadAll(r.Body)
 		var payload map[string]interface{}
-		json.Unmarshal(body, &payload)
+		if err := json.Unmarshal(body, &payload); err != nil {
+			t.Fatalf("unmarshal request body: %v", err)
+		}
 		resp := map[string]interface{}{"jsonrpc": "2.0", "id": payload["id"], "result": map[string]interface{}{"ok": true}}
 		respBytes, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(200)
-		w.Write(respBytes)
+		_, _ = w.Write(respBytes)
 	}))
 	defer ts.Close()
 

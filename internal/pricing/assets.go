@@ -7,8 +7,8 @@ import (
 
 // Asset class constants for portfolio items.
 const (
-	AssetClassCrypto     = "crypto"
-	AssetClassCommodity  = "commodity"
+	AssetClassCrypto    = "crypto"
+	AssetClassCommodity = "commodity"
 	AssetClassBond      = "bond"
 	AssetClassStock     = "stock"
 )

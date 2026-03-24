@@ -1399,7 +1399,12 @@ func main() {
 		"addr":             ":8080",
 	}).Info("HTTP server listening")
 
-	r.Run(":8080")
+	if err := r.Run(":8080"); err != nil {
+		logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
+			logging.FieldEvent: "server_exit",
+			"error":            err.Error(),
+		}).Error("HTTP server stopped with error")
+	}
 }
 
 // Fetch the latest N transactions (from the latest N blocks)
@@ -2384,20 +2389,6 @@ func sendAlertTriggeredEmail(user User, alert PriceAlert) {
 	}
 }
 
-func sendAdminCriticalEmail(title, message string) {
-	if emailService == nil || emailTemplates == nil || !emailService.Enabled() || appConfig == nil || strings.TrimSpace(appConfig.AdminEmail) == "" {
-		return
-	}
-	subj, textBody, htmlBody := emailTemplates.AdminCritical(email.AdminCriticalData{Title: title, Message: message})
-	emailService.Enqueue(email.Message{
-		To:      email.Address{Email: appConfig.AdminEmail},
-		Subject: subj,
-		Text:    textBody,
-		HTML:    htmlBody,
-		Tags:    map[string]string{"type": "admin_critical"},
-	})
-}
-
 // loginHandler handles user authentication
 func loginHandler(c *gin.Context) {
 	var loginReq struct {
@@ -2985,7 +2976,10 @@ func updatePortfolioHandler(c *gin.Context) {
 	}
 
 	var p Portfolio
-	json.Unmarshal([]byte(data), &p)
+	if err := json.Unmarshal([]byte(data), &p); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "portfolio_decode_failed", "Failed to decode portfolio")
+		return
+	}
 
 	// Update fields
 	p.Name = sanitizeText(updateReq.Name, 100)
@@ -4873,15 +4867,6 @@ func filterRatesByCurrencies(rates map[string]interface{}, want []string) map[st
 		}
 	}
 	return out
-}
-
-// getBTCPriceInFiat returns the BTC price in the given fiat code (e.g. "usd", "eur").
-// Uses the rates service; returns (0, false) if pricing is unavailable or currency unsupported.
-func getBTCPriceInFiat(ctx context.Context, fiatCode string) (float64, bool) {
-	if assetPricer == nil {
-		return 0, false
-	}
-	return assetPricer.GetAssetPriceInFiat(ctx, pricing.AssetClassCrypto, "bitcoin", fiatCode, 1)
 }
 
 // getUSDPerFiat returns how many USD equal 1 unit of fiat (e.g. 1 EUR = 1.08 USD).

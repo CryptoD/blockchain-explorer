@@ -15,33 +15,33 @@ type Config struct {
 	RedisHost string
 
 	// External providers
-	GetBlockBaseURL    string
+	GetBlockBaseURL     string
 	GetBlockAccessToken string
-	SentryDSN          string
+	SentryDSN           string
 
 	// Email delivery
-	EmailProvider   string
-	EmailFrom       string
-	EmailFromName   string
-	AdminEmail      string
-	SMTPHost        string
-	SMTPPort        int
-	SMTPUsername    string
-	SMTPPassword    string
-	SMTPStartTLS    bool
-	SMTPSkipVerify  bool
-	AppBaseURL      string
+	EmailProvider  string
+	EmailFrom      string
+	EmailFromName  string
+	AdminEmail     string
+	SMTPHost       string
+	SMTPPort       int
+	SMTPUsername   string
+	SMTPPassword   string
+	SMTPStartTLS   bool
+	SMTPSkipVerify bool
+	AppBaseURL     string
 
 	// News provider (contextual / financial news)
-	NewsProvider string
-	TheNewsAPIBaseURL          string
-	TheNewsAPIToken            string
-	TheNewsAPIDefaultSearch    string
-	TheNewsAPIDefaultLanguage  string
-	TheNewsAPIDefaultLocale    string
+	NewsProvider                string
+	TheNewsAPIBaseURL           string
+	TheNewsAPIToken             string
+	TheNewsAPIDefaultSearch     string
+	TheNewsAPIDefaultLanguage   string
+	TheNewsAPIDefaultLocale     string
 	TheNewsAPIDefaultCategories string
-	NewsCacheTTLSeconds        int // "fresh" cache TTL; default 300 (5m)
-	NewsStaleTTLSeconds        int // "stale fallback" TTL; default 3600 (1h)
+	NewsCacheTTLSeconds         int // "fresh" cache TTL; default 300 (5m)
+	NewsStaleTTLSeconds         int // "stale fallback" TTL; default 3600 (1h)
 
 	// Security / cookies
 	SecureCookies bool
@@ -52,8 +52,8 @@ type Config struct {
 	RateLimitPerUser       int
 
 	// Export-specific rate limiting (stricter to prevent abuse)
-	ExportRateLimitPerIP   int // per window; default 5
-	ExportRateLimitPerUser int // per window when authenticated; default 20
+	ExportRateLimitPerIP        int // per window; default 5
+	ExportRateLimitPerUser      int // per window when authenticated; default 20
 	ExportRateLimitHeavyPerIP   int // for heavy exports (e.g. transactions CSV); default 2
 	ExportRateLimitHeavyPerUser int // when authenticated; default 5
 
@@ -80,47 +80,47 @@ func Load() (*Config, error) {
 	appEnv := GetAppEnv()
 
 	cfg := &Config{
-		AppEnv:                appEnv,
-		RedisHost:             GetEnvWithDefault("REDIS_HOST", "localhost"),
-		GetBlockBaseURL:       strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
-		GetBlockAccessToken:   strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
-		SentryDSN:             strings.TrimSpace(os.Getenv("SENTRY_DSN")),
-		EmailProvider:         strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_PROVIDER"))),
-		EmailFrom:             strings.TrimSpace(os.Getenv("EMAIL_FROM")),
-		EmailFromName:         strings.TrimSpace(os.Getenv("EMAIL_FROM_NAME")),
-		AdminEmail:            strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
-		SMTPHost:              strings.TrimSpace(os.Getenv("SMTP_HOST")),
-		SMTPPort:              GetEnvIntWithDefault("SMTP_PORT", 587),
-		SMTPUsername:          strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
-		SMTPPassword:          strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
-		SMTPStartTLS:          strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_STARTTLS"))) == "true",
-		SMTPSkipVerify:        strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_VERIFY"))) == "true",
-		AppBaseURL:            strings.TrimSpace(os.Getenv("APP_BASE_URL")),
-		NewsProvider:          strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
-		TheNewsAPIBaseURL:     strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
-		TheNewsAPIToken:       strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),
-		TheNewsAPIDefaultSearch: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_SEARCH")),
-		TheNewsAPIDefaultLanguage: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LANGUAGE")),
-		TheNewsAPIDefaultLocale: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LOCALE")),
+		AppEnv:                      appEnv,
+		RedisHost:                   GetEnvWithDefault("REDIS_HOST", "localhost"),
+		GetBlockBaseURL:             strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
+		GetBlockAccessToken:         strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
+		SentryDSN:                   strings.TrimSpace(os.Getenv("SENTRY_DSN")),
+		EmailProvider:               strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_PROVIDER"))),
+		EmailFrom:                   strings.TrimSpace(os.Getenv("EMAIL_FROM")),
+		EmailFromName:               strings.TrimSpace(os.Getenv("EMAIL_FROM_NAME")),
+		AdminEmail:                  strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
+		SMTPHost:                    strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:                    GetEnvIntWithDefault("SMTP_PORT", 587),
+		SMTPUsername:                strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:                strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPStartTLS:                strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_STARTTLS"))) == "true",
+		SMTPSkipVerify:              strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_VERIFY"))) == "true",
+		AppBaseURL:                  strings.TrimSpace(os.Getenv("APP_BASE_URL")),
+		NewsProvider:                strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
+		TheNewsAPIBaseURL:           strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
+		TheNewsAPIToken:             strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),
+		TheNewsAPIDefaultSearch:     strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_SEARCH")),
+		TheNewsAPIDefaultLanguage:   strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LANGUAGE")),
+		TheNewsAPIDefaultLocale:     strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LOCALE")),
 		TheNewsAPIDefaultCategories: strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_CATEGORIES")),
-		NewsCacheTTLSeconds:   GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
-		NewsStaleTTLSeconds:   GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
-		SecureCookies:         UseSecureCookies(),
-		RateLimitWindowSeconds:     GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
-		RateLimitPerIP:             GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
-		RateLimitPerUser:           GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
-		ExportRateLimitPerIP:       GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_IP", 5),
-		ExportRateLimitPerUser:     GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
-		ExportRateLimitHeavyPerIP:  GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
+		NewsCacheTTLSeconds:         GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
+		NewsStaleTTLSeconds:         GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
+		SecureCookies:               UseSecureCookies(),
+		RateLimitWindowSeconds:      GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitPerIP:              GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
+		RateLimitPerUser:            GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
+		ExportRateLimitPerIP:        GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_IP", 5),
+		ExportRateLimitPerUser:      GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
+		ExportRateLimitHeavyPerIP:   GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
 		ExportRateLimitHeavyPerUser: GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
-		ReadyCheckExternal:         strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
-		RatesCacheTTLSeconds:       GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
-		MetricsEnabled:             metricsEnabledFromEnv(),
-		MetricsToken:               strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
-		SentryEnvironment:          strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
-		SentryRelease:              strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
-		SentryTracesSampleRate:     sentryTracesSampleRateForEnv(appEnv),
-		SentryErrorSampleRate:      sentryErrorSampleRateFromEnv(),
+		ReadyCheckExternal:          strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
+		RatesCacheTTLSeconds:        GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
+		MetricsEnabled:              metricsEnabledFromEnv(),
+		MetricsToken:                strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		SentryEnvironment:           strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
+		SentryRelease:               strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
+		SentryTracesSampleRate:      sentryTracesSampleRateForEnv(appEnv),
+		SentryErrorSampleRate:       sentryErrorSampleRateFromEnv(),
 	}
 
 	// Required in all environments: GetBlock configuration for core blockchain operations.
@@ -211,4 +211,3 @@ func UseSecureCookies() bool {
 	}
 	return GetAppEnv() != "development"
 }
-

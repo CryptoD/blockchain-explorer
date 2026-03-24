@@ -72,4 +72,3 @@ func ParseSort(c *gin.Context, defaultField, defaultDirection string, allowedFie
 		Direction: dir,
 	}
 }
-

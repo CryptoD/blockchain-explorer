@@ -78,4 +78,3 @@ func (a Address) String() string {
 	}
 	return fmt.Sprintf("%s <%s>", a.Name, a.Email)
 }
-

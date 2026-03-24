@@ -72,4 +72,3 @@ func renderText(tpl string, data any) string {
 	_ = t.Execute(&buf, data)
 	return buf.String()
 }
-
