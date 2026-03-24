@@ -646,7 +646,7 @@
                 const sel = (i === autocompleteSelectedIndex);
                 it.setAttribute('aria-selected', sel ? 'true' : 'false');
                 if (sel) {
-                    // set input value preview (do not perform search yet)
+                    // Keyboard nav: preview label in the input; search runs on pick/Enter, not here.
                     const input = (source === 'mobile') ? document.getElementById('search-input-mobile') : document.getElementById('search-input');
                     if (input && currentSuggestions[i]) input.value = currentSuggestions[i].value || currentSuggestions[i].label || input.value;
                     // ensure visible

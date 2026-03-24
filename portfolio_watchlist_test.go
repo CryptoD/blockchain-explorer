@@ -12,7 +12,7 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-// portfolioWatchlistTestRouter wires v1 user portfolio and watchlist routes (mirrors main).
+// portfolioWatchlistTestRouter mirrors main: v1 portfolio and watchlist routes.
 func portfolioWatchlistTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -408,7 +408,7 @@ func TestWatchlist_EntryQuota_MaxEntries(t *testing.T) {
 }
 
 func TestPortfolio_Delete_NonExistent_CurrentBehavior(t *testing.T) {
-	// Redis DEL is idempotent: no error when key missing; handler returns 200.
+	// DELETE is idempotent: missing key still yields 200 (Redis DEL no-op).
 	resetAuthState(t)
 	r := portfolioWatchlistTestRouter()
 	registerV1(t, r, "delpf", "Str0ngPass")

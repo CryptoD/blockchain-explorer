@@ -326,9 +326,8 @@ type Notification struct {
 	DismissedAt *time.Time `json:"dismissed_at,omitempty"`
 }
 
-// WatchlistEntry is a single item in a watchlist (symbol or address with optional tags/notes and group).
-// Exactly one of Symbol or Address should be set; Type indicates which ("symbol" or "address").
-// Group is optional and used for grouping display (e.g. "Crypto", "High risk", or custom).
+// WatchlistEntry is one row in a watchlist: a symbol or address plus optional tags, notes, and group label.
+// Exactly one of Symbol or Address should be set; Type is "symbol" or "address".
 type WatchlistEntry struct {
 	Type    string   `json:"type"`              // "symbol" or "address"
 	Symbol  string   `json:"symbol,omitempty"`  // e.g. "bitcoin", "ethereum"; used when Type == "symbol"

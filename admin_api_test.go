@@ -10,7 +10,7 @@ import (
 	"github.com/redis/go-redis/v9"
 )
 
-// adminTestRouter registers v1 and legacy admin routes (status + cache), matching main.
+// adminTestRouter mirrors main: v1 + legacy admin status/cache routes and CSRF.
 func adminTestRouter() *gin.Engine {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
@@ -156,8 +156,7 @@ func TestAdmin_Status_MissingCSRF(t *testing.T) {
 	}
 }
 
-// TestAdmin_WhenRedisUnreachable_CacheFails tests cache endpoints when Redis cannot serve KEYS.
-// Session still validates via in-memory fallback: validateSession falls back to sessionStore when rdb.Get fails.
+// TestAdmin_WhenRedisUnreachable_CacheFails swaps rdb for a dead address; cache ops fail, session may still validate from memory.
 func TestAdmin_WhenRedisUnreachable_CacheFails(t *testing.T) {
 	resetAuthState(t)
 	r := adminTestRouter()
@@ -170,9 +169,8 @@ func TestAdmin_WhenRedisUnreachable_CacheFails(t *testing.T) {
 		DialTimeout:     5 * time.Millisecond,
 		ReadTimeout:     5 * time.Millisecond,
 		WriteTimeout:    5 * time.Millisecond,
-		// go-redis: -1 disables command retries (see options.go).
-		MaxRetries: -1,
-		PoolSize:   1,
+		MaxRetries:      -1, // no command retries (go-redis treats -1 as zero retries)
+		PoolSize:        1,
 	})
 	rdb = bad
 	defer func() {
@@ -191,8 +189,7 @@ func TestAdmin_WhenRedisUnreachable_CacheFails(t *testing.T) {
 	}
 }
 
-// TestAdmin_Status_WhenRedisUnreachable_StillOK verifies adminStatusHandler returns 200 even when
-// Redis INFO/SCAN fail (handler does not check command errors; redis_memory may be empty).
+// TestAdmin_Status_WhenRedisUnreachable_StillOK: status handler still returns 200 if Redis INFO/rate-limit scans fail.
 func TestAdmin_Status_WhenRedisUnreachable_StillOK(t *testing.T) {
 	resetAuthState(t)
 	r := adminTestRouter()

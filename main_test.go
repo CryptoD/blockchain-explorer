@@ -149,51 +149,54 @@ func TestValidationFunctions(t *testing.T) {
 func TestSearchBlockchain_AddressTransactionBlockAndNotFound(t *testing.T) {
 	resetCache()
 
-	// Address
-	addr := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-	setCache("address:"+addr, map[string]interface{}{"result": map[string]interface{}{"address": addr}})
-	typeStr, res, err := searchBlockchain(addr)
-	if err != nil {
-		t.Fatalf("searchBlockchain(address) returned error: %v", err)
-	}
-	if typeStr != "address" {
-		t.Fatalf("expected type 'address', got %s", typeStr)
-	}
-	if res == nil {
-		t.Fatalf("expected non-nil result for address search")
-	}
+	t.Run("address", func(t *testing.T) {
+		addr := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+		setCache("address:"+addr, map[string]interface{}{"result": map[string]interface{}{"address": addr}})
+		typeStr, res, err := searchBlockchain(addr)
+		if err != nil {
+			t.Fatalf("searchBlockchain(address) returned error: %v", err)
+		}
+		if typeStr != "address" {
+			t.Fatalf("expected type 'address', got %s", typeStr)
+		}
+		if res == nil {
+			t.Fatalf("expected non-nil result for address search")
+		}
+	})
 
-	// Transaction
-	// Use a valid 64-char hex txid
-	txid := strings.Repeat("b", 60) + "0a0b"
-	setCache("tx:"+txid, map[string]interface{}{"hash": txid})
-	typeStr, _, err = searchBlockchain(txid)
-	if err != nil {
-		t.Fatalf("searchBlockchain(tx) returned error: %v", err)
-	}
-	if typeStr != "transaction" {
-		t.Fatalf("expected type 'transaction', got %s", typeStr)
-	}
+	t.Run("transaction", func(t *testing.T) {
+		txid := strings.Repeat("b", 60) + "0a0b"
+		setCache("tx:"+txid, map[string]interface{}{"hash": txid})
+		typeStr, _, err := searchBlockchain(txid)
+		if err != nil {
+			t.Fatalf("searchBlockchain(tx) returned error: %v", err)
+		}
+		if typeStr != "transaction" {
+			t.Fatalf("expected type 'transaction', got %s", typeStr)
+		}
+	})
 
-	// Block height
-	height := "12345"
-	setCache("block:"+height, map[string]interface{}{"result": map[string]interface{}{"height": 12345}})
-	typeStr, _, err = searchBlockchain(height)
-	if err != nil {
-		t.Fatalf("searchBlockchain(block) returned error: %v", err)
-	}
-	if typeStr != "block" {
-		t.Fatalf("expected type 'block', got %s", typeStr)
-	}
+	t.Run("block_height", func(t *testing.T) {
+		height := "12345"
+		setCache("block:"+height, map[string]interface{}{"result": map[string]interface{}{"height": 12345}})
+		typeStr, _, err := searchBlockchain(height)
+		if err != nil {
+			t.Fatalf("searchBlockchain(block) returned error: %v", err)
+		}
+		if typeStr != "block" {
+			t.Fatalf("expected type 'block', got %s", typeStr)
+		}
+	})
 
-	// Not found
-	_, _, err = searchBlockchain("definitely-not-a-valid-query-!@#")
-	if err == nil {
-		t.Fatalf("expected ErrNotFound for unknown query")
-	}
-	if err != ErrNotFound {
-		t.Fatalf("expected ErrNotFound, got %v", err)
-	}
+	t.Run("not_found", func(t *testing.T) {
+		_, _, err := searchBlockchain("definitely-not-a-valid-query-!@#")
+		if err == nil {
+			t.Fatalf("expected ErrNotFound for unknown query")
+		}
+		if err != ErrNotFound {
+			t.Fatalf("expected ErrNotFound, got %v", err)
+		}
+	})
 }
 
 func TestFetchLatestBlocksAndTransactions(t *testing.T) {
@@ -214,23 +217,25 @@ func TestFetchLatestBlocksAndTransactions(t *testing.T) {
 		setCache(fmtTxKey(tx2), map[string]interface{}{"hash": tx2})
 	}
 
-	// Test fetchLatestBlocks
-	blocks, err := fetchLatestBlocks(3)
-	if err != nil {
-		t.Fatalf("fetchLatestBlocks returned error: %v", err)
-	}
-	if len(blocks) != 3 {
-		t.Fatalf("expected 3 blocks, got %d", len(blocks))
-	}
+	t.Run("fetchLatestBlocks", func(t *testing.T) {
+		blocks, err := fetchLatestBlocks(3)
+		if err != nil {
+			t.Fatalf("fetchLatestBlocks returned error: %v", err)
+		}
+		if len(blocks) != 3 {
+			t.Fatalf("expected 3 blocks, got %d", len(blocks))
+		}
+	})
 
-	// Test fetchLatestTransactions: want up to 3 txs
-	txs, err := fetchLatestTransactions(2, 3)
-	if err != nil {
-		t.Fatalf("fetchLatestTransactions returned error: %v", err)
-	}
-	if len(txs) != 3 {
-		t.Fatalf("expected 3 transactions, got %d", len(txs))
-	}
+	t.Run("fetchLatestTransactions", func(t *testing.T) {
+		txs, err := fetchLatestTransactions(2, 3)
+		if err != nil {
+			t.Fatalf("fetchLatestTransactions returned error: %v", err)
+		}
+		if len(txs) != 3 {
+			t.Fatalf("expected 3 transactions, got %d", len(txs))
+		}
+	})
 }
 
 // helper formatting functions to keep keys consistent with code
@@ -294,157 +299,159 @@ func TestCallBlockchain_SuccessWithTestServer(t *testing.T) {
 
 func TestSearchHandler_HTTPBehavior(t *testing.T) {
 	resetCache()
-	// set Gin to test mode to avoid noisy output
 	gin.SetMode(gin.TestMode)
 	router := gin.Default()
 	router.GET("/api/search", searchHandler)
 
-	// seed an address into cache
 	addr := "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
-	addrData := map[string]interface{}{"result": map[string]interface{}{"address": addr}}
-	setCache("address:"+addr, addrData)
+	setCache("address:"+addr, map[string]interface{}{"result": map[string]interface{}{"address": addr}})
 
-	// Perform a request
-	req := httptest.NewRequest("GET", "/api/search?q="+addr, nil)
-	w := httptest.NewRecorder()
-	router.ServeHTTP(w, req)
+	var etag string
+	t.Run("first_get_sets_etag_and_body", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search?q="+addr, nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 OK, got %d", w.Code)
+		}
+		etag = w.Header().Get("ETag")
+		if etag == "" {
+			t.Fatalf("expected ETag header to be set")
+		}
+		if w.Header().Get("Cache-Control") == "" {
+			t.Fatalf("expected Cache-Control header to be set")
+		}
+		var body map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+			t.Fatalf("failed to parse response JSON: %v", err)
+		}
+		if body["type"] != "address" {
+			t.Fatalf("expected type 'address', got %v", body["type"])
+		}
+		if _, ok := body["result"]; !ok {
+			t.Fatalf("expected result in response body")
+		}
+	})
 
-	if w.Code != 200 {
-		t.Fatalf("expected 200 OK, got %d", w.Code)
-	}
+	t.Run("if_none_match_304", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search?q="+addr, nil)
+		req.Header.Set("If-None-Match", etag)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 304 {
+			t.Fatalf("expected 304 Not Modified, got %d", w.Code)
+		}
+	})
 
-	// Check headers
-	etag := w.Header().Get("ETag")
-	if etag == "" {
-		t.Fatalf("expected ETag header to be set")
-	}
-	if cacheControl := w.Header().Get("Cache-Control"); cacheControl == "" {
-		t.Fatalf("expected Cache-Control header to be set")
-	}
-
-	// Verify response body contains type and result
-	var body map[string]interface{}
-	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
-		t.Fatalf("failed to parse response JSON: %v", err)
-	}
-	if body["type"] != "address" {
-		t.Fatalf("expected type 'address', got %v", body["type"])
-	}
-	if _, ok := body["result"]; !ok {
-		t.Fatalf("expected result in response body")
-	}
-
-	// Now test If-None-Match handling: send same ETag and expect 304
-	req2 := httptest.NewRequest("GET", "/api/search?q="+addr, nil)
-	req2.Header.Set("If-None-Match", etag)
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != 304 {
-		t.Fatalf("expected 304 Not Modified, got %d", w2.Code)
-	}
-
-	// Missing query param -> 400
-	req3 := httptest.NewRequest("GET", "/api/search", nil)
-	w3 := httptest.NewRecorder()
-	router.ServeHTTP(w3, req3)
-	if w3.Code != 400 {
-		t.Fatalf("expected 400 for missing query, got %d", w3.Code)
-	}
+	t.Run("missing_query_400", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 400 {
+			t.Fatalf("expected 400 for missing query, got %d", w.Code)
+		}
+	})
 }
 
-// TestAdvancedSearchHandler tests the advanced symbol search with filters and sorting
 func TestAdvancedSearchHandler(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	router := gin.New()
 	router.GET("/api/search/advanced", advancedSearchHandler)
 	router.GET("/api/search/categories", getSymbolCategoriesHandler)
 
-	// Test 1: Basic search without filters
-	req1 := httptest.NewRequest("GET", "/api/search/advanced", nil)
-	w1 := httptest.NewRecorder()
-	router.ServeHTTP(w1, req1)
-	if w1.Code != 200 {
-		t.Fatalf("expected 200 for basic search, got %d", w1.Code)
-	}
-	var result1 map[string]interface{}
-	if err := json.Unmarshal(w1.Body.Bytes(), &result1); err != nil {
-		t.Fatalf("failed to parse response: %v", err)
-	}
-	if _, ok := result1["data"]; !ok {
-		t.Fatalf("expected 'data' field in response")
-	}
-	if _, ok := result1["pagination"]; !ok {
-		t.Fatalf("expected 'pagination' field in response")
-	}
+	t.Run("basic_no_filters", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for basic search, got %d", w.Code)
+		}
+		var result map[string]interface{}
+		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+			t.Fatalf("failed to parse response: %v", err)
+		}
+		if _, ok := result["data"]; !ok {
+			t.Fatalf("expected 'data' field in response")
+		}
+		if _, ok := result["pagination"]; !ok {
+			t.Fatalf("expected 'pagination' field in response")
+		}
+	})
 
-	// Test 2: Search with query
-	req2 := httptest.NewRequest("GET", "/api/search/advanced?q=BTC", nil)
-	w2 := httptest.NewRecorder()
-	router.ServeHTTP(w2, req2)
-	if w2.Code != 200 {
-		t.Fatalf("expected 200 for search with query, got %d", w2.Code)
-	}
+	t.Run("query", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?q=BTC", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with query, got %d", w.Code)
+		}
+	})
 
-	// Test 3: Search with type filter
-	req3 := httptest.NewRequest("GET", "/api/search/advanced?types=crypto", nil)
-	w3 := httptest.NewRecorder()
-	router.ServeHTTP(w3, req3)
-	if w3.Code != 200 {
-		t.Fatalf("expected 200 for search with type filter, got %d", w3.Code)
-	}
+	t.Run("type_filter", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?types=crypto", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with type filter, got %d", w.Code)
+		}
+	})
 
-	// Test 4: Search with category filter
-	req4 := httptest.NewRequest("GET", "/api/search/advanced?categories=defi", nil)
-	w4 := httptest.NewRecorder()
-	router.ServeHTTP(w4, req4)
-	if w4.Code != 200 {
-		t.Fatalf("expected 200 for search with category filter, got %d", w4.Code)
-	}
+	t.Run("category_filter", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?categories=defi", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with category filter, got %d", w.Code)
+		}
+	})
 
-	// Test 5: Search with sorting
-	req5 := httptest.NewRequest("GET", "/api/search/advanced?sort_by=price&sort_dir=desc", nil)
-	w5 := httptest.NewRecorder()
-	router.ServeHTTP(w5, req5)
-	if w5.Code != 200 {
-		t.Fatalf("expected 200 for search with sorting, got %d", w5.Code)
-	}
+	t.Run("sorting", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?sort_by=price&sort_dir=desc", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with sorting, got %d", w.Code)
+		}
+	})
 
-	// Test 6: Search with price range
-	req6 := httptest.NewRequest("GET", "/api/search/advanced?min_price=1&max_price=1000", nil)
-	w6 := httptest.NewRecorder()
-	router.ServeHTTP(w6, req6)
-	if w6.Code != 200 {
-		t.Fatalf("expected 200 for search with price range, got %d", w6.Code)
-	}
+	t.Run("price_range", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?min_price=1&max_price=1000", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with price range, got %d", w.Code)
+		}
+	})
 
-	// Test 7: Search with pagination
-	req7 := httptest.NewRequest("GET", "/api/search/advanced?page=1&page_size=5", nil)
-	w7 := httptest.NewRecorder()
-	router.ServeHTTP(w7, req7)
-	if w7.Code != 200 {
-		t.Fatalf("expected 200 for search with pagination, got %d", w7.Code)
-	}
+	t.Run("pagination", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/advanced?page=1&page_size=5", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for search with pagination, got %d", w.Code)
+		}
+	})
 
-	// Test 8: Get categories
-	req8 := httptest.NewRequest("GET", "/api/search/categories", nil)
-	w8 := httptest.NewRecorder()
-	router.ServeHTTP(w8, req8)
-	if w8.Code != 200 {
-		t.Fatalf("expected 200 for categories endpoint, got %d", w8.Code)
-	}
-	var result8 map[string][]string
-	if err := json.Unmarshal(w8.Body.Bytes(), &result8); err != nil {
-		t.Fatalf("failed to parse categories response: %v", err)
-	}
-	if _, ok := result8["types"]; !ok {
-		t.Fatalf("expected 'types' field in categories response")
-	}
-	if _, ok := result8["categories"]; !ok {
-		t.Fatalf("expected 'categories' field in categories response")
-	}
+	t.Run("categories_endpoint", func(t *testing.T) {
+		req := httptest.NewRequest("GET", "/api/search/categories", nil)
+		w := httptest.NewRecorder()
+		router.ServeHTTP(w, req)
+		if w.Code != 200 {
+			t.Fatalf("expected 200 for categories endpoint, got %d", w.Code)
+		}
+		var result map[string][]string
+		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
+			t.Fatalf("failed to parse categories response: %v", err)
+		}
+		if _, ok := result["types"]; !ok {
+			t.Fatalf("expected 'types' field in categories response")
+		}
+		if _, ok := result["categories"]; !ok {
+			t.Fatalf("expected 'categories' field in categories response")
+		}
+	})
 }
 
-// TestMatchesFilters tests the filter matching logic
 func TestMatchesFilters(t *testing.T) {
 	symbol := SymbolInfo{
 		Symbol:    "BTC",
@@ -456,82 +463,76 @@ func TestMatchesFilters(t *testing.T) {
 		IsActive:  true,
 	}
 
-	// Test type filter match
-	filters1 := SearchFilters{Types: []string{"crypto"}}
-	if !matchesFilters(symbol, filters1) {
-		t.Error("expected symbol to match crypto type filter")
-	}
-
-	// Test type filter no match
-	filters2 := SearchFilters{Types: []string{"stock"}}
-	if matchesFilters(symbol, filters2) {
-		t.Error("expected symbol not to match stock type filter")
-	}
-
-	// Test category filter match
-	filters3 := SearchFilters{Categories: []string{"layer1"}}
-	if !matchesFilters(symbol, filters3) {
-		t.Error("expected symbol to match layer1 category filter")
-	}
-
-	// Test price range filter
-	filters4 := SearchFilters{MinPrice: 1000, MaxPrice: 50000}
-	if !matchesFilters(symbol, filters4) {
-		t.Error("expected symbol to match price range filter")
-	}
-
-	// Test price range filter - too high
-	filters5 := SearchFilters{MinPrice: 50000}
-	if matchesFilters(symbol, filters5) {
-		t.Error("expected symbol not to match min price filter")
-	}
-
-	// Test market cap filter
-	filters6 := SearchFilters{MinMarketCap: 1000000000}
-	if !matchesFilters(symbol, filters6) {
-		t.Error("expected symbol to match market cap filter")
-	}
-
-	// Test active status filter
-	isActive := true
-	filters7 := SearchFilters{IsActive: &isActive}
-	if !matchesFilters(symbol, filters7) {
-		t.Error("expected symbol to match active status filter")
-	}
-
-	isActive = false
-	filters8 := SearchFilters{IsActive: &isActive}
-	if matchesFilters(symbol, filters8) {
-		t.Error("expected symbol not to match inactive status filter")
-	}
+	t.Run("type_match", func(t *testing.T) {
+		if !matchesFilters(symbol, SearchFilters{Types: []string{"crypto"}}) {
+			t.Error("expected symbol to match crypto type filter")
+		}
+	})
+	t.Run("type_no_match", func(t *testing.T) {
+		if matchesFilters(symbol, SearchFilters{Types: []string{"stock"}}) {
+			t.Error("expected symbol not to match stock type filter")
+		}
+	})
+	t.Run("category_match", func(t *testing.T) {
+		if !matchesFilters(symbol, SearchFilters{Categories: []string{"layer1"}}) {
+			t.Error("expected symbol to match layer1 category filter")
+		}
+	})
+	t.Run("price_range_match", func(t *testing.T) {
+		if !matchesFilters(symbol, SearchFilters{MinPrice: 1000, MaxPrice: 50000}) {
+			t.Error("expected symbol to match price range filter")
+		}
+	})
+	t.Run("price_min_too_high", func(t *testing.T) {
+		if matchesFilters(symbol, SearchFilters{MinPrice: 50000}) {
+			t.Error("expected symbol not to match min price filter")
+		}
+	})
+	t.Run("market_cap", func(t *testing.T) {
+		if !matchesFilters(symbol, SearchFilters{MinMarketCap: 1000000000}) {
+			t.Error("expected symbol to match market cap filter")
+		}
+	})
+	t.Run("active_true", func(t *testing.T) {
+		isActive := true
+		if !matchesFilters(symbol, SearchFilters{IsActive: &isActive}) {
+			t.Error("expected symbol to match active status filter")
+		}
+	})
+	t.Run("active_false", func(t *testing.T) {
+		isActive := false
+		if matchesFilters(symbol, SearchFilters{IsActive: &isActive}) {
+			t.Error("expected symbol not to match inactive status filter")
+		}
+	})
 }
 
-// TestSortSymbols tests the sorting logic
 func TestSortSymbols(t *testing.T) {
-	symbols := []SymbolInfo{
+	base := []SymbolInfo{
 		{Symbol: "ETH", Price: 2300, Rank: 2},
 		{Symbol: "BTC", Price: 45000, Rank: 1},
 		{Symbol: "SOL", Price: 98, Rank: 3},
 	}
 
-	// Test sort by rank ascending
-	sort1 := SortOptions{Field: "rank", Direction: "asc"}
-	sortSymbols(symbols, sort1)
-	if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
-		t.Error("expected symbols sorted by rank ascending")
-	}
-
-	// Test sort by price descending
-	sort2 := SortOptions{Field: "price", Direction: "desc"}
-	sortSymbols(symbols, sort2)
-	if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
-		t.Error("expected symbols sorted by price descending")
-	}
-
-	// Test sort by symbol ascending
-	sort3 := SortOptions{Field: "symbol", Direction: "asc"}
-	sortSymbols(symbols, sort3)
-	if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
-		t.Error("expected symbols sorted by symbol ascending")
-	}
+	t.Run("rank_asc", func(t *testing.T) {
+		symbols := append([]SymbolInfo(nil), base...)
+		sortSymbols(symbols, SortOptions{Field: "rank", Direction: "asc"})
+		if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
+			t.Error("expected symbols sorted by rank ascending")
+		}
+	})
+	t.Run("price_desc", func(t *testing.T) {
+		symbols := append([]SymbolInfo(nil), base...)
+		sortSymbols(symbols, SortOptions{Field: "price", Direction: "desc"})
+		if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
+			t.Error("expected symbols sorted by price descending")
+		}
+	})
+	t.Run("symbol_asc", func(t *testing.T) {
+		symbols := append([]SymbolInfo(nil), base...)
+		sortSymbols(symbols, SortOptions{Field: "symbol", Direction: "asc"})
+		if symbols[0].Symbol != "BTC" || symbols[1].Symbol != "ETH" || symbols[2].Symbol != "SOL" {
+			t.Error("expected symbols sorted by symbol ascending")
+		}
+	})
 }

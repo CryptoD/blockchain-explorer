@@ -53,7 +53,7 @@ func (s *SMTPSender) Send(ctx context.Context, from Address, msg Message) error 
 	defer func() { _ = c.Quit() }()
 
 	if s.UseSTARTTLS {
-		// #nosec G402 -- InsecureSkipVerify is only set when SkipVerify is true (explicit opt-in for dev/self-signed SMTP).
+		// #nosec G402 -- mirrors SMTPSender.SkipVerify (opt-in for dev/self-signed certs).
 		cfg := &tls.Config{ServerName: s.Host, InsecureSkipVerify: s.SkipVerify}
 		if err := c.StartTLS(cfg); err != nil {
 			return fmt.Errorf("starttls failed: %w", err)
