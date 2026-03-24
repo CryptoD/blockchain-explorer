@@ -62,6 +62,10 @@ type Config struct {
 
 	// Rates (multi-currency): cache TTL and effective update interval in seconds
 	RatesCacheTTLSeconds int // Redis key TTL for rate data; default 60
+
+	// Prometheus metrics at GET /metrics
+	MetricsEnabled bool
+	MetricsToken   string // optional; if set, require Authorization: Bearer <token> or X-Metrics-Token
 }
 
 // Load parses environment variables into a Config struct and validates
@@ -105,6 +109,8 @@ func Load() (*Config, error) {
 		ExportRateLimitHeavyPerUser: GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
 		ReadyCheckExternal:         strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
 		RatesCacheTTLSeconds:       GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
+		MetricsEnabled:             metricsEnabledFromEnv(),
+		MetricsToken:               strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 	}
 
 	// Required in all environments: GetBlock configuration for core blockchain operations.
@@ -113,6 +119,18 @@ func Load() (*Config, error) {
 	}
 
 	return cfg, nil
+}
+
+func metricsEnabledFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("METRICS_ENABLED")))
+	switch v {
+	case "", "1", "true", "yes":
+		return true
+	case "0", "false", "no":
+		return false
+	default:
+		return true
+	}
 }
 
 // GetEnvWithDefault returns the value of the environment variable named by key,

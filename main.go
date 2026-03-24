@@ -26,6 +26,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
+	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
@@ -868,6 +869,10 @@ func requireRoleMiddleware(requiredRole string) gin.HandlerFunc {
 // It prefers a Redis-backed implementation for multi-instance resilience,
 // and falls back to an in-memory limiter when Redis is unavailable.
 func rateLimitMiddleware(c *gin.Context) {
+	if c.Request.URL.Path == "/metrics" {
+		c.Next()
+		return
+	}
 	ip := c.ClientIP()
 	usernameVal, _ := c.Get("username")
 	username, _ := usernameVal.(string)
@@ -1077,6 +1082,9 @@ func main() {
 	r := gin.Default()
 
 	r.Use(sentrygin.New(sentrygin.Options{}))
+	if cfg.MetricsEnabled {
+		r.Use(metrics.Middleware())
+	}
 	r.Use(rateLimitMiddleware)
 	r.Use(csrfMiddleware)
 
@@ -1163,6 +1171,14 @@ func main() {
 	// Health and readiness endpoints
 	r.GET("/healthz", healthHandler)
 	r.GET("/readyz", readinessHandler)
+
+	if cfg.MetricsEnabled {
+		if cfg.MetricsToken != "" {
+			r.GET("/metrics", metrics.TokenAuthMiddleware(cfg.MetricsToken), gin.WrapH(metrics.Handler()))
+		} else {
+			r.GET("/metrics", gin.WrapH(metrics.Handler()))
+		}
+	}
 
 	// Versioned API (v1)
 	apiV1 := r.Group("/api/v1")
@@ -1341,6 +1357,7 @@ func main() {
 				if blocksErr == nil && txsErr == nil {
 					logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "prefetch_tick_ok").Debug("prefetch tick completed")
 				}
+				metrics.RecordPrefetchTick(blocksErr, txsErr)
 			}()
 			<-ticker.C
 		}
@@ -1448,6 +1465,7 @@ func newsBySymbolHandler(c *gin.Context) {
 		errorResponse(c, status, "news_fetch_failed", "Failed to fetch news")
 		return
 	}
+	metrics.RecordNews(cached, stale)
 
 	user := getOptionalAuthenticatedUser(c)
 	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
@@ -1514,6 +1532,7 @@ func newsByPortfolioHandler(c *gin.Context) {
 		errorResponse(c, status, "news_fetch_failed", "Failed to fetch news")
 		return
 	}
+	metrics.RecordNews(cached, stale)
 
 	u := getOptionalAuthenticatedUser(c)
 	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
@@ -2117,6 +2136,7 @@ func evaluatePriceAlerts() {
 	}
 
 	elapsed := time.Since(start)
+	metrics.RecordAlertEval(elapsed, triggered)
 	logging.WithComponent(logging.ComponentAlerts).WithFields(log.Fields{
 		logging.FieldEvent: "alert_eval_cycle",
 		"scanned_keys":     scannedKeys,
@@ -4159,9 +4179,11 @@ func searchHandler(c *gin.Context) {
 	c.Header("Cache-Control", "public, max-age=60")
 	if match := c.GetHeader("If-None-Match"); match == etag {
 		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_cache_hit").Debug("search cache hit")
+		metrics.RecordSearchETag(true)
 		c.Status(304)
 		return
 	}
+	metrics.RecordSearchETag(false)
 	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithFields(log.Fields{
 		logging.FieldResult: resultType,
 		logging.FieldEvent:  "search_success",
@@ -4781,12 +4803,14 @@ func ratesHandler(c *gin.Context) {
 		if err == nil && cached != "" {
 			var data map[string]interface{}
 			if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
+				metrics.RecordRates(true)
 				rates := filterRatesByCurrencies(data, wantCurrencies)
 				c.JSON(http.StatusOK, rates)
 				return
 			}
 		}
 	}
+	metrics.RecordRates(false)
 
 	if pricingClient == nil {
 		handleError(c, errors.New("pricing client not initialized"), http.StatusInternalServerError)
@@ -5203,9 +5227,11 @@ func getNetworkStatus() (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
+			metrics.RecordNetworkStatus(true)
 			return data, nil
 		}
 	}
+	metrics.RecordNetworkStatus(false)
 	ctx := context.Background()
 
 	// Fetch block height
@@ -5274,9 +5300,11 @@ func getAddressDetails(address string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
+			metrics.RecordRPCAddressCache(true)
 			return data, nil
 		}
 	}
+	metrics.RecordRPCAddressCache(false)
 
 	response, err := callBlockchain(context.Background(), "getaddressinfo", []interface{}{address})
 	if err != nil {
@@ -5304,11 +5332,14 @@ func getTransactionDetails(txID string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
+			metrics.RecordRPCTxCache(true)
 			return data, nil
 		} else {
+			metrics.RecordRPCTxCache(false)
 			return nil, &InvalidCachedJSONError{TxID: txID, Err: unmarshalErr}
 		}
 	}
+	metrics.RecordRPCTxCache(false)
 
 	response, err := callBlockchain(context.Background(), "getrawtransaction", []interface{}{txID, 1})
 	if err != nil {
@@ -5336,9 +5367,11 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
+			metrics.RecordRPCBlockCache(true)
 			return data, nil
 		}
 	}
+	metrics.RecordRPCBlockCache(false)
 
 	height, _ := strconv.Atoi(blockHeight)
 	response, err := callBlockchain(context.Background(), "getblockbyheight", []interface{}{height, 1})
@@ -5416,6 +5449,7 @@ func collectMetrics() {
 	if rdb == nil {
 		return
 	}
+	defer metrics.RecordMetricsJob()
 	ctx := context.Background()
 	now := float64(time.Now().Unix())
 
