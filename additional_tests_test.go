@@ -9,38 +9,31 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	resty "github.com/go-resty/resty/v2"
 )
 
-func TestBlockchairRequest_APIErrorStatus(t *testing.T) {
+func TestCallBlockchain_APIErrorStatus(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// server returns 500
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
 		w.Write([]byte("oops"))
 	}))
 	defer ts.Close()
 
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(2*time.Second)))
+	defer SetBlockchainClient(nil)
 
-	baseURL = ts.URL
-	apiKey = "test-key"
-	SetHTTPClient(resty.New().SetTimeout(2 * time.Second))
-
-	_, err := blockchairRequest("getblockcount", []interface{}{})
+	_, err := callBlockchain(context.Background(), "getblockcount", []interface{}{})
 	if err == nil {
 		t.Fatalf("expected error for 500 response")
 	}
 }
 
-func TestBlockchairRequest_InvalidJSON_PropagatesToGetBlockDetails(t *testing.T) {
+func TestGetBlockDetails_InvalidJSON(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// server returns 200 but invalid JSON
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
 		w.WriteHeader(http.StatusOK)
@@ -48,14 +41,8 @@ func TestBlockchairRequest_InvalidJSON_PropagatesToGetBlockDetails(t *testing.T)
 	}))
 	defer ts.Close()
 
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
-
-	baseURL = ts.URL
-	apiKey = "test-key"
-	SetHTTPClient(resty.New().SetTimeout(2 * time.Second))
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(2*time.Second)))
+	defer SetBlockchainClient(nil)
 
 	_, err := getBlockDetails("1")
 	if err == nil {
@@ -101,7 +88,6 @@ func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsError(t *testing.T
 	skipIfRedisUnavailable(t)
 	resetCache()
 	txid := "deadbeef"
-	// store invalid JSON bytes in cache
 	rdb.Set(context.Background(), "tx:"+txid, "not-json", 0)
 
 	res, err := getTransactionDetails(txid)
@@ -117,7 +103,6 @@ func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsCustomError(t *tes
 	skipIfRedisUnavailable(t)
 	resetCache()
 	txid := "deadbeef"
-	// store invalid JSON bytes in Redis cache
 	rdb.Set(context.Background(), "tx:"+txid, []byte("not-json"), 0)
 
 	_, err := getTransactionDetails(txid)
@@ -129,10 +114,9 @@ func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsCustomError(t *tes
 	}
 }
 
-func TestBlockchairRequest_TimeoutRetryBehavior(t *testing.T) {
+func TestCallBlockchain_TimeoutRetryBehavior(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// Server will delay response to trigger timeout
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(150 * time.Millisecond)
 		w.Header().Set("Content-Type", "application/json")
@@ -141,26 +125,18 @@ func TestBlockchairRequest_TimeoutRetryBehavior(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(50*time.Millisecond).SetRetryCount(1)))
+	defer SetBlockchainClient(nil)
 
-	baseURL = ts.URL
-	apiKey = "test-key"
-	// Set a client with short timeout so request fails
-	SetHTTPClient(resty.New().SetTimeout(50 * time.Millisecond).SetRetryCount(1))
-
-	_, err := blockchairRequest("someMethod", []interface{}{})
+	_, err := callBlockchain(context.Background(), "someMethod", []interface{}{})
 	if err == nil {
-		t.Fatalf("expected timeout error from blockchairRequest when server delays beyond timeout")
+		t.Fatalf("expected timeout error from callBlockchain when server delays beyond timeout")
 	}
 }
 
-func TestBlockchairRequest_RetryBehavior_SucceedsAfterNFailures(t *testing.T) {
+func TestCallBlockchain_RetrySucceedsAfterFailures(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// This server will fail first 2 requests with 500, then succeed
 	callCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		callCount++
@@ -174,17 +150,10 @@ func TestBlockchairRequest_RetryBehavior_SucceedsAfterNFailures(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(1*time.Second).SetRetryCount(3)))
+	defer SetBlockchainClient(nil)
 
-	baseURL = ts.URL
-	apiKey = "test-key"
-	// Set client to retry 3 times so that after 2 failures the 3rd attempt succeeds
-	SetHTTPClient(resty.New().SetTimeout(1 * time.Second).SetRetryCount(3))
-
-	resp, err := blockchairRequest("someMethod", []interface{}{})
+	resp, err := callBlockchain(context.Background(), "someMethod", []interface{}{})
 	if err != nil {
 		t.Fatalf("expected success after retries, got error: %v", err)
 	}

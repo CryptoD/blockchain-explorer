@@ -1,19 +1,59 @@
 package main
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"os"
 	"strconv"
 	"strings"
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
+	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/gin-gonic/gin"
 	resty "github.com/go-resty/resty/v2"
 )
+
+func TestMain(m *testing.M) {
+	gin.SetMode(gin.TestMode)
+	SetBlockchainClient(nil)
+	SetPricingClient(nil)
+	os.Exit(m.Run())
+}
+
+// TestSetPricingClient_MockNoNetwork ensures pricing paths can use pricing.MockClient
+// (no CoinGecko HTTP) when injected via SetPricingClient.
+func TestSetPricingClient_MockNoNetwork(t *testing.T) {
+	m := &pricing.MockClient{
+		GetMultiCurrencyRatesInFunc: func(ctx context.Context, currencies []string) (map[string]interface{}, error) {
+			return map[string]interface{}{
+				"bitcoin": map[string]interface{}{"usd": 50000.0},
+			}, nil
+		},
+		GetBTCUSDFunc: func(ctx context.Context) (float64, error) {
+			return 50000, nil
+		},
+	}
+	SetPricingClient(m)
+	defer SetPricingClient(nil)
+	rates, err := pricingClient.GetMultiCurrencyRatesIn(context.Background(), []string{"usd"})
+	if err != nil {
+		t.Fatal(err)
+	}
+	btc, ok := rates["bitcoin"].(map[string]interface{})
+	if !ok || btc["usd"] != 50000.0 {
+		t.Fatalf("rates = %#v", rates)
+	}
+	usd, err := pricingClient.GetBTCUSD(context.Background())
+	if err != nil || usd != 50000 {
+		t.Fatalf("GetBTCUSD = %v, %v", usd, err)
+	}
+}
 
 // skipIfRedisUnavailable skips the test if Redis is not running (e.g. in CI without a service).
 func skipIfRedisUnavailable(t *testing.T) {
@@ -180,38 +220,28 @@ func fmtTxID(h, idx int) string {
 	return base + fmt.Sprintf("%02x%02x", h%256, idx%256)
 }
 
-func TestBlockchairRequest_MissingEnv(t *testing.T) {
+func TestRPCCall_UnconfiguredReturnsError(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// Backup and restore baseURL and apiKey and httpClient
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
-
-	baseURL = ""
-	apiKey = ""
-	_, err := blockchairRequest("someMethod", []interface{}{})
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient("", "", resty.New()))
+	defer SetBlockchainClient(nil)
+	_, err := callBlockchain(context.Background(), "someMethod", []interface{}{})
 	if err == nil {
-		t.Fatalf("expected error when baseURL/apiKey missing")
+		t.Fatalf("expected error when RPC client not configured")
 	}
 }
 
-func TestBlockchairRequest_SuccessWithTestServer(t *testing.T) {
+func TestCallBlockchain_SuccessWithTestServer(t *testing.T) {
 	skipIfRedisUnavailable(t)
 	resetCache()
-	// Start an httptest server to simulate the external API
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		// Verify headers
 		if r.Header.Get("x-api-key") != "test-key" {
 			w.WriteHeader(http.StatusUnauthorized)
 			return
 		}
-		// Read body and verify structure
 		body, _ := io.ReadAll(r.Body)
 		var payload map[string]interface{}
 		json.Unmarshal(body, &payload)
-		// Echo back a successful JSON-RPC response
 		resp := map[string]interface{}{"jsonrpc": "2.0", "id": payload["id"], "result": map[string]interface{}{"ok": true}}
 		respBytes, _ := json.Marshal(resp)
 		w.Header().Set("Content-Type", "application/json")
@@ -220,20 +250,12 @@ func TestBlockchairRequest_SuccessWithTestServer(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	// Backup and restore global vars
-	oldBase := baseURL
-	oldKey := apiKey
-	oldClient := httpClient
-	defer func() { baseURL = oldBase; apiKey = oldKey; SetHTTPClient(oldClient) }()
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(2*time.Second)))
+	defer SetBlockchainClient(nil)
 
-	baseURL = ts.URL
-	apiKey = "test-key"
-	// Use a resty client with reasonable timeout
-	SetHTTPClient(resty.New().SetTimeout(2 * time.Second))
-
-	resp, err := blockchairRequest("someMethod", []interface{}{"param1"})
+	resp, err := callBlockchain(context.Background(), "someMethod", []interface{}{"param1"})
 	if err != nil {
-		t.Fatalf("expected no error from blockchairRequest, got %v", err)
+		t.Fatalf("expected no error from callBlockchain, got %v", err)
 	}
 	var parsed map[string]interface{}
 	if err := json.Unmarshal(resp.Body(), &parsed); err != nil {

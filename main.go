@@ -5564,10 +5564,8 @@ func blockchairRequest(method string, params []interface{}) (*resty.Response, er
 	return response, nil
 }
 
-// callBlockchain is a small helper that prefers the configured blockchainClient
-// when available, and falls back to the legacy blockchairRequest helper
-// otherwise. This keeps tests that exercise blockchairRequest working while
-// allowing production to inject a richer client implementation.
+// callBlockchain prefers blockchainClient (GetBlock-compatible JSON-RPC). When nil,
+// falls back to blockchairRequest using baseURL/apiKey/httpClient (legacy test path).
 func callBlockchain(ctx context.Context, method string, params []interface{}) (*resty.Response, error) {
 	if blockchainClient != nil {
 		return blockchainClient.Call(ctx, method, params)
