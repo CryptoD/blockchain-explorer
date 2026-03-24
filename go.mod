@@ -39,6 +39,7 @@ require (
 )
 
 require (
+	github.com/alicebob/miniredis/v2 v2.37.0
 	github.com/getsentry/sentry-go v0.36.2
 	github.com/getsentry/sentry-go/gin v0.36.2
 	github.com/jung-kurt/gofpdf/v2 v2.17.3
@@ -62,5 +63,6 @@ require (
 	github.com/prometheus/procfs v0.15.1 // indirect
 	github.com/quic-go/qpack v0.5.1 // indirect
 	github.com/quic-go/quic-go v0.56.0 // indirect
+	github.com/yuin/gopher-lua v1.1.1 // indirect
 	go.uber.org/mock v0.6.0 // indirect
 )

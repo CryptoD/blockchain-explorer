@@ -31,6 +31,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
+	"github.com/CryptoD/blockchain-explorer/internal/redisstore"
 	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -95,7 +96,7 @@ func T(lang, key string) string {
 var ErrNotFound = errors.New("not found")
 var ctx = context.Background()
 
-var rdb = redis.NewClient(&redis.Options{
+var rdb redisstore.Client = redis.NewClient(&redis.Options{
 	Addr: config.GetEnvWithDefault("REDIS_HOST", "localhost") + ":6379",
 	DB:   0, // use default DB
 })

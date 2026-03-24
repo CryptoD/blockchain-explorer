@@ -15,15 +15,51 @@ import (
 
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
+	"github.com/CryptoD/blockchain-explorer/internal/redistest"
+	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	resty "github.com/go-resty/resty/v2"
+	"github.com/redis/go-redis/v9"
 )
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
 	SetBlockchainClient(nil)
 	SetPricingClient(nil)
-	os.Exit(m.Run())
+
+	if redistest.UseIntegration() {
+		old := rdb
+		cl := redis.NewClient(&redis.Options{
+			Addr:            redistest.IntegrationAddr(),
+			DisableIdentity: true,
+		})
+		rdb = cl
+		if err := cl.Ping(ctx).Err(); err != nil {
+			fmt.Fprintf(os.Stderr, "integration Redis at %s: %v\n", redistest.IntegrationAddr(), err)
+			os.Exit(1)
+		}
+		code := m.Run()
+		_ = cl.Close()
+		rdb = old
+		os.Exit(code)
+	}
+
+	mr, err := miniredis.Run()
+	if err != nil {
+		fmt.Fprintf(os.Stderr, "miniredis: %v\n", err)
+		os.Exit(1)
+	}
+	old := rdb
+	cl := redis.NewClient(&redis.Options{
+		Addr:            mr.Addr(),
+		DisableIdentity: true,
+	})
+	rdb = cl
+	code := m.Run()
+	_ = cl.Close()
+	mr.Close()
+	rdb = old
+	os.Exit(code)
 }
 
 // TestSetPricingClient_MockNoNetwork ensures pricing paths can use pricing.MockClient
@@ -55,17 +91,6 @@ func TestSetPricingClient_MockNoNetwork(t *testing.T) {
 	}
 }
 
-// skipIfRedisUnavailable skips the test if Redis is not running (e.g. in CI without a service).
-func skipIfRedisUnavailable(t *testing.T) {
-	t.Helper()
-	if rdb == nil {
-		t.Skip("Redis client not configured")
-	}
-	if err := rdb.Ping(ctx).Err(); err != nil {
-		t.Skipf("Redis not available: %v", err)
-	}
-}
-
 // helper to reset global cache between tests
 func resetCache() {
 	rdb.FlushDB(ctx)
@@ -78,7 +103,6 @@ func setCache(key string, value interface{}) {
 }
 
 func TestValidationFunctions(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 
 	// isValidAddress
@@ -123,7 +147,6 @@ func TestValidationFunctions(t *testing.T) {
 }
 
 func TestSearchBlockchain_AddressTransactionBlockAndNotFound(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 
 	// Address
@@ -174,7 +197,6 @@ func TestSearchBlockchain_AddressTransactionBlockAndNotFound(t *testing.T) {
 }
 
 func TestFetchLatestBlocksAndTransactions(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 
 	// Seed network status with best_block_height = 100
@@ -221,7 +243,6 @@ func fmtTxID(h, idx int) string {
 }
 
 func TestRPCCall_UnconfiguredReturnsError(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	SetBlockchainClient(blockchain.NewGetBlockRPCClient("", "", resty.New()))
 	defer SetBlockchainClient(nil)
@@ -232,7 +253,6 @@ func TestRPCCall_UnconfiguredReturnsError(t *testing.T) {
 }
 
 func TestCallBlockchain_SuccessWithTestServer(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.Header.Get("x-api-key") != "test-key" {
@@ -271,7 +291,6 @@ func TestCallBlockchain_SuccessWithTestServer(t *testing.T) {
 }
 
 func TestSearchHandler_HTTPBehavior(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	// set Gin to test mode to avoid noisy output
 	gin.SetMode(gin.TestMode)
@@ -426,13 +445,13 @@ func TestAdvancedSearchHandler(t *testing.T) {
 // TestMatchesFilters tests the filter matching logic
 func TestMatchesFilters(t *testing.T) {
 	symbol := SymbolInfo{
-		Symbol:   "BTC",
-		Name:     "Bitcoin",
-		Type:     "crypto",
-		Category: "layer1",
-		Price:    45000.0,
+		Symbol:    "BTC",
+		Name:      "Bitcoin",
+		Type:      "crypto",
+		Category:  "layer1",
+		Price:     45000.0,
 		MarketCap: 850000000000,
-		IsActive: true,
+		IsActive:  true,
 	}
 
 	// Test type filter match

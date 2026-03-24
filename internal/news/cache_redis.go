@@ -15,7 +15,7 @@ import (
 // - fresh: <key>
 // - stale: <key>:stale
 type RedisCache struct {
-	RDB *redis.Client
+	RDB redis.Cmdable
 }
 
 func (c *RedisCache) GetFresh(ctx context.Context, key string) ([]Article, bool) {
@@ -73,4 +73,3 @@ func (c *RedisCache) set(ctx context.Context, key string, articles []Article, tt
 	}
 	return c.RDB.Set(ctx, key, b, ttl).Err()
 }
-

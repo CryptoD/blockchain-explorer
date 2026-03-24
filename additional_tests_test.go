@@ -14,7 +14,6 @@ import (
 )
 
 func TestCallBlockchain_APIErrorStatus(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusInternalServerError)
@@ -32,7 +31,6 @@ func TestCallBlockchain_APIErrorStatus(t *testing.T) {
 }
 
 func TestGetBlockDetails_InvalidJSON(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Content-Type", "application/json")
@@ -51,7 +49,6 @@ func TestGetBlockDetails_InvalidJSON(t *testing.T) {
 }
 
 func TestGetAddressDetails_CachedBytes(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	addr := "1ExampleAddr"
 	obj := map[string]interface{}{"result": map[string]interface{}{"address": addr}}
@@ -68,7 +65,6 @@ func TestGetAddressDetails_CachedBytes(t *testing.T) {
 }
 
 func TestGetTransactionDetails_CachedBytes_Behavior(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	txid := "b0c0"
 	obj := map[string]interface{}{"hash": txid}
@@ -85,7 +81,6 @@ func TestGetTransactionDetails_CachedBytes_Behavior(t *testing.T) {
 }
 
 func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsError(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	txid := "deadbeef"
 	rdb.Set(context.Background(), "tx:"+txid, "not-json", 0)
@@ -100,7 +95,6 @@ func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsError(t *testing.T
 }
 
 func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsCustomError(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	txid := "deadbeef"
 	rdb.Set(context.Background(), "tx:"+txid, []byte("not-json"), 0)
@@ -115,7 +109,6 @@ func TestGetTransactionDetails_CachedBytes_InvalidJSON_ReturnsCustomError(t *tes
 }
 
 func TestCallBlockchain_TimeoutRetryBehavior(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		time.Sleep(150 * time.Millisecond)
@@ -135,7 +128,6 @@ func TestCallBlockchain_TimeoutRetryBehavior(t *testing.T) {
 }
 
 func TestCallBlockchain_RetrySucceedsAfterFailures(t *testing.T) {
-	skipIfRedisUnavailable(t)
 	resetCache()
 	callCount := 0
 	ts := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -150,7 +142,11 @@ func TestCallBlockchain_RetrySucceedsAfterFailures(t *testing.T) {
 	}))
 	defer ts.Close()
 
-	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", resty.New().SetTimeout(1*time.Second).SetRetryCount(3)))
+	rc := resty.New().
+		SetTimeout(1 * time.Second).
+		SetRetryCount(3).
+		AddRetryAfterErrorCondition() // retry on 5xx; default resty only retries transport errors
+	SetBlockchainClient(blockchain.NewGetBlockRPCClient(ts.URL, "test-key", rc))
 	defer SetBlockchainClient(nil)
 
 	resp, err := callBlockchain(context.Background(), "someMethod", []interface{}{})
