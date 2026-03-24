@@ -59,6 +59,12 @@
 - [x] **DONE** — Correlation IDs (`internal/correlation`): propagate `X-Correlation-ID` / `X-Request-ID`, response headers and JSON on errors/health; per-run IDs for background jobs
 - [x] **DONE** — Monitoring playbook: `monitoring/README.md`, Grafana dashboard JSON, Prometheus alert rules, Alertmanager escalation example, `promtool` check script
 
+## Continuation — path to “100/100” quality
+
+This roadmap is the **historical phase checklist** (Phases 1–9 delivered; Phase 10 is future work below). **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)** is the **continuation**: **100 concrete tasks** with explanations to push the project toward world-class maintainability, security, performance, and competitive parity.
+
+**Context:** an internal code review rated the codebase at **~72/100**—strong and launchable; the main gaps called out were monolith size, test depth vs. code volume, and hardening for extreme scale. Use the new file as the backlog to **perfect** the project beyond the original roadmap’s “done” milestones.
+
 ## Phase 10 — Future
 - [ ] Replace placeholder RPC/pricing keys with real provider credentials for full data fidelity
 - [ ] Make HTML routes resilient to API rate limiting (avoid returning JSON rate-limit responses for pages)
