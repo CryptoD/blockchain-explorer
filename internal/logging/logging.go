@@ -23,6 +23,8 @@ const (
 	FieldQueryLen  = "query_len"
 	FieldQueryHash = "query_hash" // SHA-256 prefix for correlating without logging raw queries
 	FieldResult    = "result_type"
+	// FieldCorrelationID ties logs, responses, and Sentry to one request or background job run.
+	FieldCorrelationID = "correlation_id"
 )
 
 // Component identifies a subsystem for filtering and dashboards.
@@ -72,6 +74,11 @@ func Configure() {
 // WithComponent returns a log entry tagged with FieldComponent.
 func WithComponent(component string) *logrus.Entry {
 	return logrus.WithField(FieldComponent, component)
+}
+
+// WithCorrelationID returns an entry tagged with a correlation_id (HTTP request or job run).
+func WithCorrelationID(id string) *logrus.Entry {
+	return logrus.WithField(FieldCorrelationID, id)
 }
 
 // QueryLogFields returns safe structured fields for search-related logs (length + short hash; never raw query text).

@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/correlation"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
@@ -46,7 +47,7 @@ func TestSentryHandleErrorIncludesRequestRouteAndTags(t *testing.T) {
 
 	r := gin.New()
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: false}))
-	r.Use(requestIDMiddleware())
+	r.Use(correlationIDMiddleware())
 	r.Use(sentryUserScopeMiddleware())
 	r.GET("/api/v1/boom", func(c *gin.Context) {
 		handleError(c, errors.New("intentional failure"), http.StatusInternalServerError)
@@ -54,7 +55,7 @@ func TestSentryHandleErrorIncludesRequestRouteAndTags(t *testing.T) {
 
 	w := httptest.NewRecorder()
 	req := httptest.NewRequest(http.MethodGet, "/api/v1/boom", nil)
-	req.Header.Set("X-Request-ID", "test-req-abc")
+	req.Header.Set(correlation.HeaderCorrelationID, "test-req-abc")
 	r.ServeHTTP(w, req)
 
 	sentry.Flush(2 * time.Second)
@@ -65,6 +66,9 @@ func TestSentryHandleErrorIncludesRequestRouteAndTags(t *testing.T) {
 		t.Fatalf("expected 1 Sentry event, got %d", len(tp.events))
 	}
 	ev := tp.events[0]
+	if ev.Tags["correlation_id"] != "test-req-abc" {
+		t.Errorf("correlation_id tag = %q, want test-req-abc", ev.Tags["correlation_id"])
+	}
 	if ev.Tags["request_id"] != "test-req-abc" {
 		t.Errorf("request_id tag = %q, want test-req-abc", ev.Tags["request_id"])
 	}

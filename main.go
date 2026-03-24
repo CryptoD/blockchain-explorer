@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/rand"
 	"crypto/sha256"
-	"encoding/hex"
 	"crypto/subtle"
 	"encoding/base64"
 	"encoding/csv"
@@ -26,12 +25,13 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/correlation"
+	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
-	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
-	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
+	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
@@ -156,10 +156,10 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 			if ipCount > int64(perIP) {
 				log.WithFields(log.Fields{
 					logging.FieldComponent: logging.ComponentRateLimit,
-					logging.FieldEvent:       "export_rate_limit",
-					logging.FieldIP:          ip,
-					logging.FieldExport:      prefix,
-					"backend":                "redis",
+					logging.FieldEvent:     "export_rate_limit",
+					logging.FieldIP:        ip,
+					logging.FieldExport:    prefix,
+					"backend":              "redis",
 				}).Warn("Export rate limit exceeded (IP)")
 				errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 				c.Abort()
@@ -176,10 +176,10 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 				if userCount > int64(perUser) {
 					log.WithFields(log.Fields{
 						logging.FieldComponent: logging.ComponentRateLimit,
-						logging.FieldEvent:       "export_rate_limit",
-						logging.FieldUsername:    username,
-						logging.FieldExport:      prefix,
-						"backend":                "redis",
+						logging.FieldEvent:     "export_rate_limit",
+						logging.FieldUsername:  username,
+						logging.FieldExport:    prefix,
+						"backend":              "redis",
 					}).Warn("Export rate limit exceeded (user)")
 					errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 					c.Abort()
@@ -207,10 +207,10 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 	if exportRateLimitCount[ipKey] > perIP {
 		log.WithFields(log.Fields{
 			logging.FieldComponent: logging.ComponentRateLimit,
-			logging.FieldEvent:       "export_rate_limit",
-			logging.FieldIP:          ip,
-			logging.FieldExport:      prefix,
-			"backend":                "memory",
+			logging.FieldEvent:     "export_rate_limit",
+			logging.FieldIP:        ip,
+			logging.FieldExport:    prefix,
+			"backend":              "memory",
 		}).Warn("Export rate limit exceeded (in-memory)")
 		errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 		c.Abort()
@@ -230,10 +230,10 @@ func checkExportRateLimit(c *gin.Context, heavy bool) bool {
 		if exportRateLimitCount[userKey] > perUser {
 			log.WithFields(log.Fields{
 				logging.FieldComponent: logging.ComponentRateLimit,
-				logging.FieldEvent:       "export_rate_limit",
-				logging.FieldUsername:    username,
-				logging.FieldExport:      prefix,
-				"backend":                "memory",
+				logging.FieldEvent:     "export_rate_limit",
+				logging.FieldUsername:  username,
+				logging.FieldExport:    prefix,
+				"backend":              "memory",
 			}).Warn("Export rate limit exceeded (in-memory)")
 			errorResponse(c, http.StatusTooManyRequests, "export_rate_limited", "Too many export requests; try again later")
 			c.Abort()
@@ -262,29 +262,29 @@ func logLargeExport(c *gin.Context, endpoint string, details map[string]interfac
 
 // User struct definition
 type User struct {
-	Username               string    `json:"username"`
-	Password               string    `json:"-"`    // Hashed password, never sent in JSON
-	Role                   string    `json:"role"` // "admin" or "user"
-	Email                  string    `json:"email,omitempty"`                   // Optional email for notifications/onboarding
-	PreferredCurrency      string    `json:"preferred_currency,omitempty"`      // Fiat code (e.g. usd, eur); validated against supported list
-	Theme                  string    `json:"theme,omitempty"`                    // "light", "dark", "system"
-	Language               string    `json:"language,omitempty"`                // e.g. "en", "es"; validated against supported list
-	NotificationsEmail     bool      `json:"notifications_email"`                // Whether to receive email notifications
-	NotificationsPriceAlerts bool    `json:"notifications_price_alerts"`         // Whether to receive price alert notifications
-	EmailPriceAlerts       bool      `json:"email_price_alerts"`                 // Whether to receive email notifications for price alerts
-	EmailPortfolioEvents   bool      `json:"email_portfolio_events"`             // Whether to receive email notifications for portfolio events
-	EmailProductUpdates    bool      `json:"email_product_updates"`              // Whether to receive email notifications for product updates
-	DefaultLandingPage     string    `json:"default_landing_page,omitempty"`     // "explorer", "dashboard", "portfolios"
-	NewsSourcesFavorite    []string  `json:"news_sources_favorite,omitempty"`    // preferred sources (domains)
-	NewsSourcesBlocked     []string  `json:"news_sources_blocked,omitempty"`     // muted sources (domains)
-	Created                time.Time `json:"created"`
+	Username                 string    `json:"username"`
+	Password                 string    `json:"-"`                               // Hashed password, never sent in JSON
+	Role                     string    `json:"role"`                            // "admin" or "user"
+	Email                    string    `json:"email,omitempty"`                 // Optional email for notifications/onboarding
+	PreferredCurrency        string    `json:"preferred_currency,omitempty"`    // Fiat code (e.g. usd, eur); validated against supported list
+	Theme                    string    `json:"theme,omitempty"`                 // "light", "dark", "system"
+	Language                 string    `json:"language,omitempty"`              // e.g. "en", "es"; validated against supported list
+	NotificationsEmail       bool      `json:"notifications_email"`             // Whether to receive email notifications
+	NotificationsPriceAlerts bool      `json:"notifications_price_alerts"`      // Whether to receive price alert notifications
+	EmailPriceAlerts         bool      `json:"email_price_alerts"`              // Whether to receive email notifications for price alerts
+	EmailPortfolioEvents     bool      `json:"email_portfolio_events"`          // Whether to receive email notifications for portfolio events
+	EmailProductUpdates      bool      `json:"email_product_updates"`           // Whether to receive email notifications for product updates
+	DefaultLandingPage       string    `json:"default_landing_page,omitempty"`  // "explorer", "dashboard", "portfolios"
+	NewsSourcesFavorite      []string  `json:"news_sources_favorite,omitempty"` // preferred sources (domains)
+	NewsSourcesBlocked       []string  `json:"news_sources_blocked,omitempty"`  // muted sources (domains)
+	Created                  time.Time `json:"created"`
 }
 
 type PortfolioItem struct {
-	Type    string  `json:"type"`    // "crypto", "commodity", "bond", "stock"
-	Address string  `json:"address"` // Optional; e.g. wallet address for crypto
-	Label   string  `json:"label"`   // Display name
-	Amount  float64 `json:"amount"`  // Quantity (units: coins, oz, face value, etc.)
+	Type    string  `json:"type"`             // "crypto", "commodity", "bond", "stock"
+	Address string  `json:"address"`          // Optional; e.g. wallet address for crypto
+	Label   string  `json:"label"`            // Display name
+	Amount  float64 `json:"amount"`           // Quantity (units: coins, oz, face value, etc.)
 	Symbol  string  `json:"symbol,omitempty"` // Pricing id: "bitcoin", "XAU", "US10Y"; crypto defaults to "bitcoin" when empty
 }
 
@@ -301,11 +301,11 @@ type Portfolio struct {
 type PriceAlert struct {
 	ID             string     `json:"id"`
 	Username       string     `json:"username"`
-	Symbol         string     `json:"symbol"`            // e.g., "bitcoin", "btc"
-	Currency       string     `json:"currency"`          // e.g., "usd"
-	Threshold      float64    `json:"threshold"`         // price threshold in Currency
-	Direction      string     `json:"direction"`         // "above" or "below"
-	DeliveryMethod string     `json:"delivery_method"`   // "in_app" or "email"
+	Symbol         string     `json:"symbol"`          // e.g., "bitcoin", "btc"
+	Currency       string     `json:"currency"`        // e.g., "usd"
+	Threshold      float64    `json:"threshold"`       // price threshold in Currency
+	Direction      string     `json:"direction"`       // "above" or "below"
+	DeliveryMethod string     `json:"delivery_method"` // "in_app" or "email"
 	IsActive       bool       `json:"is_active"`
 	TriggeredAt    *time.Time `json:"triggered_at,omitempty"`
 	Created        time.Time  `json:"created"`
@@ -547,7 +547,6 @@ func isStrongPassword(pw string) bool {
 	return false
 }
 
-
 // initializeDefaultAdmin creates the default admin user if it doesn't exist.
 // In non-development environments, ADMIN_USERNAME and ADMIN_PASSWORD must be provided.
 // In development, sensible but insecure defaults are allowed for convenience.
@@ -683,18 +682,18 @@ func userProfileHandler(c *gin.Context) {
 
 // updateProfileRequest is the body for PATCH /api/user/profile (profile settings).
 type updateProfileRequest struct {
-	Email                   *string `json:"email"`
-	PreferredCurrency       *string `json:"preferred_currency"`        // Fiat code (e.g. usd, eur); empty string clears preference
-	Theme                   *string `json:"theme"`                    // "light", "dark", "system"
-	Language                *string `json:"language"`                // e.g. "en", "es"
-	NotificationsEmail      *bool   `json:"notifications_email"`
-	NotificationsPriceAlerts *bool  `json:"notifications_price_alerts"`
-	EmailPriceAlerts        *bool   `json:"email_price_alerts"`
-	EmailPortfolioEvents    *bool   `json:"email_portfolio_events"`
-	EmailProductUpdates     *bool   `json:"email_product_updates"`
-	DefaultLandingPage      *string `json:"default_landing_page"`      // "explorer", "dashboard", "portfolios"
-	NewsSourcesFavorite     *[]string `json:"news_sources_favorite"`
-	NewsSourcesBlocked      *[]string `json:"news_sources_blocked"`
+	Email                    *string   `json:"email"`
+	PreferredCurrency        *string   `json:"preferred_currency"` // Fiat code (e.g. usd, eur); empty string clears preference
+	Theme                    *string   `json:"theme"`              // "light", "dark", "system"
+	Language                 *string   `json:"language"`           // e.g. "en", "es"
+	NotificationsEmail       *bool     `json:"notifications_email"`
+	NotificationsPriceAlerts *bool     `json:"notifications_price_alerts"`
+	EmailPriceAlerts         *bool     `json:"email_price_alerts"`
+	EmailPortfolioEvents     *bool     `json:"email_portfolio_events"`
+	EmailProductUpdates      *bool     `json:"email_product_updates"`
+	DefaultLandingPage       *string   `json:"default_landing_page"` // "explorer", "dashboard", "portfolios"
+	NewsSourcesFavorite      *[]string `json:"news_sources_favorite"`
+	NewsSourcesBlocked       *[]string `json:"news_sources_blocked"`
 }
 
 // updateProfileHandler updates the authenticated user's profile settings (e.g. preferred_currency).
@@ -936,10 +935,10 @@ func rateLimitMiddleware(c *gin.Context) {
 		if exceeded {
 			log.WithFields(log.Fields{
 				logging.FieldComponent: logging.ComponentRateLimit,
-				logging.FieldEvent:       "api_rate_limit",
-				logging.FieldIP:          ip,
-				logging.FieldUsername:    username,
-				"backend":                "redis",
+				logging.FieldEvent:     "api_rate_limit",
+				logging.FieldIP:        ip,
+				logging.FieldUsername:  username,
+				"backend":              "redis",
 			}).Warn("Rate limit exceeded (Redis)")
 			errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 			c.Abort()
@@ -971,9 +970,9 @@ func rateLimitMiddleware(c *gin.Context) {
 	if rateLimitCount[ip] > perIPLimit {
 		log.WithFields(log.Fields{
 			logging.FieldComponent: logging.ComponentRateLimit,
-			logging.FieldEvent:       "api_rate_limit",
-			logging.FieldIP:          ip,
-			"backend":                "memory",
+			logging.FieldEvent:     "api_rate_limit",
+			logging.FieldIP:        ip,
+			"backend":              "memory",
 		}).Warn("Rate limit exceeded (in-memory)")
 		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
 		c.Abort()
@@ -1083,7 +1082,7 @@ func main() {
 	r := gin.Default()
 
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: true, Timeout: 2 * time.Second}))
-	r.Use(requestIDMiddleware())
+	r.Use(correlationIDMiddleware())
 	r.Use(sentryUserScopeMiddleware())
 	if cfg.MetricsEnabled {
 		r.Use(metrics.Middleware())
@@ -1335,12 +1334,16 @@ func main() {
 
 	// Start background job to prefetch latest blocks and transactions
 	go func() {
-		logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "prefetch_started").Info("background prefetch job started")
 		ticker := time.NewTicker(30 * time.Second)
 		defer ticker.Stop()
 		for {
 			// Initial run and every tick
 			func() {
+				cid := correlation.NewID()
+				jobLog := logging.WithComponent(logging.ComponentBackground).WithFields(log.Fields{
+					logging.FieldCorrelationID: cid,
+					logging.FieldEvent:         "prefetch_tick",
+				})
 				const numBlocks = 5
 				const numTxs = 10
 				blocks, blocksErr := fetchLatestBlocks(numBlocks)
@@ -1348,17 +1351,17 @@ func main() {
 					blocksJSON, _ := json.Marshal(blocks)
 					rdb.Set(context.Background(), "latest_blocks", blocksJSON, 5*time.Minute)
 				} else {
-					logging.WithComponent(logging.ComponentBackground).WithError(blocksErr).WithField(logging.FieldEvent, "prefetch_blocks_failed").Error("failed to prefetch latest blocks")
+					jobLog.WithError(blocksErr).WithField(logging.FieldEvent, "prefetch_blocks_failed").Error("failed to prefetch latest blocks")
 				}
 				txs, txsErr := fetchLatestTransactions(numBlocks, numTxs)
 				if txsErr == nil {
 					txsJSON, _ := json.Marshal(txs)
 					rdb.Set(context.Background(), "latest_transactions", txsJSON, 5*time.Minute)
 				} else {
-					logging.WithComponent(logging.ComponentBackground).WithError(txsErr).WithField(logging.FieldEvent, "prefetch_txs_failed").Error("failed to prefetch latest transactions")
+					jobLog.WithError(txsErr).WithField(logging.FieldEvent, "prefetch_txs_failed").Error("failed to prefetch latest transactions")
 				}
 				if blocksErr == nil && txsErr == nil {
-					logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "prefetch_tick_ok").Debug("prefetch tick completed")
+					jobLog.WithField(logging.FieldEvent, "prefetch_tick_ok").Debug("prefetch tick completed")
 				}
 				metrics.RecordPrefetchTick(blocksErr, txsErr)
 			}()
@@ -1368,19 +1371,16 @@ func main() {
 
 	// Start background job to collect metrics for charts
 	go func() {
-		logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "metrics_started").Info("background metrics collection job started")
 		ticker := time.NewTicker(5 * time.Minute)
 		defer ticker.Stop()
 		for {
 			collectMetrics()
-			logging.WithComponent(logging.ComponentBackground).WithField(logging.FieldEvent, "metrics_collected").Debug("collected metrics for charts")
 			<-ticker.C
 		}
 	}()
 
 	// Start background job to evaluate price alerts
 	go func() {
-		logging.WithComponent(logging.ComponentAlerts).WithField(logging.FieldEvent, "alert_eval_started").Info("background price alert evaluation job started")
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		for {
@@ -1748,7 +1748,7 @@ func applyUserNewsPrefs(articles []news.Article, user *User, favoritesOnly bool)
 // -----------------------------
 
 const (
-	priceAlertKeyPrefix = "alert:"
+	priceAlertKeyPrefix   = "alert:"
 	notificationKeyPrefix = "notification:"
 )
 
@@ -1756,8 +1756,8 @@ type createPriceAlertRequest struct {
 	Symbol         string  `json:"symbol"`
 	Currency       string  `json:"currency"`
 	Threshold      float64 `json:"threshold"`
-	Direction      string  `json:"direction"`        // above|below
-	DeliveryMethod string  `json:"delivery_method"`  // in_app|email
+	Direction      string  `json:"direction"`       // above|below
+	DeliveryMethod string  `json:"delivery_method"` // in_app|email
 	IsActive       *bool   `json:"is_active,omitempty"`
 }
 
@@ -2026,19 +2026,22 @@ func applyPriceAlertUpdate(existing PriceAlert, req updatePriceAlertRequest) (Pr
 // and marks triggered alerts in Redis.
 func evaluatePriceAlerts() {
 	start := time.Now()
+	cid := correlation.NewID()
+	jobLog := logging.WithComponent(logging.ComponentAlerts).WithField(logging.FieldCorrelationID, cid)
 	if rdb == nil || assetPricer == nil {
 		return
 	}
+	jobLog.WithField(logging.FieldEvent, "alert_eval_cycle_start").Debug("alert evaluation cycle started")
 
 	ctx := context.Background()
 	var (
-		scannedKeys   int
-		evaluated     int
-		triggered     int
-		skipped       int
-		decodeErrors  int
-		priceErrors   int
-		updateErrors  int
+		scannedKeys  int
+		evaluated    int
+		triggered    int
+		skipped      int
+		decodeErrors int
+		priceErrors  int
+		updateErrors int
 	)
 
 	// Per-cycle price cache to avoid repeated upstream calls.
@@ -2050,7 +2053,7 @@ func evaluatePriceAlerts() {
 	for {
 		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
 		if err != nil {
-			logging.WithComponent(logging.ComponentAlerts).WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("alert evaluation scan failed")
+			jobLog.WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("alert evaluation scan failed")
 			break
 		}
 		cursor = next
@@ -2140,7 +2143,7 @@ func evaluatePriceAlerts() {
 
 	elapsed := time.Since(start)
 	metrics.RecordAlertEval(elapsed, triggered)
-	logging.WithComponent(logging.ComponentAlerts).WithFields(log.Fields{
+	jobLog.WithFields(log.Fields{
 		logging.FieldEvent: "alert_eval_cycle",
 		"scanned_keys":     scannedKeys,
 		"evaluated":        evaluated,
@@ -3019,7 +3022,7 @@ func watchlistKey(username, id string) string {
 }
 
 const (
-	maxWatchlistsPerUser = 20   // quota: max watchlists per user to avoid unbounded storage
+	maxWatchlistsPerUser = 20 // quota: max watchlists per user to avoid unbounded storage
 	maxWatchlistEntries  = 100
 	maxWatchlistNameLen  = 100
 	maxEntrySymbolLen    = 128
@@ -3737,12 +3740,12 @@ const exportVersion = "1.0"
 
 // CSV export limits to prevent abuse and control memory/RPC load.
 const (
-	maxBlockRangeExport   = 500   // max blocks in one blocks CSV export (end_height - start_height + 1)
-	maxBlockRowsExport   = 2000  // max rows for blocks CSV
-	maxTxBlockRangeExport = 100   // max block range when exporting transactions (each block may have many txs)
-	maxTxRowsExport      = 5000  // max transaction rows per CSV export
-	defaultBlockRows     = 500
-	defaultTxRows        = 1000
+	maxBlockRangeExport   = 500  // max blocks in one blocks CSV export (end_height - start_height + 1)
+	maxBlockRowsExport    = 2000 // max rows for blocks CSV
+	maxTxBlockRangeExport = 100  // max block range when exporting transactions (each block may have many txs)
+	maxTxRowsExport       = 5000 // max transaction rows per CSV export
+	defaultBlockRows      = 500
+	defaultTxRows         = 1000
 )
 
 // exportBlocksCSVHandler streams blocks in a height range as CSV. Memory-efficient: one block at a time.
@@ -4083,11 +4086,11 @@ func exportPortfoliosHandler(c *gin.Context) {
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
-			"export_timestamp":     time.Now().UTC().Format(time.RFC3339),
-			"export_version":       exportVersion,
-			"endpoint":             "portfolios",
-			"valuation_currency":   valuationCurrency,
-			"rate_data_available":  assetPricer != nil,
+			"export_timestamp":    time.Now().UTC().Format(time.RFC3339),
+			"export_version":      exportVersion,
+			"endpoint":            "portfolios",
+			"valuation_currency":  valuationCurrency,
+			"rate_data_available": assetPricer != nil,
 		},
 		"pagination": gin.H{
 			"page":        pagination.Page,
@@ -4264,12 +4267,12 @@ func autocompleteHandler(c *gin.Context) {
 type SymbolInfo struct {
 	Symbol      string  `json:"symbol"`
 	Name        string  `json:"name"`
-	Type        string  `json:"type"`        // "crypto", "stock", "commodity", etc.
-	Category    string  `json:"category"`    // e.g., "layer1", "defi", "nft", "payment"
+	Type        string  `json:"type"`     // "crypto", "stock", "commodity", etc.
+	Category    string  `json:"category"` // e.g., "layer1", "defi", "nft", "payment"
 	MarketCap   float64 `json:"market_cap"`
 	Price       float64 `json:"price"`
 	Volume24h   float64 `json:"volume_24h"`
-	Change24h   float64 `json:"change_24h"`  // percentage change
+	Change24h   float64 `json:"change_24h"` // percentage change
 	Rank        int     `json:"rank"`
 	IsActive    bool    `json:"is_active"`
 	ListedSince int64   `json:"listed_since"` // timestamp
@@ -4277,13 +4280,13 @@ type SymbolInfo struct {
 
 // SearchFilters represents the filter parameters for symbol search
 type SearchFilters struct {
-	Types      []string `json:"types"`       // Filter by symbol types
-	Categories []string `json:"categories"`  // Filter by categories
-	MinPrice   float64  `json:"min_price"`   // Minimum price filter
-	MaxPrice   float64  `json:"max_price"`   // Maximum price filter
-	MinMarketCap float64 `json:"min_market_cap"`
-	MaxMarketCap float64 `json:"max_market_cap"`
-	IsActive   *bool    `json:"is_active"`   // Filter by active status
+	Types        []string `json:"types"`      // Filter by symbol types
+	Categories   []string `json:"categories"` // Filter by categories
+	MinPrice     float64  `json:"min_price"`  // Minimum price filter
+	MaxPrice     float64  `json:"max_price"`  // Maximum price filter
+	MinMarketCap float64  `json:"min_market_cap"`
+	MaxMarketCap float64  `json:"max_market_cap"`
+	IsActive     *bool    `json:"is_active"` // Filter by active status
 }
 
 // SortOptions represents sorting configuration
@@ -4550,11 +4553,11 @@ func advancedSearchHandler(c *gin.Context) {
 	}).Info("advanced search completed")
 
 	c.JSON(http.StatusOK, gin.H{
-		"data":       paginatedResults,
+		"data": paginatedResults,
 		"pagination": gin.H{
-			"page":       pagination.Page,
-			"page_size":  pagination.PageSize,
-			"total":      total,
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
 			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
 		},
 		"filters_applied": gin.H{
@@ -4976,7 +4979,7 @@ type PortfolioWithValuation struct {
 	Updated           time.Time                `json:"updated"`
 	ValuationCurrency string                   `json:"valuation_currency,omitempty"`
 	TotalValueFiat    *float64                 `json:"total_value_fiat,omitempty"`
-	Items             []PortfolioItemWithValue  `json:"items"`
+	Items             []PortfolioItemWithValue `json:"items"`
 }
 
 // healthHandler is a simple liveness probe. It reports basic process health
@@ -5003,14 +5006,14 @@ func healthHandler(c *gin.Context) {
 		details["config_error"] = "GETBLOCK_BASE_URL or GETBLOCK_ACCESS_TOKEN not set"
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	c.JSON(http.StatusOK, mergeCorrelationID(c, gin.H{
 		"status":     status,
 		"details":    details,
 		"timestamp":  time.Now().Unix(),
 		"app_env":    config.GetAppEnv(),
 		"version":    "v1",
 		"api_prefix": "/api/v1",
-	})
+	}))
 }
 
 // readinessHandler is a readiness probe. It checks core dependencies such as
@@ -5018,13 +5021,13 @@ func healthHandler(c *gin.Context) {
 // endpoint returns 503 so orchestrators can avoid routing traffic.
 func readinessHandler(c *gin.Context) {
 	if rdb == nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "redis client not initialized"})
+		c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": "redis client not initialized"}))
 		return
 	}
 
 	// Redis must be reachable
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": fmt.Sprintf("redis ping failed: %v", err)})
+		c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": fmt.Sprintf("redis ping failed: %v", err)}))
 		return
 	}
 
@@ -5032,7 +5035,7 @@ func readinessHandler(c *gin.Context) {
 	checkExternal := appConfig != nil && appConfig.ReadyCheckExternal
 	if checkExternal {
 		if baseURL == "" || apiKey == "" {
-			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": "missing GETBLOCK_* env for external readiness check"})
+			c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": "missing GETBLOCK_* env for external readiness check"}))
 			return
 		}
 		// Perform a lightweight external call with a short timeout
@@ -5054,12 +5057,12 @@ func readinessHandler(c *gin.Context) {
 			} else {
 				msg = fmt.Sprintf("%s: %s", msg, resp.Status())
 			}
-			c.JSON(http.StatusServiceUnavailable, gin.H{"status": "not_ready", "error": msg})
+			c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": msg}))
 			return
 		}
 	}
 
-	c.JSON(http.StatusOK, gin.H{"status": "ready", "timestamp": time.Now().Unix()})
+	c.JSON(http.StatusOK, mergeCorrelationID(c, gin.H{"status": "ready", "timestamp": time.Now().Unix()}))
 }
 
 var (
@@ -5081,7 +5084,7 @@ var (
 	// newsService fetches and caches contextual financial news.
 	newsService *news.Service
 	// emailService sends templated emails for onboarding/alerts.
-	emailService *email.Service
+	emailService   *email.Service
 	emailTemplates *email.Templates
 	// appConfig holds the parsed application configuration.
 	appConfig *config.Config
@@ -5148,22 +5151,21 @@ func SetPricingClient(c pricing.Client) {
 	}
 }
 
-// requestIDMiddleware sets X-Request-ID and a Sentry tag for log/trace correlation.
-func requestIDMiddleware() gin.HandlerFunc {
+// correlationIDMiddleware propagates or generates a correlation ID (X-Correlation-ID / X-Request-ID),
+// sets response headers, gin context keys, and Sentry tags for end-to-end tracing.
+func correlationIDMiddleware() gin.HandlerFunc {
 	return func(c *gin.Context) {
-		rid := strings.TrimSpace(c.GetHeader("X-Request-ID"))
+		rid := correlation.FromHeaders(c.Request.Header)
 		if rid == "" {
-			b := make([]byte, 16)
-			if _, err := rand.Read(b); err == nil {
-				rid = hex.EncodeToString(b)
-			} else {
-				rid = strconv.FormatInt(time.Now().UnixNano(), 36)
-			}
+			rid = correlation.NewID()
 		}
-		c.Set("request_id", rid)
-		c.Header("X-Request-ID", rid)
+		c.Set("correlation_id", rid)
+		c.Set("request_id", rid) // legacy alias
+		c.Header(correlation.HeaderCorrelationID, rid)
+		c.Header(correlation.HeaderRequestID, rid)
 		if hub := sentrygin.GetHubFromContext(c); hub != nil {
 			hub.ConfigureScope(func(scope *sentry.Scope) {
+				scope.SetTag("correlation_id", rid)
 				scope.SetTag("request_id", rid)
 			})
 		}
@@ -5232,6 +5234,11 @@ func captureSentryException(c *gin.Context, err error, status int, extraTags map
 				scope.SetTag(k, v)
 			}
 		}
+		if rid, exists := c.Get("correlation_id"); exists {
+			if rs, ok := rid.(string); ok && rs != "" {
+				scope.SetTag("correlation_id", rs)
+			}
+		}
 		if rid, exists := c.Get("request_id"); exists {
 			if rs, ok := rid.(string); ok && rs != "" {
 				scope.SetTag("request_id", rs)
@@ -5284,20 +5291,33 @@ func defaultErrorCode(status int) string {
 	}
 }
 
+// mergeCorrelationID adds correlation_id to a JSON body when the request has one (for client/operator tracing).
+func mergeCorrelationID(c *gin.Context, body gin.H) gin.H {
+	if body == nil {
+		body = gin.H{}
+	}
+	if cid, ok := c.Get("correlation_id"); ok {
+		if s, ok := cid.(string); ok && s != "" {
+			body["correlation_id"] = s
+		}
+	}
+	return body
+}
+
 // errorResponse writes a structured error response.
 func errorResponse(c *gin.Context, status int, code, message string) {
-	c.JSON(status, gin.H{"error": APIError{
+	c.JSON(status, mergeCorrelationID(c, gin.H{"error": APIError{
 		Code:    code,
 		Message: message,
-	}})
+	}}))
 }
 
 // abortErrorResponse aborts the request with a structured error response.
 func abortErrorResponse(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, gin.H{"error": APIError{
+	c.AbortWithStatusJSON(status, mergeCorrelationID(c, gin.H{"error": APIError{
 		Code:    code,
 		Message: message,
-	}})
+	}}))
 }
 
 // handleError captures an error with Sentry and returns a standardized payload.
@@ -5567,6 +5587,12 @@ func collectMetrics() {
 	if rdb == nil {
 		return
 	}
+	cid := correlation.NewID()
+	jobLog := logging.WithComponent(logging.ComponentBackground).WithFields(log.Fields{
+		logging.FieldCorrelationID: cid,
+		logging.FieldEvent:         "metrics_collect",
+	})
+	jobLog.Debug("metrics collection run started")
 	defer metrics.RecordMetricsJob()
 	ctx := context.Background()
 	now := float64(time.Now().Unix())
@@ -5575,6 +5601,7 @@ func collectMetrics() {
 	if pricingClient != nil {
 		rates, err := pricingClient.GetMultiCurrencyRatesIn(ctx, pricing.DefaultFiatCurrencies)
 		if err != nil {
+			jobLog.WithError(err).Warn("multi-currency rates fetch failed; using USD fallback if available")
 			// Fallback: at least store USD
 			if usd, err2 := pricingClient.GetBTCUSD(ctx); err2 == nil {
 				s := strconv.FormatFloat(usd, 'f', -1, 64)
