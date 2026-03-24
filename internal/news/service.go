@@ -2,7 +2,7 @@ package news
 
 import (
 	"context"
-	"crypto/sha1"
+	"crypto/sha256"
 	"encoding/hex"
 	"net/url"
 	"sort"
@@ -86,8 +86,8 @@ func CacheKey(providerName, scope, query string, extras map[string]string) strin
 	if providerName == "" {
 		providerName = "provider"
 	}
-	h := sha1.Sum([]byte(canonicalizeQuery(query, extras)))
-	return scope + ":" + providerName + ":" + hex.EncodeToString(h[:])
+	sum := sha256.Sum256([]byte(canonicalizeQuery(query, extras)))
+	return scope + ":" + providerName + ":" + hex.EncodeToString(sum[:])
 }
 
 func canonicalizeQuery(query string, extras map[string]string) string {

@@ -19,6 +19,7 @@ A comprehensive web-based application for exploring the Bitcoin blockchain with 
   - [Development Setup](#development-setup)
   - [Code style (Go)](#code-style-go)
   - [Code coverage](#code-coverage)
+  - [Security scanning (CI)](#security-scanning-ci)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -282,6 +283,33 @@ go tool cover -html=coverage.out -o coverage.html
 
 On pull requests, [Codecov](https://codecov.io) can enforce a **minimum coverage on new/changed lines** (patch coverage in `codecov.yml`). To enable uploads and the README badge, add a repository secret **CODECOV_TOKEN** from your Codecov project settings and ensure the repo slug in Codecov matches `CryptoD/blockchain-explorer` (or adjust badge URLs). If the secret is absent, CI still runs tests and uploads `coverage.out` / `coverage.html` as workflow artifacts.
 
+### Security scanning (CI)
+
+The workflow runs:
+
+| Tool | What it checks |
+|------|------------------|
+| **[gosec](https://github.com/securego/gosec)** | Go source for common security mistakes (`gosec ./...`). |
+| **[Trivy](https://github.com/aquasecurity/trivy)** (filesystem) | Known **vulnerabilities** in dependencies (`go.sum`, npm lockfile, etc.); skips `node_modules`, build output, and `.git`. |
+| **Trivy** (image) | Vulnerabilities in the **built Docker image** (`blockchain-explorer:latest`) after `docker build`. |
+
+Failures are reported in the **job log** (table output) and fail the workflow for **HIGH** and **CRITICAL** severities with **fixes available** (`ignore-unfixed: true` reduces noise from unfixed upstream CVEs).
+
+Run similar checks locally:
+
+```bash
+go install github.com/securego/gosec/v2/cmd/gosec@v2.22.10
+gosec -fmt text -stdout ./...
+
+docker run --rm -v "$PWD":/work -w /work aquasec/trivy:latest fs \
+  --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed \
+  --skip-dirs node_modules,.git,dist,build,.tmp,vendor .
+
+docker build -t blockchain-explorer:latest .
+docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:latest image \
+  --scanners vuln --severity HIGH,CRITICAL --ignore-unfixed blockchain-explorer:latest
+```
+
 ### Admin credentials, environments, and rotation
 
 - In **development** (`APP_ENV=development` or unset), the application will fall back to `admin` / `admin123` if `ADMIN_USERNAME` / `ADMIN_PASSWORD` are not provided. This is for local convenience only and must not be used in shared or production deployments.
@@ -296,7 +324,7 @@ On pull requests, [Codecov](https://codecov.io) can enforce a **minimum coverage
 
 We welcome contributions to improve the Bitcoin Explorer. Please follow standard Go and web development practices.
 
-Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **frontend** CSS build must succeed; **Docker** image must build. Run the commands in [Code style (Go)](#code-style-go) and `go test ./...` locally before opening a PR.
+Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **gosec** and **Trivy** (filesystem + Docker image) must pass; **frontend** CSS build must succeed; **Docker** image must build and scan clean. Run the commands in [Code style (Go)](#code-style-go), [Security scanning (CI)](#security-scanning-ci), and `go test ./...` locally before opening a PR.
 
 ## License
 
