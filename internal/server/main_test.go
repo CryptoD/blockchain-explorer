@@ -1,4 +1,4 @@
-package main
+package server
 
 import (
 	"context"
@@ -24,6 +24,7 @@ import (
 
 func TestMain(m *testing.M) {
 	gin.SetMode(gin.TestMode)
+	ResetDefaultServices()
 	SetBlockchainClient(nil)
 	SetPricingClient(nil)
 

@@ -134,7 +134,7 @@ The application will start on `http://localhost:3000`, with Adminer available at
 
 3. Run the application:
    ```bash
-   go run main.go
+   go run ./cmd/server
    ```
 
 The application will start on `http://localhost:8080`
@@ -181,7 +181,8 @@ Error Response:
 ```json
 {
 bitcoin-explorer/
-├── main.go                 # Application entry point
+├── cmd/server/             # Program entry (`main`); thin wiring
+├── internal/server/        # HTTP server, routes, handlers (application logic)
 ├── go.mod                  # Go module definition
 ├── go.sum                  # Go dependencies
 ├── bitcoin.html            # Main frontend file
@@ -202,7 +203,8 @@ bitcoin-explorer/
 ### Project Structure
 ```
 bitcoin-explorer/
-├── main.go                 # Application entry point
+├── cmd/server/             # Program entry (`main`); thin wiring
+├── internal/server/        # HTTP server, routes, handlers (application logic)
 ├── go.mod                  # Go module definition
 ├── go.sum                  # Go dependencies
 ├── bitcoin.html            # Main frontend file
@@ -251,7 +253,7 @@ bitcoin-explorer/
 
 3. Run development server with hot reload:
    ```bash
-   go run main.go
+   go run ./cmd/server
    ```
 
 ### Code style (Go)
@@ -317,6 +319,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 ## Documentation
 
+- [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 

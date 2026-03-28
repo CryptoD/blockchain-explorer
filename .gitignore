@@ -90,7 +90,8 @@ build/
 # Local temp / generated (do not track)
 .tmp/
 
-# Built binaries (build from source: go build -o blockchain-explorer .)
+# Built binaries (build from source: go build -o blockchain-explorer ./cmd/server)
 blockchain-explorer
 bitcoin-explorer
+/server
 

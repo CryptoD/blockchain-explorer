@@ -56,12 +56,12 @@ export apiKey="your_api_key"
 1. Ensure Go is installed (version 1.21 or higher).
 2. Build and run the application using:
 ```
-go build -o blockchain-explorer
+go build -o blockchain-explorer ./cmd/server
 ./blockchain-explorer
 ```
 Or, for development:
 ```
-go run main.go
+go run ./cmd/server
 ```
 
 This will start the server and make the blockchain explorer available.
@@ -85,4 +85,4 @@ docker compose up --build
 
 The Go application runs inside a container and serves HTTP on port 8080 (mapped to the host). Adminer is available on http://localhost:8080 for database administration. Redis will be exposed on port 6379.
 
-Note: The compose configuration mounts the working directory into the Go container so code changes are picked up when using `go run main.go`. 
+Note: The compose configuration mounts the working directory into the Go container so code changes are picked up when using `go run ./cmd/server`. 
