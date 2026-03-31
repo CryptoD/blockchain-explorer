@@ -18,6 +18,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/redisstore"
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
@@ -362,8 +363,8 @@ func createSession(username string) (string, error) {
 	sessionMutex.Unlock()
 
 	// Store session in Redis with 24 hour expiration if Redis is configured
-	if rdb != nil {
-		_ = rdb.Set(ctx, "session:"+sessionID, username, 24*time.Hour).Err()
+	if appRepos != nil && appRepos.Session != nil && rdb != nil {
+		_ = appRepos.Session.SetSession(ctx, sessionID, username, 24*time.Hour)
 	}
 
 	return sessionID, nil
@@ -372,8 +373,8 @@ func createSession(username string) (string, error) {
 // validateSession checks if a session is valid
 func validateSession(sessionID string) (string, bool) {
 	// Check Redis first
-	if rdb != nil {
-		if username, err := rdb.Get(ctx, "session:"+sessionID).Result(); err == nil && username != "" {
+	if appRepos != nil && appRepos.Session != nil && rdb != nil {
+		if username, err := appRepos.Session.GetSessionUsername(ctx, sessionID); err == nil && username != "" {
 			return username, true
 		}
 	}
@@ -396,9 +397,8 @@ func destroySession(sessionID string) {
 	delete(csrfStore, sessionID)
 	csrfMutex.Unlock()
 
-	if rdb != nil {
-		_ = rdb.Del(ctx, "session:"+sessionID).Err()
-		_ = rdb.Del(ctx, "csrf:"+sessionID).Err()
+	if appRepos != nil && appRepos.Session != nil && rdb != nil {
+		_ = appRepos.Session.DeleteSession(ctx, sessionID)
 	}
 }
 
@@ -414,8 +414,8 @@ func createOrUpdateCSRFToken(sessionID string) (string, error) {
 	csrfStore[sessionID] = token
 	csrfMutex.Unlock()
 
-	if rdb != nil {
-		if err := rdb.Set(ctx, "csrf:"+sessionID, token, 24*time.Hour).Err(); err != nil {
+	if appRepos != nil && appRepos.Session != nil && rdb != nil {
+		if err := appRepos.Session.SetCSRF(ctx, sessionID, token, 24*time.Hour); err != nil {
 			logging.WithComponent(logging.ComponentAuth).WithError(err).Warn("Failed to store CSRF token in Redis")
 		}
 	}
@@ -425,8 +425,8 @@ func createOrUpdateCSRFToken(sessionID string) (string, error) {
 
 // getCSRFTokenForSession retrieves the CSRF token associated with a session.
 func getCSRFTokenForSession(sessionID string) (string, error) {
-	if rdb != nil {
-		if val, err := rdb.Get(ctx, "csrf:"+sessionID).Result(); err == nil && val != "" {
+	if appRepos != nil && appRepos.Session != nil && rdb != nil {
+		if val, err := appRepos.Session.GetCSRF(ctx, sessionID); err == nil && val != "" {
 			return val, nil
 		}
 	}
@@ -441,11 +441,11 @@ func getCSRFTokenForSession(sessionID string) (string, error) {
 
 // loadUsersFromRedis loads all users from Redis
 func loadUsersFromRedis() error {
-	if rdb == nil {
+	if rdb == nil || appRepos == nil || appRepos.User == nil {
 		return nil // No Redis, use in-memory only
 	}
 
-	keys, err := rdb.Keys(ctx, "user:*").Result()
+	keys, err := appRepos.User.ListUserKeys(ctx)
 	if err != nil {
 		return err
 	}
@@ -454,15 +454,21 @@ func loadUsersFromRedis() error {
 	defer userMutex.Unlock()
 
 	for _, key := range keys {
-		username := strings.TrimPrefix(key, "user:")
-		data, err := rdb.Get(ctx, key).Result()
+		username, ok := repos.UsernameFromUserKey(key)
+		if !ok {
+			continue
+		}
+		data, err := appRepos.User.Get(ctx, username)
 		if err != nil {
+			if err == redis.Nil {
+				continue
+			}
 			logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to load user from Redis")
 			continue
 		}
 
 		var user User
-		if err := json.Unmarshal([]byte(data), &user); err != nil {
+		if err := json.Unmarshal(data, &user); err != nil {
 			logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to unmarshal user from Redis")
 			continue
 		}
@@ -475,7 +481,7 @@ func loadUsersFromRedis() error {
 
 // saveUserToRedis saves a user to Redis
 func saveUserToRedis(user User) error {
-	if rdb == nil {
+	if rdb == nil || appRepos == nil || appRepos.User == nil {
 		return nil // No Redis, use in-memory only
 	}
 
@@ -484,7 +490,7 @@ func saveUserToRedis(user User) error {
 		return err
 	}
 
-	return rdb.Set(ctx, "user:"+user.Username, data, 0).Err() // No expiration
+	return appRepos.User.Save(ctx, user.Username, data) // No expiration
 }
 
 // sanitizeText trims, truncates, strips control characters (except basic
@@ -542,8 +548,14 @@ func initializeDefaultAdmin() {
 	userMutex.Lock()
 	defer userMutex.Unlock()
 
-	adminUsername := os.Getenv("ADMIN_USERNAME")
-	adminPassword := os.Getenv("ADMIN_PASSWORD")
+	var adminUsername, adminPassword string
+	if appConfig != nil {
+		adminUsername = appConfig.AdminUsername
+		adminPassword = appConfig.AdminPassword
+	} else {
+		adminUsername = strings.TrimSpace(os.Getenv("ADMIN_USERNAME"))
+		adminPassword = os.Getenv("ADMIN_PASSWORD")
+	}
 
 	if appEnv == "development" {
 		if adminUsername == "" {
@@ -552,14 +564,8 @@ func initializeDefaultAdmin() {
 		if adminPassword == "" {
 			adminPassword = "admin123"
 		}
-	} else {
-		if adminUsername == "" || adminPassword == "" {
-			logging.WithComponent(logging.ComponentAdmin).Fatal("ADMIN_USERNAME and ADMIN_PASSWORD must be set in non-development environments")
-		}
-		if !isStrongPassword(adminPassword) {
-			logging.WithComponent(logging.ComponentAdmin).Fatal("ADMIN_PASSWORD must be 8-128 characters and include at least one letter and one digit in non-development environments")
-		}
 	}
+	// Non-development admin requirements are enforced by config.Validate() at startup.
 
 	if _, exists := users[adminUsername]; !exists {
 		hashedPassword, err := bcrypt.GenerateFromPassword([]byte(adminPassword), bcrypt.DefaultCost)
@@ -616,11 +622,7 @@ func createUser(username, password, role, email string) error {
 
 	users[username] = user
 
-	// Save to Redis
-	if rdb != nil {
-		data, _ := json.Marshal(user)
-		_ = rdb.Set(ctx, "user:"+user.Username, data, 0).Err()
-	}
+	_ = saveUserToRedis(user)
 
 	return nil
 }

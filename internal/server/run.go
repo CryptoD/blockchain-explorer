@@ -14,6 +14,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
 	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
@@ -83,6 +84,7 @@ func Run() error {
 	rdb = redis.NewClient(&redis.Options{
 		Addr: cfg.RedisHost + ":6379",
 	})
+	appRepos = repos.NewStores(rdb)
 
 	// Configure Redis for LRU eviction
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")
@@ -147,6 +149,19 @@ func Run() error {
 
 	// Initialize default admin user
 	initializeDefaultAdmin()
+
+	applyDependencies(NewDependencies(
+		cfg,
+		rdb,
+		appRepos,
+		httpClient,
+		blockchainClient,
+		pricingClient,
+		assetPricer,
+		emailTemplates,
+		newsService,
+		emailService,
+	))
 
 	registerStaticRoutes(r)
 	registerHealthAndMetricsRoutes(r, cfg)

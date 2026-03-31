@@ -16,6 +16,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/CryptoD/blockchain-explorer/internal/redistest"
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/alicebob/miniredis/v2"
 	"github.com/gin-gonic/gin"
 	resty "github.com/go-resty/resty/v2"
@@ -30,11 +31,13 @@ func TestMain(m *testing.M) {
 
 	if redistest.UseIntegration() {
 		old := rdb
+		oldRepos := appRepos
 		cl := redis.NewClient(&redis.Options{
 			Addr:            redistest.IntegrationAddr(),
 			DisableIdentity: true,
 		})
 		rdb = cl
+		appRepos = repos.NewStores(rdb)
 		if err := cl.Ping(ctx).Err(); err != nil {
 			fmt.Fprintf(os.Stderr, "integration Redis at %s: %v\n", redistest.IntegrationAddr(), err)
 			os.Exit(1)
@@ -42,6 +45,7 @@ func TestMain(m *testing.M) {
 		code := m.Run()
 		_ = cl.Close()
 		rdb = old
+		appRepos = oldRepos
 		os.Exit(code)
 	}
 
@@ -51,15 +55,18 @@ func TestMain(m *testing.M) {
 		os.Exit(1)
 	}
 	old := rdb
+	oldRepos := appRepos
 	cl := redis.NewClient(&redis.Options{
 		Addr:            mr.Addr(),
 		DisableIdentity: true,
 	})
 	rdb = cl
+	appRepos = repos.NewStores(rdb)
 	code := m.Run()
 	_ = cl.Close()
 	mr.Close()
 	rdb = old
+	appRepos = oldRepos
 	os.Exit(code)
 }
 

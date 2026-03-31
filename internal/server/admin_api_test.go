@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 )
@@ -163,6 +164,7 @@ func TestAdmin_WhenRedisUnreachable_CacheFails(t *testing.T) {
 	cookie, csrf := loginV1(t, r, "admin", "admin123")
 
 	old := rdb
+	oldRepos := appRepos
 	bad := redis.NewClient(&redis.Options{
 		Addr:            "127.0.0.1:1",
 		DisableIdentity: true,
@@ -173,9 +175,11 @@ func TestAdmin_WhenRedisUnreachable_CacheFails(t *testing.T) {
 		PoolSize:        1,
 	})
 	rdb = bad
+	appRepos = repos.NewStores(bad)
 	defer func() {
 		_ = bad.Close()
 		rdb = old
+		appRepos = oldRepos
 	}()
 
 	ws := getReq(t, r, "/api/v1/admin/cache?action=stats", authHeader(cookie, csrf))
@@ -196,6 +200,7 @@ func TestAdmin_Status_WhenRedisUnreachable_StillOK(t *testing.T) {
 	cookie, csrf := loginV1(t, r, "admin", "admin123")
 
 	old := rdb
+	oldRepos := appRepos
 	bad := redis.NewClient(&redis.Options{
 		Addr:            "127.0.0.1:1",
 		DisableIdentity: true,
@@ -206,9 +211,11 @@ func TestAdmin_Status_WhenRedisUnreachable_StillOK(t *testing.T) {
 		PoolSize:        1,
 	})
 	rdb = bad
+	appRepos = repos.NewStores(bad)
 	defer func() {
 		_ = bad.Close()
 		rdb = old
+		appRepos = oldRepos
 	}()
 
 	w := getReq(t, r, "/api/v1/admin/status", authHeader(cookie, csrf))

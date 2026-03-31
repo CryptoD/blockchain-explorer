@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"unicode"
 )
 
 // Config holds all application configuration derived from environment variables.
@@ -13,6 +14,10 @@ type Config struct {
 
 	// Core infrastructure
 	RedisHost string
+
+	// Default admin (env ADMIN_USERNAME / ADMIN_PASSWORD). Required outside development; validated in Validate().
+	AdminUsername string
+	AdminPassword string
 
 	// External providers
 	GetBlockBaseURL     string
@@ -82,6 +87,8 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:                      appEnv,
 		RedisHost:                   GetEnvWithDefault("REDIS_HOST", "localhost"),
+		AdminUsername:               strings.TrimSpace(os.Getenv("ADMIN_USERNAME")),
+		AdminPassword:               os.Getenv("ADMIN_PASSWORD"),
 		GetBlockBaseURL:             strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
 		GetBlockAccessToken:         strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
 		SentryDSN:                   strings.TrimSpace(os.Getenv("SENTRY_DSN")),
@@ -123,12 +130,77 @@ func Load() (*Config, error) {
 		SentryErrorSampleRate:       sentryErrorSampleRateFromEnv(),
 	}
 
-	// Required in all environments: GetBlock configuration for core blockchain operations.
-	if cfg.GetBlockBaseURL == "" || cfg.GetBlockAccessToken == "" {
-		return nil, fmt.Errorf("missing required environment variables GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN")
+	if err := cfg.Validate(); err != nil {
+		return nil, err
 	}
 
 	return cfg, nil
+}
+
+// Validate checks configuration for invalid combinations and required fields. Call after Load populates the struct.
+func (c *Config) Validate() error {
+	if c == nil {
+		return fmt.Errorf("config is nil")
+	}
+
+	if strings.TrimSpace(c.GetBlockBaseURL) == "" || strings.TrimSpace(c.GetBlockAccessToken) == "" {
+		return fmt.Errorf("GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN are required")
+	}
+
+	if c.RateLimitWindowSeconds < 0 {
+		return fmt.Errorf("RATE_LIMIT_WINDOW_SECONDS must be >= 0")
+	}
+	if c.RateLimitPerIP < 0 || c.RateLimitPerUser < 0 {
+		return fmt.Errorf("rate limit counts must be >= 0")
+	}
+	if c.ExportRateLimitPerIP < 0 || c.ExportRateLimitPerUser < 0 || c.ExportRateLimitHeavyPerIP < 0 || c.ExportRateLimitHeavyPerUser < 0 {
+		return fmt.Errorf("export rate limit counts must be >= 0")
+	}
+	if c.RatesCacheTTLSeconds < 0 {
+		return fmt.Errorf("RATES_CACHE_TTL_SECONDS must be >= 0")
+	}
+	if c.NewsCacheTTLSeconds < 0 || c.NewsStaleTTLSeconds < 0 {
+		return fmt.Errorf("NEWS_CACHE_TTL_SECONDS and NEWS_STALE_TTL_SECONDS must be >= 0")
+	}
+	if c.SMTPPort < 0 || c.SMTPPort > 65535 {
+		return fmt.Errorf("SMTP_PORT must be between 0 and 65535")
+	}
+	if c.SentryTracesSampleRate < 0 || c.SentryTracesSampleRate > 1 {
+		return fmt.Errorf("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1")
+	}
+	if c.SentryErrorSampleRate < 0 || c.SentryErrorSampleRate > 1 {
+		return fmt.Errorf("SENTRY_SAMPLE_RATE must be between 0 and 1")
+	}
+
+	// Non-development: require explicit admin credentials (same rules as initializeDefaultAdmin).
+	if !strings.EqualFold(c.AppEnv, "development") {
+		if strings.TrimSpace(c.AdminUsername) == "" || c.AdminPassword == "" {
+			return fmt.Errorf("ADMIN_USERNAME and ADMIN_PASSWORD must be set when APP_ENV is not development (got APP_ENV=%q)", c.AppEnv)
+		}
+		if !isStrongAdminPassword(c.AdminPassword) {
+			return fmt.Errorf("ADMIN_PASSWORD must be 8-128 characters and include at least one letter and one digit when APP_ENV is not development")
+		}
+	}
+
+	return nil
+}
+
+func isStrongAdminPassword(pw string) bool {
+	if len(pw) < 8 || len(pw) > 128 {
+		return false
+	}
+	var hasLetter, hasDigit bool
+	for _, r := range pw {
+		if unicode.IsLetter(r) {
+			hasLetter = true
+		} else if unicode.IsDigit(r) {
+			hasDigit = true
+		}
+		if hasLetter && hasDigit {
+			return true
+		}
+	}
+	return false
 }
 
 func sentryTracesSampleRateForEnv(appEnv string) float64 {

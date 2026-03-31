@@ -18,6 +18,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/gin-gonic/gin"
+	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
 
@@ -392,14 +393,21 @@ func newsByPortfolioHandler(c *gin.Context) {
 		return
 	}
 
-	key := "portfolio:" + username + ":" + portfolioID
-	data, err := rdb.Get(ctx, key).Result()
+	if appRepos == nil || appRepos.Portfolio == nil {
+		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Redis unavailable")
+		return
+	}
+	data, err := appRepos.Portfolio.Get(ctx, username, portfolioID)
 	if err != nil {
-		errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
+		if err == redis.Nil {
+			errorResponse(c, http.StatusNotFound, "portfolio_not_found", "Portfolio not found")
+		} else {
+			errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to load portfolio")
+		}
 		return
 	}
 	var p Portfolio
-	if err := json.Unmarshal([]byte(data), &p); err != nil {
+	if err := json.Unmarshal(data, &p); err != nil {
 		errorResponse(c, http.StatusInternalServerError, "portfolio_decode_failed", "Failed to load portfolio")
 		return
 	}

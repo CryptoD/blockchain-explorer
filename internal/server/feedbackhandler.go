@@ -13,6 +13,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
@@ -407,12 +408,9 @@ func deletePortfolioHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{"message": "Portfolio deleted successfully"})
 }
 
-// Redis key convention for watchlists: watchlist:{username}:{id}
-// TTL: none (0) — watchlists are persistent user data like portfolios.
-const watchlistKeyPrefix = "watchlist:"
-
+// watchlistKey delegates to repos.WatchlistKey (single source of truth for Redis keys).
 func watchlistKey(username, id string) string {
-	return watchlistKeyPrefix + username + ":" + id
+	return repos.WatchlistKey(username, id)
 }
 
 const (
@@ -462,18 +460,6 @@ func validateWatchlistEntry(i int, e *WatchlistEntry) error {
 	}
 	e.Group = sanitizeText(e.Group, maxEntryGroupLen)
 	return nil
-}
-
-// getWatchlistCount returns the number of watchlists for a user (for quota enforcement).
-func getWatchlistCount(ctx context.Context, username string) (int, error) {
-	if rdb == nil {
-		return 0, errors.New("redis unavailable")
-	}
-	keys, err := rdb.Keys(ctx, watchlistKey(username, "*")).Result()
-	if err != nil {
-		return 0, err
-	}
-	return len(keys), nil
 }
 
 // listWatchlistsHandler returns all watchlists for the authenticated user.

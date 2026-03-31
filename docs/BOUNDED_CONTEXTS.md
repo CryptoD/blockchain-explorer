@@ -98,9 +98,9 @@ flowchart LR
 | Pricing | `internal/pricing` | Shared by portfolio, watchlist, alerts, dashboard. |
 | Email | `internal/email` | Used by alerts/notifications flows; do not embed HTTP handler logic here. |
 | Blockchain RPC | `internal/blockchain` | Explorer-only concerns; portfolio does not import it for valuation. |
-| Sessions / CSRF | `internal/server` + `internal/redisstore` | Candidate to extract behind interfaces later. |
+| Sessions / CSRF | `internal/repos` (`SessionRepo`) + `internal/redisstore` | Key shapes in [`internal/repos/keys.go`](../internal/repos/keys.go). |
 
-Most **handler logic** still lives in **`internal/server`**, split across several `*.go` files by area (same package). **Domain service interfaces** (`ExplorerService`, `AuthService`, `PortfolioService`, etc.—see `internal/server/service_interfaces.go`) sit in front of Redis/RPC for testability; defaults delegate to existing helpers. When extracting further, keep **one context per package** (e.g. `internal/portfolio`) and **inject** Redis, pricing, and auth checks—do not let portfolio import watchlist or vice versa.
+Most **handler logic** still lives in **`internal/server`**, split across several `*.go` files by area (same package). **Domain service interfaces** (`ExplorerService`, `AuthService`, `PortfolioService`, etc.—see `internal/server/service_interfaces.go`) sit in front of Redis/RPC for testability; defaults delegate to **`internal/repos`** for portfolio, watchlist, session, user, feedback, and admin cache operations. When extracting further, keep **one context per package** (e.g. `internal/portfolio`) and **inject** Redis, pricing, and auth checks—do not let portfolio import watchlist or vice versa.
 
 ---
 

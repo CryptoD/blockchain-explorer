@@ -4,9 +4,8 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"fmt"
-	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/redis/go-redis/v9"
 )
 
@@ -47,21 +46,20 @@ func (defaultAuthService) CreateUser(username, password, role, email string) err
 type defaultPortfolioService struct{}
 
 func (defaultPortfolioService) ListPortfolios(ctx context.Context, username string) ([]Portfolio, error) {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Portfolio == nil {
 		return nil, errors.New("redis unavailable")
 	}
-	keys, err := rdb.Keys(ctx, "portfolio:"+username+":*").Result()
+	raw, err := appRepos.Portfolio.ListJSON(ctx, username)
 	if err != nil {
+		if errors.Is(err, repos.ErrNotConfigured) {
+			return nil, errors.New("redis unavailable")
+		}
 		return nil, err
 	}
-	out := make([]Portfolio, 0, len(keys))
-	for _, key := range keys {
-		data, err := rdb.Get(ctx, key).Result()
-		if err != nil {
-			continue
-		}
+	out := make([]Portfolio, 0, len(raw))
+	for _, b := range raw {
 		var p Portfolio
-		if err := json.Unmarshal([]byte(data), &p); err == nil {
+		if err := json.Unmarshal(b, &p); err == nil {
 			out = append(out, p)
 		}
 	}
@@ -69,11 +67,10 @@ func (defaultPortfolioService) ListPortfolios(ctx context.Context, username stri
 }
 
 func (defaultPortfolioService) GetPortfolio(ctx context.Context, username, id string) (*Portfolio, error) {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Portfolio == nil {
 		return nil, errors.New("redis unavailable")
 	}
-	key := "portfolio:" + username + ":" + id
-	data, err := rdb.Get(ctx, key).Result()
+	data, err := appRepos.Portfolio.Get(ctx, username, id)
 	if err != nil {
 		if err == redis.Nil {
 			return nil, ErrNotFound
@@ -81,48 +78,43 @@ func (defaultPortfolioService) GetPortfolio(ctx context.Context, username, id st
 		return nil, err
 	}
 	var p Portfolio
-	if err := json.Unmarshal([]byte(data), &p); err != nil {
+	if err := json.Unmarshal(data, &p); err != nil {
 		return nil, err
 	}
 	return &p, nil
 }
 
 func (defaultPortfolioService) SavePortfolio(ctx context.Context, p *Portfolio) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Portfolio == nil {
 		return errors.New("redis unavailable")
 	}
-	data, err := json.Marshal(p)
-	if err != nil {
-		return err
-	}
-	return rdb.Set(ctx, "portfolio:"+p.Username+":"+p.ID, data, 0).Err()
+	return appRepos.Portfolio.Save(ctx, p.Username, p.ID, p)
 }
 
 func (defaultPortfolioService) DeletePortfolio(ctx context.Context, username, id string) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Portfolio == nil {
 		return errors.New("redis unavailable")
 	}
-	return rdb.Del(ctx, "portfolio:"+username+":"+id).Err()
+	return appRepos.Portfolio.Delete(ctx, username, id)
 }
 
 type defaultWatchlistService struct{}
 
 func (defaultWatchlistService) ListWatchlists(ctx context.Context, username string) ([]Watchlist, error) {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Watchlist == nil {
 		return nil, errors.New("redis unavailable")
 	}
-	keys, err := rdb.Keys(ctx, watchlistKey(username, "*")).Result()
+	raw, err := appRepos.Watchlist.ListJSON(ctx, username)
 	if err != nil {
+		if errors.Is(err, repos.ErrNotConfigured) {
+			return nil, errors.New("redis unavailable")
+		}
 		return nil, err
 	}
-	out := make([]Watchlist, 0, len(keys))
-	for _, key := range keys {
-		data, err := rdb.Get(ctx, key).Result()
-		if err != nil {
-			continue
-		}
+	out := make([]Watchlist, 0, len(raw))
+	for _, b := range raw {
 		var w Watchlist
-		if err := json.Unmarshal([]byte(data), &w); err == nil {
+		if err := json.Unmarshal(b, &w); err == nil {
 			out = append(out, w)
 		}
 	}
@@ -130,11 +122,10 @@ func (defaultWatchlistService) ListWatchlists(ctx context.Context, username stri
 }
 
 func (defaultWatchlistService) GetWatchlist(ctx context.Context, username, id string) (*Watchlist, error) {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Watchlist == nil {
 		return nil, errors.New("redis unavailable")
 	}
-	key := watchlistKey(username, id)
-	data, err := rdb.Get(ctx, key).Result()
+	data, err := appRepos.Watchlist.Get(ctx, username, id)
 	if err != nil {
 		if err == redis.Nil {
 			return nil, ErrNotFound
@@ -142,33 +133,35 @@ func (defaultWatchlistService) GetWatchlist(ctx context.Context, username, id st
 		return nil, err
 	}
 	var w Watchlist
-	if err := json.Unmarshal([]byte(data), &w); err != nil {
+	if err := json.Unmarshal(data, &w); err != nil {
 		return nil, err
 	}
 	return &w, nil
 }
 
 func (defaultWatchlistService) CountWatchlists(ctx context.Context, username string) (int, error) {
-	return getWatchlistCount(ctx, username)
+	if appRepos == nil || appRepos.Watchlist == nil {
+		return 0, errors.New("redis unavailable")
+	}
+	n, err := appRepos.Watchlist.Count(ctx, username)
+	if err != nil && errors.Is(err, repos.ErrNotConfigured) {
+		return 0, errors.New("redis unavailable")
+	}
+	return n, err
 }
 
 func (defaultWatchlistService) SaveWatchlist(ctx context.Context, w *Watchlist) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Watchlist == nil {
 		return errors.New("redis unavailable")
 	}
-	data, err := json.Marshal(w)
-	if err != nil {
-		return err
-	}
-	key := watchlistKey(w.Username, w.ID)
-	return rdb.Set(ctx, key, data, 0).Err()
+	return appRepos.Watchlist.Save(ctx, w.Username, w.ID, w)
 }
 
 func (defaultWatchlistService) DeleteWatchlist(ctx context.Context, username, id string) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Watchlist == nil {
 		return errors.New("redis unavailable")
 	}
-	return rdb.Del(ctx, watchlistKey(username, id)).Err()
+	return appRepos.Watchlist.Delete(ctx, username, id)
 }
 
 type defaultAlertService struct{}
@@ -181,10 +174,10 @@ func (defaultAlertService) EvaluateAll(ctx context.Context) {
 type defaultAdminService struct{}
 
 func (defaultAdminService) RedisMemoryInfo(ctx context.Context) string {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Admin == nil {
 		return ""
 	}
-	return rdb.Info(ctx, "memory").Val()
+	return appRepos.Admin.MemoryInfo(ctx)
 }
 
 func (defaultAdminService) ActiveRateLimitEntries(ctx context.Context) int {
@@ -193,41 +186,38 @@ func (defaultAdminService) ActiveRateLimitEntries(ctx context.Context) int {
 }
 
 func (defaultAdminService) ListCacheKeys(ctx context.Context) ([]string, error) {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Admin == nil {
 		return nil, errors.New("redis unavailable")
 	}
-	return rdb.Keys(ctx, "*").Result()
+	keys, err := appRepos.Admin.ListAllKeys(ctx)
+	if err != nil && errors.Is(err, repos.ErrNotConfigured) {
+		return nil, errors.New("redis unavailable")
+	}
+	return keys, err
 }
 
 func (defaultAdminService) DeleteCacheKeys(ctx context.Context, keys []string) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Admin == nil {
 		return errors.New("redis unavailable")
 	}
-	if len(keys) == 0 {
-		return nil
+	err := appRepos.Admin.DeleteKeys(ctx, keys)
+	if err != nil && errors.Is(err, repos.ErrNotConfigured) {
+		return errors.New("redis unavailable")
 	}
-	return rdb.Del(ctx, keys...).Err()
+	return err
 }
 
 type defaultFeedbackService struct{}
 
 func (defaultFeedbackService) Store(ctx context.Context, name, emailAddr, message, clientIP string) error {
-	if rdb == nil {
+	if appRepos == nil || appRepos.Feedback == nil {
 		return errors.New("redis unavailable")
 	}
-	feedbackKey := fmt.Sprintf("feedback:%d", time.Now().Unix())
-	feedbackData := map[string]interface{}{
-		"name":      name,
-		"email":     emailAddr,
-		"message":   message,
-		"timestamp": time.Now().Format(time.RFC3339),
-		"ip":        clientIP,
+	err := appRepos.Feedback.Store(ctx, name, emailAddr, message, clientIP)
+	if err != nil && errors.Is(err, repos.ErrNotConfigured) {
+		return errors.New("redis unavailable")
 	}
-	jsonData, err := json.Marshal(feedbackData)
-	if err != nil {
-		return err
-	}
-	return rdb.Set(ctx, feedbackKey, jsonData, 30*24*time.Hour).Err()
+	return err
 }
 
 // ResetDefaultServices restores production default implementations for all domain services.

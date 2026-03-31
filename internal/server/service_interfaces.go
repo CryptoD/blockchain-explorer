@@ -9,6 +9,7 @@ import (
 
 // Domain service interfaces (ROADMAP task 4): handlers depend on these for testability.
 // Defaults are wired in init via ResetDefaultServices; production assigns *news.Service and *email.Service in Run.
+// The aggregated graph lives in Dependencies (deps.go), built via NewDependencies and applied in Run (task 8).
 
 // ExplorerService covers blockchain search and network status used by explorer HTTP handlers.
 type ExplorerService interface {
