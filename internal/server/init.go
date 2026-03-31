@@ -15,6 +15,7 @@ import (
 	"time"
 	"unicode"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apperrors"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/redisstore"
@@ -75,7 +76,7 @@ func T(lang, key string) string {
 }
 
 // global Redis client and context
-var ErrNotFound = errors.New("not found")
+var ErrNotFound = apperrors.ErrNotFound
 var ctx = context.Background()
 
 var rdb redisstore.Client = redis.NewClient(&redis.Options{

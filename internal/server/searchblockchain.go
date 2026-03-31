@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
+	"github.com/CryptoD/blockchain-explorer/internal/export"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
@@ -85,11 +86,7 @@ func searchHandler(c *gin.Context) {
 	resultType, result, err := explorerSvc.SearchBlockchain(c.Request.Context(), query)
 	if err != nil {
 		logging.WithComponent(logging.ComponentSearch).WithError(err).WithFields(qf).WithField(logging.FieldEvent, "search_failed").Error("search failed")
-		if err == ErrNotFound {
-			errorResponse(c, http.StatusNotFound, "not_found", "Not found")
-		} else {
-			errorResponse(c, http.StatusInternalServerError, "internal_error", err.Error())
-		}
+		errorResponseFrom(c, err)
 		return
 	}
 	// Marshal the result to JSON for ETag calculation
@@ -133,18 +130,14 @@ func exportSearchHandler(c *gin.Context) {
 	}
 	resultType, result, err := explorerSvc.SearchBlockchain(c.Request.Context(), query)
 	if err != nil {
-		if err == ErrNotFound {
-			errorResponse(c, http.StatusNotFound, "not_found", "Not found")
-		} else {
-			errorResponse(c, http.StatusInternalServerError, "internal_error", err.Error())
-		}
+		errorResponseFrom(c, err)
 		return
 	}
 	c.Header("Content-Type", "application/json; charset=utf-8")
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
 			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
-			"export_version":   exportVersion,
+			"export_version":   export.Version,
 			"endpoint":         "search",
 			"query":            query,
 		},
@@ -545,7 +538,7 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"export_meta": gin.H{
 			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
-			"export_version":   exportVersion,
+			"export_version":   export.Version,
 			"endpoint":         "search/advanced",
 			"query":            query,
 			"filters_applied": gin.H{

@@ -20,7 +20,7 @@ type Dependencies struct {
 	Repos  *repos.Stores
 	HTTP   *resty.Client
 
-	Blockchain blockchain.RPCClient
+	Blockchain blockchain.Blockchain
 	Pricing    pricing.Client
 	Assets     pricing.AssetPricer
 
@@ -47,7 +47,7 @@ func NewDependencies(
 	redisClient redisstore.Client,
 	stores *repos.Stores,
 	httpClient *resty.Client,
-	bc blockchain.RPCClient,
+	bc blockchain.Blockchain,
 	pc pricing.Client,
 	assets pricing.AssetPricer,
 	emailTmpl *email.Templates,

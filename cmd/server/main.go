@@ -1,4 +1,5 @@
 // Entry point for the HTTP API and web UI. Application logic lives in package server.
+// Do not import domain packages (e.g. internal/news) here; compose them only in internal/server.
 package main
 
 import (

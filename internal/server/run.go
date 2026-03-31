@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"os"
 	"strings"
 	"time"
 
@@ -22,6 +23,20 @@ import (
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 )
+
+// listenAddr returns HTTP_LISTEN_ADDR if set, else ":APP_PORT", else ":8080".
+func listenAddr() string {
+	if a := strings.TrimSpace(os.Getenv("HTTP_LISTEN_ADDR")); a != "" {
+		return a
+	}
+	if p := strings.TrimSpace(os.Getenv("APP_PORT")); p != "" {
+		if strings.HasPrefix(p, ":") {
+			return p
+		}
+		return ":" + p
+	}
+	return ":8080"
+}
 
 // Run loads configuration, wires dependencies, registers routes, and blocks serving HTTP until shutdown.
 func Run() error {
@@ -93,33 +108,24 @@ func Run() error {
 	// Initialize pluggable service clients
 	blockchainClient = blockchain.NewGetBlockRPCClient(baseURL, apiKey, httpClient)
 	cgClient := pricing.NewCoinGeckoClient(httpClient)
-	pricingClient = cgClient
+	ratesTTL := time.Duration(cfg.RatesCacheTTLSeconds) * time.Second
+	if ratesTTL <= 0 {
+		ratesTTL = 60 * time.Second
+	}
+	pricingClient = pricing.NewCachingClient(cgClient, ratesTTL)
+	cryptoFetcher := pricing.NewCachingCryptoFetcher(cgClient, ratesTTL)
 	assetPricer = &pricing.CompositePricer{
-		Crypto:    cgClient,
+		Crypto:    cryptoFetcher,
 		Commodity: &pricing.StaticCommoditySource{},
 		Bond:      &pricing.StaticBondSource{PricePer100: pricing.DefaultBondPrices()},
 	}
 
-	// Initialize news service (provider + Redis cache).
-	// Symbol endpoint can operate without auth; portfolio endpoint requires auth.
+	// Initialize news service (provider + Redis cache). Wiring is encapsulated in internal/news.
 	if cfg.NewsProvider == "" {
 		cfg.NewsProvider = "thenewsapi"
 	}
-	if cfg.NewsProvider == "thenewsapi" && cfg.TheNewsAPIToken != "" {
-		prov := &news.TheNewsAPIProvider{
-			BaseURL:           cfg.TheNewsAPIBaseURL,
-			Token:             cfg.TheNewsAPIToken,
-			Client:            httpClient,
-			DefaultLanguage:   cfg.TheNewsAPIDefaultLanguage,
-			DefaultLocale:     cfg.TheNewsAPIDefaultLocale,
-			DefaultCategories: cfg.TheNewsAPIDefaultCategories,
-		}
-		newsService = &news.Service{
-			Provider: prov,
-			Cache:    &news.RedisCache{RDB: rdb},
-			FreshTTL: time.Duration(cfg.NewsCacheTTLSeconds) * time.Second,
-			StaleTTL: time.Duration(cfg.NewsStaleTTLSeconds) * time.Second,
-		}
+	if s := news.NewServiceFromConfig(cfg, rdb, httpClient); s != nil {
+		newsService = s
 	} else {
 		logging.WithComponent(logging.ComponentNews).WithField(logging.FieldProvider, cfg.NewsProvider).Warn("news provider not configured; news endpoints will be unavailable")
 	}
@@ -229,12 +235,13 @@ func Run() error {
 		defer sentry.Flush(2 * time.Second)
 	}
 
+	addr := listenAddr()
 	logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
 		logging.FieldEvent: "listen",
-		"addr":             ":8080",
+		"addr":             addr,
 	}).Info("HTTP server listening")
 
-	if err := r.Run(":8080"); err != nil {
+	if err := r.Run(addr); err != nil {
 		logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
 			logging.FieldEvent: "server_exit",
 			"error":            err.Error(),

@@ -84,3 +84,5 @@ func (s *SMTPSender) Send(ctx context.Context, from Address, msg Message) error 
 	}
 	return w.Close()
 }
+
+var _ EmailSender = (*SMTPSender)(nil)

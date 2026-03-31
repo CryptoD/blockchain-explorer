@@ -77,6 +77,23 @@ var (
 			Help: "Cumulative number of price alerts triggered.",
 		},
 	)
+
+	blockchainRPCCalls = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "explorer_blockchain_rpc_calls_total",
+			Help: "JSON-RPC calls to the blockchain provider by method and outcome.",
+		},
+		[]string{"method", "status"},
+	)
+
+	blockchainRPCDuration = promauto.NewHistogramVec(
+		prometheus.HistogramOpts{
+			Name:    "explorer_blockchain_rpc_duration_seconds",
+			Help:    "Duration of blockchain JSON-RPC calls by method.",
+			Buckets: []float64{.005, .01, .025, .05, .1, .25, .5, 1, 2.5, 5, 10, 30},
+		},
+		[]string{"method"},
+	)
 )
 
 // Handler returns the Prometheus scrape handler (default registry).
@@ -217,6 +234,19 @@ func RecordPrefetchTick(blocksErr, txsErr error) {
 // RecordMetricsJob records one metrics chart collection run.
 func RecordMetricsJob() {
 	backgroundJobRuns.WithLabelValues("metrics_charts").Inc()
+}
+
+// RecordBlockchainRPC records one JSON-RPC call to the configured blockchain client.
+func RecordBlockchainRPC(method string, elapsed time.Duration, err error) {
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	if len(method) > 64 {
+		method = method[:64]
+	}
+	blockchainRPCCalls.WithLabelValues(method, status).Inc()
+	blockchainRPCDuration.WithLabelValues(method).Observe(elapsed.Seconds())
 }
 
 // RecordAlertEval records one alert evaluation cycle.

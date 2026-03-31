@@ -320,6 +320,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 ## Documentation
 
 - [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
+- [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 

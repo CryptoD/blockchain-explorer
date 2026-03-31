@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apperrors"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/correlation"
@@ -39,32 +40,7 @@ func getUSDPerFiat(ctx context.Context, fiatCode string) (float64, bool) {
 	if err != nil {
 		return 0, false
 	}
-	btc, ok := rates["bitcoin"].(map[string]interface{})
-	if !ok {
-		return 0, false
-	}
-	var btcUSD, btcFiat float64
-	for k, val := range btc {
-		var v float64
-		switch x := val.(type) {
-		case float64:
-			v = x
-		case int:
-			v = float64(x)
-		default:
-			continue
-		}
-		if k == "usd" {
-			btcUSD = v
-		}
-		if k == fiatCode {
-			btcFiat = v
-		}
-	}
-	if btcUSD <= 0 || btcFiat <= 0 {
-		return 0, false
-	}
-	return btcUSD / btcFiat, true
+	return pricing.USDPerUnitOfFiatFromBTCRates(rates, fiatCode)
 }
 
 // getAssetPriceInFiat returns the spot price of an asset (type + symbol) in the given fiat.
@@ -214,8 +190,8 @@ var (
 	httpClient = resty.New().
 			SetTimeout(10 * time.Second).
 			SetRetryCount(3)
-	// blockchainClient is the pluggable blockchain data provider.
-	blockchainClient blockchain.RPCClient
+	// blockchainClient is the pluggable blockchain data provider (nil uses baseURL/apiKey/httpClient).
+	blockchainClient blockchain.Blockchain
 	// pricingClient is the pluggable pricing/FX provider.
 	pricingClient pricing.Client
 	// assetPricer unifies crypto, commodity, and bond pricing for portfolio valuation.
@@ -239,8 +215,8 @@ func SetHTTPClient(c *resty.Client) {
 	}
 }
 
-// SetBlockchainClient allows tests to inject a mock blockchain RPC client.
-func SetBlockchainClient(c blockchain.RPCClient) {
+// SetBlockchainClient allows tests to inject a mock blockchain JSON-RPC client.
+func SetBlockchainClient(c blockchain.Blockchain) {
 	blockchainClient = c
 }
 
@@ -448,6 +424,23 @@ func errorResponse(c *gin.Context, status int, code, message string) {
 	}}))
 }
 
+// errorResponseFrom maps domain errors to stable API codes without leaking raw errors to clients.
+func errorResponseFrom(c *gin.Context, err error) {
+	if err == nil {
+		return
+	}
+	var apiErr *apperrors.Error
+	if errors.As(err, &apiErr) {
+		errorResponse(c, apiErr.Status, apiErr.Code, apiErr.Message)
+		return
+	}
+	if errors.Is(err, apperrors.ErrNotFound) {
+		errorResponse(c, http.StatusNotFound, apperrors.CodeNotFound, "Not found")
+		return
+	}
+	errorResponse(c, http.StatusInternalServerError, apperrors.CodeInternal, "An internal error occurred")
+}
+
 // abortErrorResponse aborts the request with a structured error response.
 func abortErrorResponse(c *gin.Context, status int, code, message string) {
 	c.AbortWithStatusJSON(status, mergeCorrelationID(c, gin.H{"error": APIError{
@@ -459,7 +452,11 @@ func abortErrorResponse(c *gin.Context, status int, code, message string) {
 // handleError captures an error with Sentry and returns a standardized payload.
 func handleError(c *gin.Context, err error, status int) {
 	captureSentryException(c, err, status, map[string]string{"source": "handleError"})
-	errorResponse(c, status, defaultErrorCode(status), err.Error())
+	msg := err.Error()
+	if status >= http.StatusInternalServerError {
+		msg = "An internal error occurred"
+	}
+	errorResponse(c, status, defaultErrorCode(status), msg)
 }
 
 func isValidAddress(address string) bool {
@@ -667,46 +664,32 @@ func getBlockDetails(blockHeight string) (map[string]interface{}, error) {
 	return result, nil
 }
 
-// collectMetrics collects historical metrics for charts
-func blockchairRequest(method string, params []interface{}) (*resty.Response, error) {
-	if baseURL == "" || apiKey == "" {
-		return nil, errors.New("missing required environment variables")
+const defaultBlockchainRPCTimeout = 30 * time.Second
+
+func blockchainForCall() blockchain.Blockchain {
+	if blockchainClient != nil {
+		return blockchainClient
 	}
-
-	// Generate a unique ID for this request
-	requestID := fmt.Sprintf("%d", time.Now().UnixNano())
-
-	payload := map[string]interface{}{
-		"jsonrpc": "2.0",
-		"id":      requestID,
-		"method":  method,
-		"params":  params,
-	}
-
-	response, err := httpClient.R().
-		SetHeader("Content-Type", "application/json").
-		SetHeader("x-api-key", apiKey).
-		SetBody(payload).
-		Post(baseURL)
-
-	if err != nil {
-		return nil, fmt.Errorf("API request failed: %w", err)
-	}
-
-	if response.StatusCode() >= 400 {
-		return nil, fmt.Errorf("API error: %s", response.Status())
-	}
-
-	return response, nil
+	return blockchain.NewGetBlockRPCClient(baseURL, apiKey, httpClient)
 }
 
-// callBlockchain prefers blockchainClient (GetBlock-compatible JSON-RPC). When nil,
-// falls back to blockchairRequest using baseURL/apiKey/httpClient (legacy test path).
-func callBlockchain(ctx context.Context, method string, params []interface{}) (*resty.Response, error) {
-	if blockchainClient != nil {
-		return blockchainClient.Call(ctx, method, params)
+func ensureRPCDeadline(ctx context.Context, d time.Duration) (context.Context, context.CancelFunc) {
+	if _, ok := ctx.Deadline(); ok {
+		return ctx, func() {}
 	}
-	return blockchairRequest(method, params)
+	return context.WithTimeout(ctx, d)
+}
+
+// callBlockchain performs a JSON-RPC call through the configured Blockchain client,
+// applies a default deadline when ctx has none, and records Prometheus metrics.
+func callBlockchain(ctx context.Context, method string, params []interface{}) (*resty.Response, error) {
+	bc := blockchainForCall()
+	ctx, cancel := ensureRPCDeadline(ctx, defaultBlockchainRPCTimeout)
+	defer cancel()
+	start := time.Now()
+	resp, err := bc.Call(ctx, method, params)
+	metrics.RecordBlockchainRPC(method, time.Since(start), err)
+	return resp, err
 }
 
 // Redis key for historical BTC price in a fiat currency (e.g. btc_price_history:usd).

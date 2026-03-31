@@ -8,13 +8,16 @@ import (
 	"github.com/go-resty/resty/v2"
 )
 
-// RPCClient defines an abstract interface for performing JSON-RPC calls
-// against a blockchain provider.
-type RPCClient interface {
+// Blockchain is the JSON-RPC surface for a GetBlock-compatible Bitcoin node.
+// All explorer RPC traffic should go through this interface (see server callBlockchain).
+type Blockchain interface {
 	Call(ctx context.Context, method string, params []interface{}) (*resty.Response, error)
 }
 
-// GetBlockRPCClient is a concrete implementation of RPCClient that talks to
+// RPCClient is an alias for Blockchain.
+type RPCClient = Blockchain
+
+// GetBlockRPCClient is a concrete implementation of Blockchain that talks to
 // a GetBlock-compatible JSON-RPC endpoint.
 type GetBlockRPCClient struct {
 	BaseURL    string
@@ -65,3 +68,5 @@ func (c *GetBlockRPCClient) Call(ctx context.Context, method string, params []in
 	}
 	return resp, nil
 }
+
+var _ Blockchain = (*GetBlockRPCClient)(nil)

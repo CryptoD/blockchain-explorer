@@ -13,14 +13,6 @@ const (
 	AssetClassStock     = "stock"
 )
 
-// AssetPricer returns the spot price of an asset in the given fiat currency.
-// symbol is asset-specific (e.g. "bitcoin", "XAU", "US10Y"). Returns (0, false) when unavailable.
-// usdPerFiat: 1 unit of fiat = usdPerFiat USD (e.g. 1 EUR = 1.08 USD). Use 1.0 when fiat is USD.
-// Used to convert commodity/bond USD prices into user fiat when fiat != USD.
-type AssetPricer interface {
-	GetAssetPriceInFiat(ctx context.Context, assetType, symbol, fiat string, usdPerFiat float64) (float64, bool)
-}
-
 // CryptoIDBySymbol maps common symbols to CoinGecko API ids.
 var CryptoIDBySymbol = map[string]string{
 	"btc": "bitcoin", "bitcoin": "bitcoin",
@@ -56,21 +48,6 @@ type CompositePricer struct {
 	Crypto    CryptoPriceFetcher
 	Commodity CommodityPriceFetcher
 	Bond      BondPriceFetcher
-}
-
-// CryptoPriceFetcher returns the price of a crypto asset (by CoinGecko id) in fiat.
-type CryptoPriceFetcher interface {
-	GetCryptoPriceInFiat(ctx context.Context, coinID, fiat string) (float64, bool)
-}
-
-// CommodityPriceFetcher returns the price of a commodity (e.g. XAU, XAG) in fiat.
-type CommodityPriceFetcher interface {
-	GetCommodityPriceInFiat(ctx context.Context, symbol, fiat string) (float64, bool)
-}
-
-// BondPriceFetcher returns the price of a bond (e.g. US10Y) in fiat.
-type BondPriceFetcher interface {
-	GetBondPriceInFiat(ctx context.Context, symbol, fiat string) (float64, bool)
 }
 
 // GetAssetPriceInFiat implements AssetPricer.

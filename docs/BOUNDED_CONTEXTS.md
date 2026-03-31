@@ -4,6 +4,8 @@ This document defines the **domains** (bounded contexts) of the Bitcoin Explorer
 
 It satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **1** and should be updated when a major feature moves into its own package or when dependencies change.
 
+For **which `internal/*` packages are treated as stable contracts** (vs. application shell), see [INTERNAL_APIS.md](INTERNAL_APIS.md).
+
 ---
 
 ## Context map (summary)
