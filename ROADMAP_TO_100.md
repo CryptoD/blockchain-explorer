@@ -45,7 +45,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 ## Phase 13 — Security
 
 - [x] **29. Threat model document** — STRIDE-lite: who attacks, what assets, what mitigations exist. **Done:** [`docs/THREAT_MODEL.md`](docs/THREAT_MODEL.md) (assets, threat actors, STRIDE-lite matrix with pointers to CSRF, rate limits, sessions, roles, metrics token, config validation); README [Documentation](README.md#documentation).
-- [ ] **30. Security headers audit** — Verify CSP, HSTS (behind TLS), X-Frame-Options, etc. against latest OWASP recommendations.
+- [x] **30. Security headers audit** — Verify CSP, HSTS (behind TLS), X-Frame-Options, etc. against latest OWASP recommendations. **Done:** [`internal/server/security_headers.go`](internal/server/security_headers.go) + [`internal/server/security_headers_test.go`](internal/server/security_headers_test.go); HSTS via `HSTS_MAX_AGE_SECONDS` / `HSTS_INCLUDE_SUBDOMAINS` ([`internal/config/config.go`](internal/config/config.go)); checklist [docs/SECURITY_HEADERS.md](docs/SECURITY_HEADERS.md).
 - [ ] **31. CSRF token rotation policy** — Document and test session expiry + CSRF invalidation on password change.
 - [ ] **32. Rate limit bypass review** — Ensure metrics and health endpoints cannot be abused for DoS; document exemptions.
 - [ ] **33. Input size limits everywhere** — Max body size, max JSON depth, max CSV rows for export.

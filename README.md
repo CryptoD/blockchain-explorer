@@ -382,6 +382,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
 - [Threat model (STRIDE-lite)](docs/THREAT_MODEL.md) - assets, actors, mitigations
+- [Security HTTP headers](docs/SECURITY_HEADERS.md) - CSP, HSTS, framing, env vars (`HSTS_*`)
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 

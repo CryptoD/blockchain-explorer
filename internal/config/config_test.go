@@ -70,3 +70,19 @@ func TestValidate_RedisPort(t *testing.T) {
 		t.Fatalf("expected REDIS_PORT error, got %v", err)
 	}
 }
+
+func TestValidate_HSTSMaxAge(t *testing.T) {
+	c := minimalValidBase()
+	c.HSTSMaxAgeSeconds = -1
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "HSTS_MAX_AGE_SECONDS") {
+		t.Fatalf("expected HSTS_MAX_AGE_SECONDS error, got %v", err)
+	}
+	c.HSTSMaxAgeSeconds = 63072001
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "HSTS_MAX_AGE_SECONDS") {
+		t.Fatalf("expected HSTS_MAX_AGE_SECONDS error, got %v", err)
+	}
+	c.HSTSMaxAgeSeconds = 31536000
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}

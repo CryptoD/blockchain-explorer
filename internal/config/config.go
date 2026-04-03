@@ -51,6 +51,9 @@ type Config struct {
 
 	// Security / cookies
 	SecureCookies bool
+	// HSTS: if HSTSMaxAgeSeconds > 0, handlers may set Strict-Transport-Security for HTTPS requests only.
+	HSTSMaxAgeSeconds     int
+	HSTSIncludeSubdomains bool
 
 	// Rate limiting
 	RateLimitWindowSeconds int
@@ -115,6 +118,8 @@ func Load() (*Config, error) {
 		NewsCacheTTLSeconds:         GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
 		NewsStaleTTLSeconds:         GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
 		SecureCookies:               UseSecureCookies(),
+		HSTSMaxAgeSeconds:           GetEnvIntWithDefault("HSTS_MAX_AGE_SECONDS", 0),
+		HSTSIncludeSubdomains:       strings.EqualFold(strings.TrimSpace(os.Getenv("HSTS_INCLUDE_SUBDOMAINS")), "true"),
 		RateLimitWindowSeconds:      GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
 		RateLimitPerIP:              GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
 		RateLimitPerUser:            GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
@@ -151,6 +156,10 @@ func (c *Config) Validate() error {
 
 	if c.RedisPort < 1 || c.RedisPort > 65535 {
 		return fmt.Errorf("REDIS_PORT must be between 1 and 65535")
+	}
+
+	if c.HSTSMaxAgeSeconds < 0 || c.HSTSMaxAgeSeconds > 63072000 {
+		return fmt.Errorf("HSTS_MAX_AGE_SECONDS must be between 0 and 63072000")
 	}
 
 	if c.RateLimitWindowSeconds < 0 {
