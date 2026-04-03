@@ -40,13 +40,14 @@ func isHTTPSRequest(c *gin.Context) bool {
 	return strings.EqualFold(strings.TrimSpace(c.GetHeader("X-Forwarded-Proto")), "https")
 }
 
-// buildContentSecurityPolicy matches current static pages: inline scripts, /script.js, cdn.jsdelivr.net (Chart.js, qrcode).
-// 'unsafe-inline' for script/style is a known gap; roadmap task 39 tracks tightening (nonces/hashes).
+// buildContentSecurityPolicy matches static pages under /static/js and CDNs (Chart.js, qrcode).
+// No script 'unsafe-inline': page logic lives in external files (roadmap task 39). Styles may still use
+// 'unsafe-inline' where Tailwind or dynamic HTML requires it.
 func buildContentSecurityPolicy() string {
 	const (
 		// semicolons separate directives; keep single line for one header value
 		policy = "default-src 'self'; " +
-			"script-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net; " +
+			"script-src 'self' https://cdn.jsdelivr.net; " +
 			"style-src 'self' 'unsafe-inline'; " +
 			"img-src 'self' data: https:; " +
 			"font-src 'self'; " +

@@ -10,7 +10,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **30**. I
 
 | Header | Value (summary) | OWASP / practice notes |
 |--------|------------------|-------------------------|
-| **Content-Security-Policy (CSP)** | `default-src 'self'`; `script-src` allows `'self'`, `'unsafe-inline'`, `https://cdn.jsdelivr.net`; `style-src` `'self'` + `'unsafe-inline'`; `img-src` `'self' data: https:`; `connect-src 'self'`; `frame-ancestors 'none'`; `base-uri 'self'`; `form-action 'self'`; `object-src 'none'` | Reduces XSS impact and clickjacking (`frame-ancestors`). **`unsafe-inline` for script/style** weakens XSS defenses; roadmap task **39** may add nonces or hashes. |
+| **Content-Security-Policy (CSP)** | `default-src 'self'`; `script-src` `'self'` + `https://cdn.jsdelivr.net` (no script **`unsafe-inline`**; page JS is under `/static/js/*.js`); `style-src` `'self'` + `'unsafe-inline'`; `img-src` `'self' data: https:`; `connect-src 'self'`; `frame-ancestors 'none'`; `base-uri 'self'`; `form-action 'self'`; `object-src 'none'` | Reduces XSS impact and clickjacking (`frame-ancestors`). Style **`unsafe-inline`** may remain for Tailwind/dynamic markup; see roadmap task **39**. |
 | **X-Content-Type-Options** | `nosniff` | Prevents MIME-type confusion ([OWASP Cheat Sheet: HTTP Headers](https://cheatsheetseries.owasp.org/cheatsheets/HTTP_Headers_Cheat_Sheet.html)). |
 | **X-Frame-Options** | `DENY` | Legacy complement to `frame-ancestors`; blocks embedding in frames. |
 | **Referrer-Policy** | `strict-origin-when-cross-origin` | Limits referrer leakage on cross-origin navigations while keeping same-origin and HTTPS→HTTPS usefulness. |

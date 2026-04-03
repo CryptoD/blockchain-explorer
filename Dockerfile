@@ -19,6 +19,10 @@ RUN apk --no-cache add ca-certificates
 WORKDIR /root/
 
 COPY --from=builder /app/main .
+COPY --from=builder /app/*.html .
+COPY --from=builder /app/static ./static
+COPY --from=builder /app/dist ./dist
+COPY --from=builder /app/images ./images
 
 EXPOSE 3000
 

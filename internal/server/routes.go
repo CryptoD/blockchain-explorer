@@ -13,6 +13,7 @@ import (
 func registerStaticRoutes(r *gin.Engine) {
 	r.Static("/images", "./images")
 	r.Static("/dist", "./dist")
+	r.Static("/static", "./static")
 	r.StaticFile("/bitcoin.html", "bitcoin.html")
 	r.StaticFile("/", "index.html")
 	r.StaticFile("/admin", "admin.html")

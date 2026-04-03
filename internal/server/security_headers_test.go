@@ -57,11 +57,20 @@ func TestSecurityHeadersMiddleware_HSTS_https(t *testing.T) {
 	}
 }
 
-func TestBuildContentSecurityPolicy_IncludesInlineAndCDN(t *testing.T) {
+func TestBuildContentSecurityPolicy_ScriptsExternalAndCDN(t *testing.T) {
 	csp := buildContentSecurityPolicy()
-	for _, needle := range []string{"default-src 'self'", "'unsafe-inline'", "cdn.jsdelivr.net", "frame-ancestors 'none'"} {
+	for _, needle := range []string{
+		"default-src 'self'",
+		"script-src 'self' https://cdn.jsdelivr.net",
+		"style-src 'self' 'unsafe-inline'",
+		"cdn.jsdelivr.net",
+		"frame-ancestors 'none'",
+	} {
 		if !strings.Contains(csp, needle) {
 			t.Fatalf("CSP missing %q: %s", needle, csp)
 		}
+	}
+	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
+		t.Fatalf("script-src should not allow inline scripts: %s", csp)
 	}
 }

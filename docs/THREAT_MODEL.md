@@ -67,7 +67,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 
 ## 4. Residual risks & follow-ons
 
-- **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap task **30**).
+- **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap tasks **30**, **39**: external scripts, no script `unsafe-inline`).
 - **Session fixation on login** — mitigated by invalidating the prior session before elevation ([`loginHandler`](../internal/server/updatepricealerthandler.go), task **38**); password change **CSRF rotation** in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
 - **Input limits** on large bodies/exports — roadmap task **33** ([`INPUT_LIMITS.md`](INPUT_LIMITS.md)).
 - **SQL / Redis key patterns** — roadmap task **34** ([`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md)).
