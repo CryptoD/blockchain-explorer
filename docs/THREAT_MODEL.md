@@ -32,7 +32,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **29**. I
 | **Authenticated user** | Access or modify **other** users’ data; abuse exports; escalate to admin if misconfiguration allows. | Valid session; constrained by authz and Redis key layout. |
 | **Admin (or stolen admin session)** | Full use of admin routes; clear caches; observe operational data. | Strong if `ADMIN_*` weak or session hijacked. |
 | **Operator / misconfiguration** | Accidentally expose Redis, disable TLS, ship dev defaults. | Environment and deployment mistakes. |
-| **Dependency / supply chain** | Backdoored module or base image. | Mitigated by CI scans and pinning; residual risk remains. |
+| **Dependency / supply chain** | Backdoored module or base image. | Mitigated by **Trivy** + **gosec** in CI, pinned deps, and **[Dependabot](https://docs.github.com/en/code-security/dependabot)** with a documented review cadence ([`docs/DEPENDENCY_UPDATES.md`](DEPENDENCY_UPDATES.md)); residual risk remains. |
 
 We do **not** model nation-state APTs in detail; many controls below still help against opportunistic and script-kiddie threats.
 

@@ -29,6 +29,7 @@ A comprehensive web-based application for exploring the Bitcoin blockchain with 
   - [Mutation testing (optional)](#mutation-testing-optional)
   - [Chaos testing (optional)](#chaos-testing-optional)
   - [Security scanning (CI)](#security-scanning-ci)
+  - [Dependency updates (policy)](#dependency-updates-policy)
 - [Documentation](#documentation)
 - [Contributing](#contributing)
 - [License](#license)
@@ -345,6 +346,10 @@ Interpret **LIVED** and **NOT COVERED** mutants as hints to add or tighten tests
 
 For **staging** or local resilience drills, [Toxiproxy](https://github.com/Shopify/toxiproxy) can sit in front of Redis while you add latency, timeouts, or resets via its HTTP API. The repo includes [`scripts/chaos/docker-compose.yml`](scripts/chaos/docker-compose.yml) (Redis + Toxiproxy; proxied Redis on host port **6380**, API on **8474**). Point the app at the proxy with **`REDIS_HOST`** and **`REDIS_PORT`** (defaults remain `localhost` / `6379`). Full instructions: [`docs/CHAOS_TESTING.md`](docs/CHAOS_TESTING.md).
 
+### Dependency updates (policy)
+
+**[GitHub Dependabot](https://docs.github.com/en/code-security/dependabot)** opens **monthly**, **grouped** pull requests for Go modules, npm, and GitHub Actions (see [`.github/dependabot.yml`](.github/dependabot.yml)). Review and merge those PRs when **CI is fully green**, including **gosec** and **Trivy** (filesystem + Docker image)—see [Dependency update policy](docs/DEPENDENCY_UPDATES.md).
+
 ### Security scanning (CI)
 
 CI includes a dedicated **[Gitleaks](https://github.com/gitleaks/gitleaks)** workflow ([`.github/workflows/gitleaks.yml`](.github/workflows/gitleaks.yml)) on every push and pull request to `main` / `master` (full git history). It uses the repo [`.gitleaks.toml`](.gitleaks.toml) (default rules plus a small allowlist for a legacy placeholder string). Any finding fails the job.
@@ -387,6 +392,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
 - [Threat model (STRIDE-lite)](docs/THREAT_MODEL.md) - assets, actors, mitigations
+- [Dependency update policy](docs/DEPENDENCY_UPDATES.md) - Dependabot schedule, monthly review, Trivy-aligned merges
 - [Security HTTP headers](docs/SECURITY_HEADERS.md) - CSP, HSTS, framing, env vars (`HSTS_*`)
 - [CSRF and sessions](docs/CSRF_AND_SESSIONS.md) - session TTL, CSRF rotation on password change, tests
 - [Rate limits and probe exemptions](docs/RATE_LIMITS.md) - global limits, `/healthz`/`/readyz`, `/metrics` + `METRICS_RATE_LIMIT_PER_IP`
@@ -399,7 +405,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 We welcome contributions to improve the Bitcoin Explorer. Please follow standard Go and web development practices.
 
-Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **Gitleaks**, **gosec**, and **Trivy** (filesystem + Docker image) must pass; **frontend** CSS build must succeed; **Docker** image must build and scan clean. Pushes to the default branch also run the [race detector workflow](#race-detector-ci). The [E2E workflow](#e2e-tests-playwright) runs Playwright against the built server. Run the commands in [Code style (Go)](#code-style-go), [Security scanning (CI)](#security-scanning-ci), and `go test ./...` locally before opening a PR.
+Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **Gitleaks**, **gosec**, and **Trivy** (filesystem + Docker image) must pass; **frontend** CSS build must succeed; **Docker** image must build and scan clean. Pushes to the default branch also run the [race detector workflow](#race-detector-ci). The [E2E workflow](#e2e-tests-playwright) runs Playwright against the built server. **Dependabot** dependency PRs follow [Dependency updates (policy)](#dependency-updates-policy). Run the commands in [Code style (Go)](#code-style-go), [Security scanning (CI)](#security-scanning-ci), and `go test ./...` locally before opening a PR.
 
 ## License
 
