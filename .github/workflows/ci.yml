@@ -10,15 +10,15 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -60,15 +60,15 @@ jobs:
     permissions:
       contents: read
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -104,15 +104,15 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Go
-      uses: actions/setup-go@v4
+      uses: actions/setup-go@v6
       with:
         go-version: '1.24'
 
     - name: Cache Go modules
-      uses: actions/cache@v3
+      uses: actions/cache@v5
       with:
         path: ~/go/pkg/mod
         key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
@@ -144,7 +144,7 @@ jobs:
       run: go tool cover -html=coverage.out -o coverage.html
 
     - name: Upload coverage artifacts
-      uses: actions/upload-artifact@v4
+      uses: actions/upload-artifact@v7
       with:
         name: go-coverage
         path: |
@@ -154,7 +154,7 @@ jobs:
 
     - name: Upload coverage to Codecov
       if: ${{ secrets.CODECOV_TOKEN != '' }}
-      uses: codecov/codecov-action@v5
+      uses: codecov/codecov-action@v6
       with:
         token: ${{ secrets.CODECOV_TOKEN }}
         files: coverage.out
@@ -168,10 +168,10 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Set up Node.js
-      uses: actions/setup-node@v4
+      uses: actions/setup-node@v6
       with:
         node-version: '18'
         cache: 'npm'
@@ -186,7 +186,7 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-    - uses: actions/checkout@v4
+    - uses: actions/checkout@v6
 
     - name: Build Docker image
       run: docker build -t blockchain-explorer:latest .
