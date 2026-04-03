@@ -1258,6 +1258,8 @@
         });
     }
 
+    }
+
     // Admin Dashboard Functionality
     function initAdminDashboard() {
         const loginForm = document.getElementById('login-form');
@@ -1596,4 +1598,3 @@
 
     // Initialize authentication
     initAuth();
-});
