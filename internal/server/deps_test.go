@@ -18,7 +18,7 @@ func TestNewDependencies_HoldsInterfaceBoundaries(t *testing.T) {
 		GetBlockAccessToken: "tok",
 	}
 	cl := redis.NewClient(&redis.Options{Addr: "localhost:6379"})
-	defer cl.Close()
+	defer func() { _ = cl.Close() }()
 	st := repos.NewStores(cl)
 	httpC := resty.New()
 	bc := blockchain.NewGetBlockRPCClient(cfg.GetBlockBaseURL, cfg.GetBlockAccessToken, httpC)

@@ -45,7 +45,7 @@ func requestBodyLimitsMiddleware(cfg *config.Config) gin.HandlerFunc {
 		isJSON := strings.Contains(ct, "application/json")
 
 		body := c.Request.Body
-		defer body.Close()
+		defer func() { _ = body.Close() }()
 
 		if isJSON {
 			data, err := io.ReadAll(http.MaxBytesReader(c.Writer, body, maxBytes))

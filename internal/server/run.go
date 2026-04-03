@@ -153,10 +153,10 @@ func Run() error {
 		})
 		if cfg.SMTPSkipVerify {
 			emailLog.WithFields(log.Fields{
-				"smtp_skip_verify":       true,
-				logging.FieldEnv:         cfg.AppEnv,
-				"smtp_starttls":          cfg.SMTPStartTLS,
-				"security_event":         "smtp_tls_verification_disabled",
+				"smtp_skip_verify":        true,
+				logging.FieldEnv:          cfg.AppEnv,
+				"smtp_starttls":           cfg.SMTPStartTLS,
+				"security_event":          "smtp_tls_verification_disabled",
 				"security_recommendation": "use a CA-issued cert or install the dev CA; never set SMTP_SKIP_VERIFY outside development",
 			}).Warn("SECURITY: SMTP TLS certificate verification is disabled (SMTP_SKIP_VERIFY=true). Email is vulnerable to MITM. Allowed only for APP_ENV=development with self-signed or local CAs.")
 		}
