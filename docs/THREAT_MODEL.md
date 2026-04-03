@@ -67,6 +67,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 
 ## 4. Residual risks & follow-ons
 
+- **External penetration test** — not a substitute for design-time controls; schedule third-party tests **annually** and **before major launches**, track findings in issues ([`docs/PENETRATION_TESTING.md`](PENETRATION_TESTING.md), roadmap task **40**).
 - **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap tasks **30**, **39**: external scripts, no script `unsafe-inline`).
 - **Session fixation on login** — mitigated by invalidating the prior session before elevation ([`loginHandler`](../internal/server/updatepricealerthandler.go), task **38**); password change **CSRF rotation** in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
 - **Input limits** on large bodies/exports — roadmap task **33** ([`INPUT_LIMITS.md`](INPUT_LIMITS.md)).

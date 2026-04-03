@@ -38,6 +38,10 @@ We kindly ask that you:
 
 Once a fix is released, we may acknowledge your contribution in release notes or a security advisory, unless you prefer to remain anonymous.
 
+## External penetration tests
+
+Third-party penetration tests are planned on an **annual** basis and **before major launches**, with findings tracked as GitHub issues. See [`docs/PENETRATION_TESTING.md`](docs/PENETRATION_TESTING.md).
+
 ## Non‑Security Issues
 
 For non-security bugs, feature requests, or general questions, please use the normal GitHub issue tracker instead of the security contact described above.

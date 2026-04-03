@@ -401,6 +401,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [SQL (N/A) and Redis key safety](docs/SQL_AND_REDIS_SAFETY.md) - no SQL in app; Redis keys, SCAN patterns, future SQL/Lua guidance
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
+- [External penetration testing](docs/PENETRATION_TESTING.md) - cadence (annual / pre-launch), tracking findings in issues
 
 ## Contributing
 
