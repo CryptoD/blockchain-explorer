@@ -386,6 +386,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [CSRF and sessions](docs/CSRF_AND_SESSIONS.md) - session TTL, CSRF rotation on password change, tests
 - [Rate limits and probe exemptions](docs/RATE_LIMITS.md) - global limits, `/healthz`/`/readyz`, `/metrics` + `METRICS_RATE_LIMIT_PER_IP`
 - [Input size limits](docs/INPUT_LIMITS.md) - max body, JSON depth, CSV export row caps
+- [SQL (N/A) and Redis key safety](docs/SQL_AND_REDIS_SAFETY.md) - no SQL in app; Redis keys, SCAN patterns, future SQL/Lua guidance
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 

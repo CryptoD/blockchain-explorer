@@ -54,6 +54,8 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 | **I** | Leak PII, session tokens, or stack traces to clients | Profiles, errors | Typed errors and stable API codes ([`internal/apperrors`](../internal/apperrors/)); avoid returning raw `err.Error()` for 5xx in hot paths; Sentry sampling configurable. |
 | **I** | Leak metrics or Redis contents | Ops data | **Metrics** optional auth token ([`METRICS_TOKEN`](../internal/config/config.go)); admin routes require authenticated admin. |
 | **I** | Exfiltrate provider API keys from repo or runtime | Secrets | Env-based config; **do not** commit secrets; CI can add secret scanning (see roadmap task 35). |
+| **I** | SQL injection | DB (if ever added) | **N/A today** — no SQL store; guidance in [`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md) (task **34**). |
+| **T** | Redis key confusion or overly broad `SCAN` | Multi-tenant Redis | Keys use fixed prefixes and session-bound usernames; usernames disallow glob chars used in `SCAN` patterns; see [`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md). |
 | **D** | Flood `/api/search`, login, or exports | Availability | **Rate limiting** per IP and per user ([`rateLimitMiddleware`](../internal/server/updateprofilehandler.go)); stricter **export** limits; optional Redis failure → in-memory limiter fallback (degraded but bounded). **Probe** and **metrics** paths are documented in [`RATE_LIMITS.md`](RATE_LIMITS.md) (task **32**). |
 | **D** | Exhaust Redis or upstream RPC | Backend | Timeouts on blockchain/pricing HTTP clients; cache TTLs; pagination caps ([`internal/apiutil`](../internal/apiutil/pagination.go)); request body and JSON depth limits ([`INPUT_LIMITS.md`](INPUT_LIMITS.md), task **33**). |
 | **E** | User becomes admin | Roles | Separate **admin** user and role checks; default dev admin only in development ([`initializeDefaultAdmin`](../internal/server/init.go)); production **refuses start** without admin password ([`Validate`](../internal/config/config.go)). |
@@ -65,7 +67,8 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 
 - **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap task **30**).
 - **Session fixation / rotation on login** — roadmap task **38**; password change CSRF rotation is documented in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
-- **Input limits** on large bodies/exports — roadmap task **33**.
+- **Input limits** on large bodies/exports — roadmap task **33** ([`INPUT_LIMITS.md`](INPUT_LIMITS.md)).
+- **SQL / Redis key patterns** — roadmap task **34** ([`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md)).
 - **Redis exposed to the internet** — defeats many assumptions; **must** be private to the app VPC/network.
 - **Default dev credentials** — documented in README; **never** use in production.
 
