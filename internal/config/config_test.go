@@ -63,6 +63,21 @@ func TestValidate_SMTPPort(t *testing.T) {
 	}
 }
 
+func TestValidate_SMTPSkipVerifyOnlyInDevelopment(t *testing.T) {
+	c := minimalValidBase()
+	c.SMTPSkipVerify = true
+	if err := c.Validate(); err != nil {
+		t.Fatalf("development should allow SMTP_SKIP_VERIFY: %v", err)
+	}
+
+	c.AppEnv = "production"
+	c.AdminUsername = "admin"
+	c.AdminPassword = "Str0ngEnough"
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "SMTP_SKIP_VERIFY") {
+		t.Fatalf("expected SMTP_SKIP_VERIFY error for production, got %v", err)
+	}
+}
+
 func TestValidate_RedisPort(t *testing.T) {
 	c := minimalValidBase()
 	c.RedisPort = 0

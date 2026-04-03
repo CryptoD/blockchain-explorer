@@ -220,6 +220,9 @@ func (c *Config) Validate() error {
 	if c.SMTPPort < 0 || c.SMTPPort > 65535 {
 		return fmt.Errorf("SMTP_PORT must be between 0 and 65535")
 	}
+	if c.SMTPSkipVerify && !strings.EqualFold(c.AppEnv, "development") {
+		return fmt.Errorf("SMTP_SKIP_VERIFY=true is only allowed when APP_ENV=development (got APP_ENV=%q); production and staging must verify SMTP TLS certificates", c.AppEnv)
+	}
 	if c.SentryTracesSampleRate < 0 || c.SentryTracesSampleRate > 1 {
 		return fmt.Errorf("SENTRY_TRACES_SAMPLE_RATE must be between 0 and 1")
 	}

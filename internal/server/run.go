@@ -147,10 +147,20 @@ func Run() error {
 		}
 		emailService = email.NewService(sender, email.Address{Email: cfg.EmailFrom, Name: cfg.EmailFromName})
 		emailTemplates = email.NewTemplates(cfg.AppBaseURL)
-		logging.WithComponent(logging.ComponentEmail).WithFields(log.Fields{
+		emailLog := logging.WithComponent(logging.ComponentEmail).WithFields(log.Fields{
 			logging.FieldProvider: sender.Name(),
 			"from_configured":     strings.TrimSpace(cfg.EmailFrom) != "",
-		}).Info("email service initialized")
+		})
+		if cfg.SMTPSkipVerify {
+			emailLog.WithFields(log.Fields{
+				"smtp_skip_verify":       true,
+				logging.FieldEnv:         cfg.AppEnv,
+				"smtp_starttls":          cfg.SMTPStartTLS,
+				"security_event":         "smtp_tls_verification_disabled",
+				"security_recommendation": "use a CA-issued cert or install the dev CA; never set SMTP_SKIP_VERIFY outside development",
+			}).Warn("SECURITY: SMTP TLS certificate verification is disabled (SMTP_SKIP_VERIFY=true). Email is vulnerable to MITM. Allowed only for APP_ENV=development with self-signed or local CAs.")
+		}
+		emailLog.Info("email service initialized")
 	} else {
 		logging.WithComponent(logging.ComponentEmail).WithField(logging.FieldProvider, cfg.EmailProvider).Warn("email service not configured; emails disabled")
 	}
