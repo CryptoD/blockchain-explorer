@@ -64,7 +64,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 ## 4. Residual risks & follow-ons
 
 - **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap task **30**).
-- **Session fixation / rotation on login** — roadmap task **38**.
+- **Session fixation / rotation on login** — roadmap task **38**; password change CSRF rotation is documented in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
 - **Input limits** on large bodies/exports — roadmap task **33**.
 - **Redis exposed to the internet** — defeats many assumptions; **must** be private to the app VPC/network.
 - **Default dev credentials** — documented in README; **never** use in production.

@@ -7,6 +7,7 @@ import (
 	"strings"
 	"testing"
 
+	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
 )
 
@@ -41,6 +42,8 @@ func authTestRouter() *gin.Engine {
 		userV1.Use(authMiddleware)
 		{
 			userV1.GET("/profile", userProfileHandler)
+			userV1.PATCH("/profile", updateProfileHandler)
+			userV1.PATCH("/password", changePasswordHandler)
 		}
 
 		adminV1 := apiV1.Group("/admin")
@@ -196,6 +199,56 @@ func TestLogout_ClearsSession(t *testing.T) {
 	}
 }
 
+func TestPasswordChange_RotatesCSRF(t *testing.T) {
+	resetAuthState(t)
+	router := authTestRouter()
+	postJSON(t, router, "/api/v1/register", `{"username":"pwdrot","password":"Str0ngPass","email":"p@x.co"}`)
+	cookie, oldCSRF := loginV1(t, router, "pwdrot", "Str0ngPass")
+
+	body := `{"current_password":"Str0ngPass","new_password":"NewStr0ng99"}`
+	w := reqJSON(t, router, http.MethodPatch, "/api/v1/user/password", body, authHeader(cookie, oldCSRF))
+	if w.Code != http.StatusOK {
+		t.Fatalf("password change: %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Message   string `json:"message"`
+		CSRFToken string `json:"csrfToken"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil || out.CSRFToken == "" {
+		t.Fatalf("response: %v body %s", err, w.Body.String())
+	}
+	if out.CSRFToken == oldCSRF {
+		t.Fatal("expected new CSRF token after password change")
+	}
+
+	wBad := reqJSON(t, router, http.MethodPatch, "/api/v1/user/profile", `{}`, authHeader(cookie, oldCSRF))
+	if wBad.Code != http.StatusForbidden {
+		t.Fatalf("old CSRF want 403, got %d: %s", wBad.Code, wBad.Body.String())
+	}
+
+	wOK := reqJSON(t, router, http.MethodPatch, "/api/v1/user/profile", `{}`, authHeader(cookie, out.CSRFToken))
+	if wOK.Code != http.StatusOK {
+		t.Fatalf("new CSRF want 200, got %d: %s", wOK.Code, wOK.Body.String())
+	}
+
+	_, newCSRF := loginV1(t, router, "pwdrot", "NewStr0ng99")
+	if newCSRF == "" {
+		t.Fatal("login with new password should return CSRF")
+	}
+}
+
+func TestPasswordChange_WrongCurrentPassword(t *testing.T) {
+	resetAuthState(t)
+	router := authTestRouter()
+	postJSON(t, router, "/api/v1/register", `{"username":"badcur","password":"Str0ngPass"}`)
+	cookie, csrf := loginV1(t, router, "badcur", "Str0ngPass")
+	body := `{"current_password":"WrongPass1","new_password":"NewStr0ng99"}`
+	w := reqJSON(t, router, http.MethodPatch, "/api/v1/user/password", body, authHeader(cookie, csrf))
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("want 401, got %d: %s", w.Code, w.Body.String())
+	}
+}
+
 func TestSession_InvalidAfterServerSideDestroy(t *testing.T) {
 	resetAuthState(t)
 	router := authTestRouter()
@@ -219,6 +272,31 @@ func TestSession_InvalidAfterServerSideDestroy(t *testing.T) {
 	w := getReq(t, router, "/api/v1/user/profile", authHeader(cookie, csrf))
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("expected 401 after destroySession, got %d", w.Code)
+	}
+}
+
+// TestSession_InvalidWhenRedisSessionKeyMissing covers the same Redis.Nil path as TTL expiry:
+// when the session key is gone from Redis, validateSession must not fall back to in-memory state.
+func TestSession_InvalidWhenRedisSessionKeyMissing(t *testing.T) {
+	resetAuthState(t)
+	router := authTestRouter()
+	postJSON(t, router, "/api/v1/register", `{"username":"sessgone","password":"Str0ngPass"}`)
+	cookie, csrf := loginV1(t, router, "sessgone", "Str0ngPass")
+	sid := cookie.Value
+	if sid == "" {
+		t.Fatal("empty session cookie")
+	}
+	key := repos.SessionKey(sid)
+	if n, err := rdb.Exists(ctx, key).Result(); err != nil || n != 1 {
+		t.Fatalf("precondition session in Redis: exists=%v err=%v key=%q", n, err, key)
+	}
+	if err := rdb.Del(ctx, key).Err(); err != nil {
+		t.Fatal(err)
+	}
+
+	w := getReq(t, router, "/api/v1/user/profile", authHeader(cookie, csrf))
+	if w.Code != http.StatusUnauthorized {
+		t.Fatalf("expected 401 when Redis session key is missing, got %d: %s", w.Code, w.Body.String())
 	}
 }
 

@@ -20,6 +20,7 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
+	"golang.org/x/crypto/bcrypt"
 )
 
 func updateProfileHandler(c *gin.Context) {
@@ -134,6 +135,75 @@ func updateProfileHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, user)
+}
+
+// changePasswordHandler updates the authenticated user's password and rotates the CSRF token for the
+// current session so any previously issued X-CSRF-Token value stops working (roadmap task 31).
+func changePasswordHandler(c *gin.Context) {
+	usernameVal, exists := c.Get("username")
+	if !exists {
+		errorResponse(c, http.StatusUnauthorized, "user_not_found", "User not found in session")
+		return
+	}
+	username := usernameVal.(string)
+
+	sessionID, err := c.Cookie("session_id")
+	if err != nil || strings.TrimSpace(sessionID) == "" {
+		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
+		return
+	}
+
+	var body struct {
+		CurrentPassword string `json:"current_password" binding:"required"`
+		NewPassword     string `json:"new_password" binding:"required"`
+	}
+	if err := c.ShouldBindJSON(&body); err != nil {
+		errorResponse(c, http.StatusBadRequest, "invalid_body", "Invalid request body")
+		return
+	}
+	if !isStrongPassword(body.NewPassword) {
+		errorResponse(c, http.StatusBadRequest, "invalid_password", "Password must be 8-128 characters and include at least one letter and one digit")
+		return
+	}
+
+	user, ok := getUser(username)
+	if !ok {
+		errorResponse(c, http.StatusNotFound, "user_profile_not_found", "User profile not found")
+		return
+	}
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(body.CurrentPassword)); err != nil {
+		errorResponse(c, http.StatusUnauthorized, "invalid_credentials", "Current password is incorrect")
+		return
+	}
+
+	hashed, err := bcrypt.GenerateFromPassword([]byte(body.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Error("password hash failed")
+		errorResponse(c, http.StatusInternalServerError, "password_update_failed", "Failed to update password")
+		return
+	}
+	user.Password = string(hashed)
+	userMutex.Lock()
+	users[username] = user
+	userMutex.Unlock()
+
+	if err := saveUserToRedis(user); err != nil {
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldUsername, username).Warn("Failed to persist password change to Redis")
+		errorResponse(c, http.StatusInternalServerError, "save_failed", "Failed to save profile")
+		return
+	}
+
+	newCSRF, err := authSvc.CreateOrUpdateCSRFToken(sessionID)
+	if err != nil {
+		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldEvent, "csrf_rotate_failed").Error("failed to rotate CSRF after password change")
+		errorResponse(c, http.StatusInternalServerError, "csrf_rotation_failed", "Failed to rotate CSRF token")
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"message":   "Password updated",
+		"csrfToken": newCSRF,
+	})
 }
 
 // authMiddleware checks for valid authentication

@@ -102,6 +102,7 @@ func registerUserRoutesV1(apiV1 *gin.RouterGroup) {
 func registerUserProfileRoutes(user *gin.RouterGroup) {
 	user.GET("/profile", userProfileHandler)
 	user.PATCH("/profile", updateProfileHandler)
+	user.PATCH("/password", changePasswordHandler)
 }
 
 func registerUserNotificationRoutes(user *gin.RouterGroup) {

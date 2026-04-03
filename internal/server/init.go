@@ -351,7 +351,8 @@ func generateSessionID() (string, error) {
 	if _, err := rand.Read(bytes); err != nil {
 		return "", err
 	}
-	return base64.URLEncoding.EncodeToString(bytes), nil
+	// RawURLEncoding avoids '=' padding, which interacts poorly with Cookie parsing and tests.
+	return base64.RawURLEncoding.EncodeToString(bytes), nil
 }
 
 // createSession creates a new session for the user
@@ -375,14 +376,21 @@ func createSession(username string) (string, error) {
 
 // validateSession checks if a session is valid
 func validateSession(sessionID string) (string, bool) {
-	// Check Redis first
 	if appRepos != nil && appRepos.Session != nil && rdb != nil {
-		if username, err := appRepos.Session.GetSessionUsername(ctx, sessionID); err == nil && username != "" {
+		username, err := appRepos.Session.GetSessionUsername(ctx, sessionID)
+		if err == nil && username != "" {
 			return username, true
+		}
+		// Redis is authoritative when configured: expired/missing key must not fall back to in-memory.
+		if err == redis.Nil {
+			sessionMutex.Lock()
+			delete(sessionStore, sessionID)
+			sessionMutex.Unlock()
+			return "", false
 		}
 	}
 
-	// Fallback to in-memory store
+	// Fallback to in-memory store (e.g. Redis temporarily unavailable)
 	sessionMutex.RLock()
 	username, exists := sessionStore[sessionID]
 	sessionMutex.RUnlock()

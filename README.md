@@ -383,6 +383,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
 - [Threat model (STRIDE-lite)](docs/THREAT_MODEL.md) - assets, actors, mitigations
 - [Security HTTP headers](docs/SECURITY_HEADERS.md) - CSP, HSTS, framing, env vars (`HSTS_*`)
+- [CSRF and sessions](docs/CSRF_AND_SESSIONS.md) - session TTL, CSRF rotation on password change, tests
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 
