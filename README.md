@@ -4,6 +4,7 @@
 [![Race](https://github.com/CryptoD/blockchain-explorer/actions/workflows/race.yml/badge.svg)](https://github.com/CryptoD/blockchain-explorer/actions/workflows/race.yml)
 [![E2E](https://github.com/CryptoD/blockchain-explorer/actions/workflows/e2e.yml/badge.svg)](https://github.com/CryptoD/blockchain-explorer/actions/workflows/e2e.yml)
 [![Mutation](https://github.com/CryptoD/blockchain-explorer/actions/workflows/mutation.yml/badge.svg)](https://github.com/CryptoD/blockchain-explorer/actions/workflows/mutation.yml)
+[![Gitleaks](https://github.com/CryptoD/blockchain-explorer/actions/workflows/gitleaks.yml/badge.svg)](https://github.com/CryptoD/blockchain-explorer/actions/workflows/gitleaks.yml)
 [![codecov](https://codecov.io/gh/CryptoD/blockchain-explorer/branch/main/graph/badge.svg)](https://codecov.io/gh/CryptoD/blockchain-explorer)
 
 A comprehensive web-based application for exploring the Bitcoin blockchain with real-time access to blocks, transactions, and address information.
@@ -346,7 +347,9 @@ For **staging** or local resilience drills, [Toxiproxy](https://github.com/Shopi
 
 ### Security scanning (CI)
 
-The workflow runs:
+CI includes a dedicated **[Gitleaks](https://github.com/gitleaks/gitleaks)** workflow ([`.github/workflows/gitleaks.yml`](.github/workflows/gitleaks.yml)) on every push and pull request to `main` / `master` (full git history). It uses the repo [`.gitleaks.toml`](.gitleaks.toml) (default rules plus a small allowlist for a legacy placeholder string). Any finding fails the job.
+
+The main **CI** workflow also runs:
 
 | Tool | What it checks |
 |------|------------------|
@@ -354,11 +357,13 @@ The workflow runs:
 | **[Trivy](https://github.com/aquasecurity/trivy)** (filesystem) | Known **vulnerabilities** in dependencies (`go.sum`, npm lockfile, etc.); skips `node_modules`, build output, and `.git`. |
 | **Trivy** (image) | Vulnerabilities in the **built Docker image** (`blockchain-explorer:latest`) after `docker build`. |
 
-Failures are reported in the **job log** (table output) and fail the workflow for **HIGH** and **CRITICAL** severities with **fixes available** (`ignore-unfixed: true` reduces noise from unfixed upstream CVEs).
+For **gosec** and **Trivy**, failures are reported in the **job log** (table output) and fail the workflow for **HIGH** and **CRITICAL** severities with **fixes available** (`ignore-unfixed: true` reduces noise from unfixed upstream CVEs).
 
 Run similar checks locally:
 
 ```bash
+docker run --rm -v "$PWD":/work -w /work zricethezav/gitleaks:v8.24.2 detect --source . --config .gitleaks.toml
+
 go install github.com/securego/gosec/v2/cmd/gosec@v2.22.10
 gosec -fmt text -stdout ./...
 
@@ -394,7 +399,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 We welcome contributions to improve the Bitcoin Explorer. Please follow standard Go and web development practices.
 
-Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **gosec** and **Trivy** (filesystem + Docker image) must pass; **frontend** CSS build must succeed; **Docker** image must build and scan clean. Pushes to the default branch also run the [race detector workflow](#race-detector-ci). The [E2E workflow](#e2e-tests-playwright) runs Playwright against the built server. Run the commands in [Code style (Go)](#code-style-go), [Security scanning (CI)](#security-scanning-ci), and `go test ./...` locally before opening a PR.
+Pull requests are checked in GitHub Actions: **Go** code must satisfy **gofmt** (simplified), **goimports**, **golangci-lint**, and tests; **Gitleaks**, **gosec**, and **Trivy** (filesystem + Docker image) must pass; **frontend** CSS build must succeed; **Docker** image must build and scan clean. Pushes to the default branch also run the [race detector workflow](#race-detector-ci). The [E2E workflow](#e2e-tests-playwright) runs Playwright against the built server. Run the commands in [Code style (Go)](#code-style-go), [Security scanning (CI)](#security-scanning-ci), and `go test ./...` locally before opening a PR.
 
 ## License
 

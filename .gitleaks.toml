@@ -1,0 +1,15 @@
+# Gitleaks configuration for CI and local runs (see README).
+# https://github.com/gitleaks/gitleaks
+
+title = "blockchain-explorer"
+
+[extend]
+useDefault = true
+
+# Old cmd/main.go used this hex as a *default* string for GETBLOCK_ACCESS_TOKEN in getEnvWithDefault
+# (removed in refactor). Block future real keys; this placeholder is not a live credential.
+[allowlist]
+description = "Legacy GetBlock placeholder in historical main.go"
+regexes = [
+  '''eb8cb69423354abb8d5e489adfc54742''',
+]

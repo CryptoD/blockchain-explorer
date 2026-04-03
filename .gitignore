@@ -29,6 +29,7 @@ secrets/
 vendor/
 node_modules/
 package-lock.json
+.gocache/
 
 ################################
 # Archives / installers        #
