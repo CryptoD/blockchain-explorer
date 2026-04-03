@@ -73,8 +73,9 @@ type Config struct {
 	RatesCacheTTLSeconds int // Redis key TTL for rate data; default 60
 
 	// Prometheus metrics at GET /metrics
-	MetricsEnabled bool
-	MetricsToken   string // optional; if set, require Authorization: Bearer <token> or X-Metrics-Token
+	MetricsEnabled        bool
+	MetricsToken          string // optional; if set, require Authorization: Bearer <token> or X-Metrics-Token
+	MetricsRateLimitPerIP int    // when MetricsEnabled and MetricsToken is empty: max GET /metrics per IP per window (0 = unlimited)
 
 	// Sentry (optional; DSN from SENTRY_DSN)
 	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
@@ -131,6 +132,7 @@ func Load() (*Config, error) {
 		RatesCacheTTLSeconds:        GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
 		MetricsEnabled:              metricsEnabledFromEnv(),
 		MetricsToken:                strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		MetricsRateLimitPerIP:       GetEnvIntWithDefault("METRICS_RATE_LIMIT_PER_IP", 120),
 		SentryEnvironment:           strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
 		SentryRelease:               strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:      sentryTracesSampleRateForEnv(appEnv),
@@ -167,6 +169,9 @@ func (c *Config) Validate() error {
 	}
 	if c.RateLimitPerIP < 0 || c.RateLimitPerUser < 0 {
 		return fmt.Errorf("rate limit counts must be >= 0")
+	}
+	if c.MetricsRateLimitPerIP < 0 {
+		return fmt.Errorf("METRICS_RATE_LIMIT_PER_IP must be >= 0")
 	}
 	if c.ExportRateLimitPerIP < 0 || c.ExportRateLimitPerUser < 0 || c.ExportRateLimitHeavyPerIP < 0 || c.ExportRateLimitHeavyPerUser < 0 {
 		return fmt.Errorf("export rate limit counts must be >= 0")

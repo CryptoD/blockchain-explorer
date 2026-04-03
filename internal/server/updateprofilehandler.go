@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
@@ -21,6 +22,13 @@ import (
 	"github.com/redis/go-redis/v9"
 	log "github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
+)
+
+// In-memory fallback for METRICS_RATE_LIMIT_PER_IP when Redis is unavailable.
+var (
+	metricsRLCount = make(map[string]int)
+	metricsRLReset = make(map[string]time.Time)
+	metricsRLMutex sync.Mutex
 )
 
 func updateProfileHandler(c *gin.Context) {
@@ -261,11 +269,78 @@ func requireRoleMiddleware(requiredRole string) gin.HandlerFunc {
 	}
 }
 
+// enforceMetricsUnauthenticatedRateLimit applies a separate per-IP budget for GET /metrics when
+// metrics are enabled without METRICS_TOKEN (see docs/RATE_LIMITS.md). Returns true if the request was aborted with 429.
+func enforceMetricsUnauthenticatedRateLimit(c *gin.Context) bool {
+	if appConfig == nil || !appConfig.MetricsEnabled || strings.TrimSpace(appConfig.MetricsToken) != "" {
+		return false
+	}
+	limit := appConfig.MetricsRateLimitPerIP
+	if limit <= 0 {
+		return false
+	}
+	windowSeconds := 60
+	if appConfig.RateLimitWindowSeconds > 0 {
+		windowSeconds = appConfig.RateLimitWindowSeconds
+	}
+	window := time.Duration(windowSeconds) * time.Second
+	ip := c.ClientIP()
+	ctx := context.Background()
+	key := "rate:metrics:ip:" + ip
+
+	if rdb != nil {
+		n, err := rdb.Incr(ctx, key).Result()
+		if err == nil {
+			if n == 1 {
+				_ = rdb.Expire(ctx, key, window).Err()
+			}
+			if n > int64(limit) {
+				logging.WithComponent(logging.ComponentRateLimit).WithField(logging.FieldEvent, "metrics_rate_limit").WithField(logging.FieldIP, ip).Warn("metrics scrape rate limit exceeded (Redis)")
+				errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+				c.Abort()
+				return true
+			}
+			return false
+		}
+		logging.WithComponent(logging.ComponentRateLimit).WithError(err).WithField(logging.FieldEvent, "metrics_redis_incr_failed").Warn("metrics rate limit Redis incr failed; using in-memory fallback")
+	}
+
+	metricsRLMutex.Lock()
+	defer metricsRLMutex.Unlock()
+	now := time.Now()
+	if reset, ok := metricsRLReset[ip]; ok && now.After(reset) {
+		metricsRLCount[ip] = 0
+		metricsRLReset[ip] = now.Add(window)
+	}
+	if _, ok := metricsRLCount[ip]; !ok {
+		metricsRLCount[ip] = 0
+		metricsRLReset[ip] = now.Add(window)
+	}
+	metricsRLCount[ip]++
+	if metricsRLCount[ip] > limit {
+		logging.WithComponent(logging.ComponentRateLimit).WithField(logging.FieldEvent, "metrics_rate_limit").WithField(logging.FieldIP, ip).Warn("metrics scrape rate limit exceeded (memory)")
+		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+		c.Abort()
+		return true
+	}
+	return false
+}
+
 // rateLimitMiddleware limits requests per IP and per authenticated user.
 // It prefers a Redis-backed implementation for multi-instance resilience,
 // and falls back to an in-memory limiter when Redis is unavailable.
+//
+// Exempt paths (orchestrator probes, Prometheus): see docs/RATE_LIMITS.md.
 func rateLimitMiddleware(c *gin.Context) {
-	if c.Request.URL.Path == "/metrics" {
+	path := c.Request.URL.Path
+	if path == "/metrics" {
+		if enforceMetricsUnauthenticatedRateLimit(c) {
+			return
+		}
+		c.Next()
+		return
+	}
+	if path == "/healthz" || path == "/readyz" {
 		c.Next()
 		return
 	}

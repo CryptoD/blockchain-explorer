@@ -71,6 +71,18 @@ func TestValidate_RedisPort(t *testing.T) {
 	}
 }
 
+func TestValidate_MetricsRateLimitPerIP(t *testing.T) {
+	c := minimalValidBase()
+	c.MetricsRateLimitPerIP = -1
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "METRICS_RATE_LIMIT_PER_IP") {
+		t.Fatalf("expected METRICS_RATE_LIMIT_PER_IP error, got %v", err)
+	}
+	c.MetricsRateLimitPerIP = 0
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
 func TestValidate_HSTSMaxAge(t *testing.T) {
 	c := minimalValidBase()
 	c.HSTSMaxAgeSeconds = -1
