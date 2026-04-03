@@ -594,6 +594,12 @@ func loginHandler(c *gin.Context) {
 		return
 	}
 
+	// Session fixation: invalidate any existing session cookie before issuing a new authenticated session
+	// (login elevation and account switches).
+	if oldSID, err := c.Cookie("session_id"); err == nil && strings.TrimSpace(oldSID) != "" {
+		authSvc.DestroySession(oldSID)
+	}
+
 	sessionID, err := authSvc.CreateSession(loginReq.Username)
 	if err != nil {
 		logging.WithComponent(logging.ComponentAuth).WithError(err).WithField(logging.FieldEvent, "session_create_failed").Error("failed to create session")

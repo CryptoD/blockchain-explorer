@@ -58,8 +58,16 @@ func authTestRouter() *gin.Engine {
 
 func postJSON(t *testing.T, r http.Handler, path, body string) *httptest.ResponseRecorder {
 	t.Helper()
+	return postJSONWithCookie(t, r, path, body, nil)
+}
+
+func postJSONWithCookie(t *testing.T, r http.Handler, path, body string, cookie *http.Cookie) *httptest.ResponseRecorder {
+	t.Helper()
 	req := httptest.NewRequest(http.MethodPost, path, strings.NewReader(body))
 	req.Header.Set("Content-Type", "application/json")
+	if cookie != nil {
+		req.AddCookie(cookie)
+	}
 	w := httptest.NewRecorder()
 	r.ServeHTTP(w, req)
 	return w
@@ -85,8 +93,13 @@ type loginResponse struct {
 
 func loginV1(t *testing.T, router http.Handler, username, password string) (cookie *http.Cookie, csrf string) {
 	t.Helper()
+	return loginV1WithCookie(t, router, username, password, nil)
+}
+
+func loginV1WithCookie(t *testing.T, router http.Handler, username, password string, prior *http.Cookie) (cookie *http.Cookie, csrf string) {
+	t.Helper()
 	body := `{"username":"` + username + `","password":"` + password + `"}`
-	w := postJSON(t, router, "/api/v1/login", body)
+	w := postJSONWithCookie(t, router, "/api/v1/login", body, prior)
 	if w.Code != http.StatusOK {
 		t.Fatalf("login: status %d body %s", w.Code, w.Body.String())
 	}
@@ -165,6 +178,35 @@ func TestLogin_Success_And_Profile(t *testing.T) {
 	}
 	if u.Username != "loguser" || u.Role != "user" {
 		t.Fatalf("user: %+v", u)
+	}
+}
+
+func TestLogin_DestroyPriorSessionOnElevation(t *testing.T) {
+	resetAuthState(t)
+	router := authTestRouter()
+	postJSON(t, router, "/api/v1/register", `{"username":"userA","password":"Str0ngPass"}`)
+	postJSON(t, router, "/api/v1/register", `{"username":"userB","password":"Str0ngPass"}`)
+
+	cookieA, csrfA := loginV1(t, router, "userA", "Str0ngPass")
+	cookieB, csrfB := loginV1WithCookie(t, router, "userB", "Str0ngPass", cookieA)
+
+	if cookieA.Value == cookieB.Value {
+		t.Fatal("login should issue a new session id")
+	}
+	wOld := getReq(t, router, "/api/v1/user/profile", authHeader(cookieA, csrfA))
+	if wOld.Code != http.StatusUnauthorized {
+		t.Fatalf("old session should be invalid, got %d: %s", wOld.Code, wOld.Body.String())
+	}
+	wNew := getReq(t, router, "/api/v1/user/profile", authHeader(cookieB, csrfB))
+	if wNew.Code != http.StatusOK {
+		t.Fatalf("new session: %d %s", wNew.Code, wNew.Body.String())
+	}
+	var u User
+	if err := json.Unmarshal(wNew.Body.Bytes(), &u); err != nil {
+		t.Fatal(err)
+	}
+	if u.Username != "userB" {
+		t.Fatalf("want userB, got %q", u.Username)
 	}
 }
 

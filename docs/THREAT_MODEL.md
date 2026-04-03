@@ -61,13 +61,14 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 | **D** | Exhaust Redis or upstream RPC | Backend | Timeouts on blockchain/pricing HTTP clients; cache TTLs; pagination caps ([`internal/apiutil`](../internal/apiutil/pagination.go)); request body and JSON depth limits ([`INPUT_LIMITS.md`](INPUT_LIMITS.md), task **33**). |
 | **E** | User becomes admin | Roles | Separate **admin** user and role checks; default dev admin only in development ([`initializeDefaultAdmin`](../internal/server/init.go)); production **refuses start** without admin password ([`Validate`](../internal/config/config.go)). |
 | **E** | CSRF bypass on POST/PUT/DELETE | Sessions | CSRF token stored server-side; **X-CSRF-Token** required for state-changing routes with session cookie. |
+| **E** | Session fixation (bind login to attacker-known session id) | Sessions | Successful login **destroys** any existing `session_id` cookie server-side, then issues a **new** id ([`loginHandler`](../internal/server/updatepricealerthandler.go)); see [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (tasks **31**, **38**). |
 
 ---
 
 ## 4. Residual risks & follow-ons
 
 - **Headers (CSP, HSTS, framing)** — implemented and documented in [`docs/SECURITY_HEADERS.md`](SECURITY_HEADERS.md) (roadmap task **30**).
-- **Session fixation / rotation on login** — roadmap task **38**; password change CSRF rotation is documented in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
+- **Session fixation on login** — mitigated by invalidating the prior session before elevation ([`loginHandler`](../internal/server/updatepricealerthandler.go), task **38**); password change **CSRF rotation** in [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (task **31**).
 - **Input limits** on large bodies/exports — roadmap task **33** ([`INPUT_LIMITS.md`](INPUT_LIMITS.md)).
 - **SQL / Redis key patterns** — roadmap task **34** ([`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md)).
 - **Redis exposed to the internet** — defeats many assumptions; **must** be private to the app VPC/network.

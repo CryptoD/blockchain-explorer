@@ -8,7 +8,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **31**. I
 
 | Event | Behavior |
 |-------|----------|
-| **Login** | A new **session id** is created ([`createSession`](../internal/server/init.go)); it is stored in **Redis** with TTL **24 hours** and mirrored in an in-process map for resilience. The HTTP **Set-Cookie** uses `Max-Age` **86400** (24h) and [`SecureCookies`](../internal/config/config.go) when configured. The login JSON response includes **`csrfToken`**. |
+| **Login** | Any previous **`session_id`** cookie is **destroyed** first ([`loginHandler`](../internal/server/updatepricealerthandler.go)) to mitigate **session fixation** and stale sessions when switching accounts. Then a **new** session id is created ([`createSession`](../internal/server/init.go)); it is stored in **Redis** with TTL **24 hours** and mirrored in an in-process map for resilience. The HTTP **Set-Cookie** uses `Max-Age` **86400** (24h) and [`SecureCookies`](../internal/config/config.go) when configured. The login JSON response includes **`csrfToken`**. |
 | **Logout** | [`destroySession`](../internal/server/init.go) removes the session and CSRF entries from memory and Redis ([`SessionRepo.DeleteSession`](../internal/repos/session.go)). |
 | **Validation** | [`validateSession`](../internal/server/init.go) reads the **`session_id`** cookie. When Redis is configured, **Redis is authoritative**: if the session key is missing or expired (`redis.Nil`), the session is **invalid** and the in-memory copy for that id is cleared—state-changing requests must not rely on stale memory after Redis TTL. If Redis is temporarily unavailable, validation may fall back to the in-memory store. |
 
@@ -44,10 +44,11 @@ Coverage lives in [`internal/server/auth_test.go`](../internal/server/auth_test.
 - **`TestPasswordChange_WrongCurrentPassword`** — incorrect current password returns **401**.
 - **`TestSession_InvalidWhenRedisSessionKeyMissing`** — if the Redis session key is removed (same **`redis.Nil`** path as TTL expiry), **`GET /profile`** returns **401**.
 - **`TestSession_InvalidAfterServerSideDestroy`** — server-side session teardown invalidates the browser session.
+- **`TestLogin_DestroyPriorSessionOnElevation`** — logging in as another user while sending the first user’s session cookie invalidates the first session; the old cookie no longer works for `/profile`.
 
 ---
 
 ## Related roadmap items
 
-- **38** — Session fixation / further session id regeneration on privilege change (login elevation).
+- **38** — Session fixation: prior session invalidated on successful login ([`loginHandler`](../internal/server/updatepricealerthandler.go)); see tests in [`auth_test.go`](../internal/server/auth_test.go).
 - **29** — [Threat model](THREAT_MODEL.md) (CSRF and sessions in the STRIDE matrix).
