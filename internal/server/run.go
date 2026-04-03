@@ -90,6 +90,7 @@ func Run() error {
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: true, Timeout: 2 * time.Second}))
 	r.Use(correlationIDMiddleware())
 	r.Use(sentryUserScopeMiddleware())
+	r.Use(requestBodyLimitsMiddleware(cfg))
 	if cfg.MetricsEnabled {
 		r.Use(metrics.Middleware())
 	}

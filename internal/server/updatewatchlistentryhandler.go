@@ -232,6 +232,26 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 	}
 }
 
+func effectiveBlockCSVRowCap() int {
+	cap := export.MaxBlockRows
+	if appConfig != nil && appConfig.ExportMaxBlockCSVRows > 0 {
+		if appConfig.ExportMaxBlockCSVRows < cap {
+			cap = appConfig.ExportMaxBlockCSVRows
+		}
+	}
+	return cap
+}
+
+func effectiveTransactionCSVRowCap() int {
+	cap := export.MaxTxRows
+	if appConfig != nil && appConfig.ExportMaxTransactionCSVRows > 0 {
+		if appConfig.ExportMaxTransactionCSVRows < cap {
+			cap = appConfig.ExportMaxTransactionCSVRows
+		}
+	}
+	return cap
+}
+
 // exportBlocksCSVHandler streams blocks in a height range as CSV. Memory-efficient: one block at a time.
 // Query params: start_height, end_height (required), limit (optional, default 500, max 2000).
 // Range is capped at export.MaxBlockRange blocks.
@@ -261,10 +281,11 @@ func exportBlocksCSVHandler(c *gin.Context) {
 		return
 	}
 	limit := export.DefaultBlockRows
+	maxRowCap := effectiveBlockCSVRowCap()
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			if n > export.MaxBlockRows {
-				n = export.MaxBlockRows
+			if n > maxRowCap {
+				n = maxRowCap
 			}
 			limit = n
 		}
@@ -352,10 +373,11 @@ func exportTransactionsCSVHandler(c *gin.Context) {
 		return
 	}
 	limit := export.DefaultTxRows
+	maxTxRowCap := effectiveTransactionCSVRowCap()
 	if l := c.Query("limit"); l != "" {
 		if n, err := strconv.Atoi(l); err == nil && n > 0 {
-			if n > export.MaxTxRows {
-				n = export.MaxTxRows
+			if n > maxTxRowCap {
+				n = maxTxRowCap
 			}
 			limit = n
 		}

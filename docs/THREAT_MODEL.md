@@ -55,7 +55,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 | **I** | Leak metrics or Redis contents | Ops data | **Metrics** optional auth token ([`METRICS_TOKEN`](../internal/config/config.go)); admin routes require authenticated admin. |
 | **I** | Exfiltrate provider API keys from repo or runtime | Secrets | Env-based config; **do not** commit secrets; CI can add secret scanning (see roadmap task 35). |
 | **D** | Flood `/api/search`, login, or exports | Availability | **Rate limiting** per IP and per user ([`rateLimitMiddleware`](../internal/server/updateprofilehandler.go)); stricter **export** limits; optional Redis failure → in-memory limiter fallback (degraded but bounded). **Probe** and **metrics** paths are documented in [`RATE_LIMITS.md`](RATE_LIMITS.md) (task **32**). |
-| **D** | Exhaust Redis or upstream RPC | Backend | Timeouts on blockchain/pricing HTTP clients; cache TTLs; pagination caps ([`internal/apiutil`](../internal/apiutil/pagination.go)). |
+| **D** | Exhaust Redis or upstream RPC | Backend | Timeouts on blockchain/pricing HTTP clients; cache TTLs; pagination caps ([`internal/apiutil`](../internal/apiutil/pagination.go)); request body and JSON depth limits ([`INPUT_LIMITS.md`](INPUT_LIMITS.md), task **33**). |
 | **E** | User becomes admin | Roles | Separate **admin** user and role checks; default dev admin only in development ([`initializeDefaultAdmin`](../internal/server/init.go)); production **refuses start** without admin password ([`Validate`](../internal/config/config.go)). |
 | **E** | CSRF bypass on POST/PUT/DELETE | Sessions | CSRF token stored server-side; **X-CSRF-Token** required for state-changing routes with session cookie. |
 

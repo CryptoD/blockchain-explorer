@@ -71,6 +71,35 @@ func TestValidate_RedisPort(t *testing.T) {
 	}
 }
 
+func TestValidate_ExportCSVRowCaps(t *testing.T) {
+	c := minimalValidBase()
+	c.ExportMaxBlockCSVRows = 2001
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "EXPORT_MAX_BLOCK_CSV_ROWS") {
+		t.Fatalf("expected EXPORT_MAX_BLOCK_CSV_ROWS error, got %v", err)
+	}
+	c.ExportMaxBlockCSVRows = 0
+	c.ExportMaxTransactionCSVRows = 6000
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "EXPORT_MAX_TRANSACTION_CSV_ROWS") {
+		t.Fatalf("expected EXPORT_MAX_TRANSACTION_CSV_ROWS error, got %v", err)
+	}
+	c.ExportMaxTransactionCSVRows = 0
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
+func TestValidate_MaxRequestBodyBytes(t *testing.T) {
+	c := minimalValidBase()
+	c.MaxRequestBodyBytes = 500
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "MAX_REQUEST_BODY_BYTES") {
+		t.Fatalf("expected MAX_REQUEST_BODY_BYTES error, got %v", err)
+	}
+	c.MaxRequestBodyBytes = 1024 * 1024
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}
+
 func TestValidate_MetricsRateLimitPerIP(t *testing.T) {
 	c := minimalValidBase()
 	c.MetricsRateLimitPerIP = -1

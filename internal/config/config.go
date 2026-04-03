@@ -6,6 +6,8 @@ import (
 	"strconv"
 	"strings"
 	"unicode"
+
+	"github.com/CryptoD/blockchain-explorer/internal/export"
 )
 
 // Config holds all application configuration derived from environment variables.
@@ -65,6 +67,13 @@ type Config struct {
 	ExportRateLimitPerUser      int // per window when authenticated; default 20
 	ExportRateLimitHeavyPerIP   int // for heavy exports (e.g. transactions CSV); default 2
 	ExportRateLimitHeavyPerUser int // when authenticated; default 5
+
+	// Request body limits (POST/PUT/PATCH). See docs/INPUT_LIMITS.md.
+	MaxRequestBodyBytes int64 // 0 = unlimited; default 1 MiB from env
+	MaxJSONDepth        int   // 0 = skip JSON nesting check; default 64
+	// CSV export: optional caps at or below export package maxima (0 = use export defaults only)
+	ExportMaxBlockCSVRows       int
+	ExportMaxTransactionCSVRows int
 
 	// Readiness / health
 	ReadyCheckExternal bool
@@ -128,6 +137,10 @@ func Load() (*Config, error) {
 		ExportRateLimitPerUser:      GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
 		ExportRateLimitHeavyPerIP:   GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
 		ExportRateLimitHeavyPerUser: GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
+		MaxRequestBodyBytes:         GetEnvInt64WithDefault("MAX_REQUEST_BODY_BYTES", 1024*1024),
+		MaxJSONDepth:                GetEnvIntWithDefault("MAX_JSON_DEPTH", 64),
+		ExportMaxBlockCSVRows:       GetEnvIntWithDefault("EXPORT_MAX_BLOCK_CSV_ROWS", 0),
+		ExportMaxTransactionCSVRows: GetEnvIntWithDefault("EXPORT_MAX_TRANSACTION_CSV_ROWS", 0),
 		ReadyCheckExternal:          strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
 		RatesCacheTTLSeconds:        GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
 		MetricsEnabled:              metricsEnabledFromEnv(),
@@ -175,6 +188,28 @@ func (c *Config) Validate() error {
 	}
 	if c.ExportRateLimitPerIP < 0 || c.ExportRateLimitPerUser < 0 || c.ExportRateLimitHeavyPerIP < 0 || c.ExportRateLimitHeavyPerUser < 0 {
 		return fmt.Errorf("export rate limit counts must be >= 0")
+	}
+	if c.MaxRequestBodyBytes < 0 {
+		return fmt.Errorf("MAX_REQUEST_BODY_BYTES must be >= 0")
+	}
+	if c.MaxRequestBodyBytes > 0 && c.MaxRequestBodyBytes < 1024 {
+		return fmt.Errorf("MAX_REQUEST_BODY_BYTES must be 0 (unlimited) or at least 1024")
+	}
+	const maxBodyBytes = 100 << 20 // 100 MiB
+	if c.MaxRequestBodyBytes > maxBodyBytes {
+		return fmt.Errorf("MAX_REQUEST_BODY_BYTES cannot exceed %d", maxBodyBytes)
+	}
+	if c.MaxJSONDepth < 0 {
+		return fmt.Errorf("MAX_JSON_DEPTH must be >= 0")
+	}
+	if c.ExportMaxBlockCSVRows < 0 || c.ExportMaxTransactionCSVRows < 0 {
+		return fmt.Errorf("EXPORT_MAX_*_CSV_ROWS must be >= 0")
+	}
+	if c.ExportMaxBlockCSVRows > 0 && c.ExportMaxBlockCSVRows > export.MaxBlockRows {
+		return fmt.Errorf("EXPORT_MAX_BLOCK_CSV_ROWS cannot exceed %d", export.MaxBlockRows)
+	}
+	if c.ExportMaxTransactionCSVRows > 0 && c.ExportMaxTransactionCSVRows > export.MaxTxRows {
+		return fmt.Errorf("EXPORT_MAX_TRANSACTION_CSV_ROWS cannot exceed %d", export.MaxTxRows)
 	}
 	if c.RatesCacheTTLSeconds < 0 {
 		return fmt.Errorf("RATES_CACHE_TTL_SECONDS must be >= 0")
@@ -287,6 +322,19 @@ func GetEnvIntWithDefault(key string, defaultValue int) int {
 		return defaultValue
 	}
 	if v, err := strconv.Atoi(valStr); err == nil {
+		return v
+	}
+	return defaultValue
+}
+
+// GetEnvInt64WithDefault reads an environment variable and parses it as int64,
+// returning defaultValue if unset or invalid.
+func GetEnvInt64WithDefault(key string, defaultValue int64) int64 {
+	valStr := strings.TrimSpace(os.Getenv(key))
+	if valStr == "" {
+		return defaultValue
+	}
+	if v, err := strconv.ParseInt(valStr, 10, 64); err == nil {
 		return v
 	}
 	return defaultValue
