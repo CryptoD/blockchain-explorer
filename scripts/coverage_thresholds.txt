@@ -1,0 +1,20 @@
+# Per-package minimum statement coverage for `go test -cover`.
+# Enforced by scripts/check_coverage.sh in CI.
+#
+# Roadmap goals (raise floors over time): internal/news ≥60%, internal/server ≥40%.
+# Current baselines are ratcheted just below measured coverage so CI stays green;
+# bump a line when you add tests so coverage cannot regress.
+#
+# Format: full_import_path<TAB>min_percent
+github.com/CryptoD/blockchain-explorer/internal/apperrors	28
+github.com/CryptoD/blockchain-explorer/internal/blockchain	42
+github.com/CryptoD/blockchain-explorer/internal/config	35
+github.com/CryptoD/blockchain-explorer/internal/correlation	80
+github.com/CryptoD/blockchain-explorer/internal/email	12
+github.com/CryptoD/blockchain-explorer/internal/export	11
+github.com/CryptoD/blockchain-explorer/internal/news	30
+github.com/CryptoD/blockchain-explorer/internal/pricing	42
+github.com/CryptoD/blockchain-explorer/internal/redistest	84
+github.com/CryptoD/blockchain-explorer/internal/repos	3
+github.com/CryptoD/blockchain-explorer/internal/sentryutil	7
+github.com/CryptoD/blockchain-explorer/internal/server	28

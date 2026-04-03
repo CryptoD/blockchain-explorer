@@ -173,6 +173,9 @@ func TestPortfolio_Create_ValidationErrors(t *testing.T) {
 	}{
 		{`{"name":"","description":"","items":[]}`, "invalid_portfolio_name"},
 		{`{"name":"` + strings.Repeat("x", 101) + `","description":"","items":[]}`, "invalid_portfolio_name"},
+		{`{"name":"ok","description":"` + strings.Repeat("d", 501) + `","items":[]}`, "invalid_portfolio_description"},
+		{`{"name":"ok","description":"","items":[{"type":"crypto","label":"a","address":""}]}`, "invalid_item_address"},
+		{`{"name":"ok","description":"","items":[{"type":"crypto","label":"` + strings.Repeat("L", 101) + `","address":"1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"}]}`, "invalid_item_label"},
 		{`{"name":"ok","description":"","items":[{"type":"nft","label":"a","address":"x"}]}`, "invalid_item_type"},
 		{`{"name":"ok","description":"","items":[{"type":"crypto","label":"","address":"x"}]}`, "invalid_item_label"},
 	}
@@ -180,6 +183,31 @@ func TestPortfolio_Create_ValidationErrors(t *testing.T) {
 		w := reqJSON(t, r, http.MethodPost, "/api/v1/user/portfolios", tc.body, authHeader(cookie, csrf))
 		if w.Code != http.StatusBadRequest {
 			t.Fatalf("body %s: want 400 got %d %s", tc.body, w.Code, w.Body.String())
+		}
+		if c := apiErrCode(t, w.Body.Bytes()); c != tc.want {
+			t.Fatalf("code want %q got %q body %s", tc.want, c, w.Body.String())
+		}
+	}
+}
+
+func TestWatchlist_Create_ValidationErrors_Table(t *testing.T) {
+	resetAuthState(t)
+	r := portfolioWatchlistTestRouter()
+	registerV1(t, r, "wlval", "Str0ngPass")
+	cookie, csrf := loginV1(t, r, "wlval", "Str0ngPass")
+
+	cases := []struct {
+		body string
+		want string
+	}{
+		{`{"name":"` + strings.Repeat("n", 101) + `","entries":[]}`, "invalid_watchlist_name"},
+		{`{"name":"ok","entries":[{"type":"nft","symbol":"x"}]}`, "invalid_entry"},
+		{`{"name":"ok","entries":[{"type":"symbol","symbol":""}]}`, "invalid_entry"},
+	}
+	for _, tc := range cases {
+		w := reqJSON(t, r, http.MethodPost, "/api/v1/user/watchlists", tc.body, authHeader(cookie, csrf))
+		if w.Code != http.StatusBadRequest {
+			t.Fatalf("want 400 got %d %s", w.Code, w.Body.String())
 		}
 		if c := apiErrCode(t, w.Body.Bytes()); c != tc.want {
 			t.Fatalf("code want %q got %q body %s", tc.want, c, w.Body.String())

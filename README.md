@@ -283,6 +283,8 @@ go tool cover -html=coverage.out -o coverage.html
 
 `coverage.out` and `coverage.html` are gitignored.
 
+**Per-package floors (gradual ratchet):** [`scripts/coverage_thresholds.txt`](scripts/coverage_thresholds.txt) lists minimum statement coverage for selected packages (for example `internal/news` and `internal/server`). CI runs [`scripts/check_coverage.sh`](scripts/check_coverage.sh) after tests; raise a threshold when you improve coverage so it cannot regress. Long-term targets in the roadmap are on the order of **≥60%** for news and **≥40%** for the server package—current floors are set just below measured coverage until tests catch up.
+
 On pull requests, [Codecov](https://codecov.io) can enforce a **minimum coverage on new/changed lines** (patch coverage in `codecov.yml`). To enable uploads and the README badge, add a repository secret **CODECOV_TOKEN** from your Codecov project settings and ensure the repo slug in Codecov matches `CryptoD/blockchain-explorer` (or adjust badge URLs). If the secret is absent, CI still runs tests and uploads `coverage.out` / `coverage.html` as workflow artifacts.
 
 ### Security scanning (CI)

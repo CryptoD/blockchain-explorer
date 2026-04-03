@@ -127,6 +127,9 @@ jobs:
         set -euo pipefail
         go test -coverprofile=coverage.out -covermode=atomic ./...
 
+    - name: Enforce per-package coverage (ratchet)
+      run: ./scripts/check_coverage.sh
+
     - name: Coverage summary
       run: |
         echo "## Go test coverage" >> "$GITHUB_STEP_SUMMARY"

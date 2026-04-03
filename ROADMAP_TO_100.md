@@ -28,9 +28,9 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 ## Phase 12 — Testing & quality
 
-- [ ] **16. Set coverage targets per package** — e.g. `internal/news` ≥60%, handlers ≥40%; enforce in CI with gradual ratchet.
-- [ ] **17. Handler tests with `httptest` + mocks** — Every exported route group has at least smoke + one error path test.
-- [ ] **18. Table-driven tests for validation** — Password policy, pagination, portfolio/watchlist validation in compact tables.
+- [x] **16. Set coverage targets per package** — e.g. `internal/news` ≥60%, handlers ≥40%; enforce in CI with gradual ratchet. **Done:** [`scripts/coverage_thresholds.txt`](scripts/coverage_thresholds.txt) + [`scripts/check_coverage.sh`](scripts/check_coverage.sh); CI step “Enforce per-package coverage (ratchet)”; README documents ratchet vs roadmap goals.
+- [x] **17. Handler tests with `httptest` + mocks** — Every exported route group has at least smoke + one error path test. **Done:** [`internal/server/route_groups_v1_test.go`](internal/server/route_groups_v1_test.go) exercises `/api/v1` groups (explorer, feedback, news, user notifications/alerts/portfolio export) plus health/readiness; existing [`auth_test.go`](internal/server/auth_test.go), [`admin_api_test.go`](internal/server/admin_api_test.go), [`portfolio_watchlist_test.go`](internal/server/portfolio_watchlist_test.go), [`main_test.go`](internal/server/main_test.go) / [`service_test.go`](internal/server/service_test.go) cover auth, admin, portfolio/watchlist CRUD, legacy `/api/search`, and `SetExplorerService` mock.
+- [x] **18. Table-driven tests for validation** — Password policy, pagination, portfolio/watchlist validation in compact tables. **Done:** [`internal/server/validation_table_test.go`](internal/server/validation_table_test.go) (`isStrongPassword`, `validateWatchlistEntry`); [`internal/apiutil/pagination_test.go`](internal/apiutil/pagination_test.go) (`ParsePagination`); expanded portfolio + new watchlist tables in [`portfolio_watchlist_test.go`](internal/server/portfolio_watchlist_test.go).
 - [ ] **19. Golden files for JSON responses** — Stable snapshots for critical list/detail payloads (optional but high value).
 - [ ] **20. Redis integration tests** — Use miniredis or testcontainers for tests that need real Redis semantics beyond mocks.
 - [ ] **21. Contract tests for external APIs** — Record/replay or VCR-style for CoinGecko/news when feasible; strict timeouts.
