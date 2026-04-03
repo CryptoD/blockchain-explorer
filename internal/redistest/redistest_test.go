@@ -13,7 +13,17 @@ func TestIntegrationAddr_TEST_REDIS_ADDR(t *testing.T) {
 func TestIntegrationAddr_REDIS_HOST(t *testing.T) {
 	t.Setenv("TEST_REDIS_ADDR", "")
 	t.Setenv("REDIS_HOST", "redis.example")
+	t.Setenv("REDIS_PORT", "")
 	if got := IntegrationAddr(); got != "redis.example:6379" {
+		t.Fatalf("IntegrationAddr() = %q", got)
+	}
+}
+
+func TestIntegrationAddr_REDIS_PORT(t *testing.T) {
+	t.Setenv("TEST_REDIS_ADDR", "")
+	t.Setenv("REDIS_HOST", "127.0.0.1")
+	t.Setenv("REDIS_PORT", "6380")
+	if got := IntegrationAddr(); got != "127.0.0.1:6380" {
 		t.Fatalf("IntegrationAddr() = %q", got)
 	}
 }

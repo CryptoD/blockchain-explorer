@@ -7,6 +7,7 @@
     "qrcode": "^1.5.4"
   },
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "autoprefixer": "^10.4.14",
     "playwright": "^1.58.2",
     "postcss": "^8.4.24",
@@ -15,6 +16,8 @@
   },
   "scripts": {
     "build:css": "mkdir -p dist .tmp && sass src/styles/theme.scss .tmp/theme.css --no-source-map && npx tailwindcss -i .tmp/theme.css -o dist/styles.css --minify",
-    "watch:css": "mkdir -p dist .tmp && sass --watch src/styles/theme.scss:.tmp/theme.css & npx tailwindcss -i .tmp/theme.css -o dist/styles.css --watch"
+    "watch:css": "mkdir -p dist .tmp && sass --watch src/styles/theme.scss:.tmp/theme.css & npx tailwindcss -i .tmp/theme.css -o dist/styles.css --watch",
+    "test:e2e": "playwright test",
+    "test:e2e:ui": "playwright test --ui"
   }
 }

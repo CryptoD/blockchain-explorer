@@ -80,8 +80,10 @@ var ErrNotFound = apperrors.ErrNotFound
 var ctx = context.Background()
 
 var rdb redisstore.Client = redis.NewClient(&redis.Options{
-	Addr: config.GetEnvWithDefault("REDIS_HOST", "localhost") + ":6379",
-	DB:   0, // use default DB
+	Addr: fmt.Sprintf("%s:%d",
+		config.GetEnvWithDefault("REDIS_HOST", "localhost"),
+		config.GetEnvIntWithDefault("REDIS_PORT", 6379)),
+	DB: 0, // use default DB
 })
 
 // Rate limiting variables (used as a fallback when Redis is unavailable)

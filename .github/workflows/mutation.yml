@@ -1,0 +1,26 @@
+# Optional mutation testing (ROADMAP task 27). Does not run on every push — use workflow dispatch.
+name: Mutation
+
+on:
+  workflow_dispatch:
+
+jobs:
+  gremlins:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Install Gremlins
+      run: go install github.com/go-gremlins/gremlins/cmd/gremlins@v0.5.1
+
+    - name: Run mutation tests
+      run: |
+        export PATH="$(go env GOPATH)/bin:$PATH"
+        ./scripts/mutation_test.sh

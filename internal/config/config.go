@@ -14,6 +14,7 @@ type Config struct {
 
 	// Core infrastructure
 	RedisHost string
+	RedisPort int // TCP port; default 6379 (env REDIS_PORT)
 
 	// Default admin (env ADMIN_USERNAME / ADMIN_PASSWORD). Required outside development; validated in Validate().
 	AdminUsername string
@@ -87,6 +88,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		AppEnv:                      appEnv,
 		RedisHost:                   GetEnvWithDefault("REDIS_HOST", "localhost"),
+		RedisPort:                   GetEnvIntWithDefault("REDIS_PORT", 6379),
 		AdminUsername:               strings.TrimSpace(os.Getenv("ADMIN_USERNAME")),
 		AdminPassword:               os.Getenv("ADMIN_PASSWORD"),
 		GetBlockBaseURL:             strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
@@ -147,6 +149,10 @@ func (c *Config) Validate() error {
 		return fmt.Errorf("GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN are required")
 	}
 
+	if c.RedisPort < 1 || c.RedisPort > 65535 {
+		return fmt.Errorf("REDIS_PORT must be between 1 and 65535")
+	}
+
 	if c.RateLimitWindowSeconds < 0 {
 		return fmt.Errorf("RATE_LIMIT_WINDOW_SECONDS must be >= 0")
 	}
@@ -183,6 +189,14 @@ func (c *Config) Validate() error {
 	}
 
 	return nil
+}
+
+// RedisAddr returns host:port for the Redis server.
+func (c *Config) RedisAddr() string {
+	if c == nil {
+		return "localhost:6379"
+	}
+	return fmt.Sprintf("%s:%d", c.RedisHost, c.RedisPort)
 }
 
 func isStrongAdminPassword(pw string) bool {

@@ -13,6 +13,9 @@ import (
 // CoinGeckoClient is a concrete implementation of Client using the CoinGecko HTTP API only.
 type CoinGeckoClient struct {
 	HTTPClient *resty.Client
+	// BaseURL is the API origin (scheme + host, no trailing slash), e.g. https://api.coingecko.com.
+	// Empty means the public CoinGecko host. Tests point this at an httptest server for contract replay.
+	BaseURL string
 }
 
 // NewCoinGeckoClient constructs a CoinGeckoClient, defaulting to a sane Resty
@@ -26,6 +29,13 @@ func NewCoinGeckoClient(httpClient *resty.Client) *CoinGeckoClient {
 	return &CoinGeckoClient{HTTPClient: httpClient}
 }
 
+func (c *CoinGeckoClient) apiOrigin() string {
+	if c != nil && strings.TrimSpace(c.BaseURL) != "" {
+		return strings.TrimRight(strings.TrimSpace(c.BaseURL), "/")
+	}
+	return "https://api.coingecko.com"
+}
+
 func (c *CoinGeckoClient) GetMultiCurrencyRates(ctx context.Context) (map[string]interface{}, error) {
 	return c.GetMultiCurrencyRatesIn(ctx, nil)
 }
@@ -36,7 +46,7 @@ func (c *CoinGeckoClient) GetMultiCurrencyRatesIn(ctx context.Context, currencie
 		vs = DefaultFiatCurrencies
 	}
 	vsStr := strings.Join(vs, ",")
-	url := fmt.Sprintf("https://api.coingecko.com/api/v3/simple/price?ids=bitcoin&vs_currencies=%s", vsStr)
+	url := fmt.Sprintf("%s/api/v3/simple/price?ids=bitcoin&vs_currencies=%s", c.apiOrigin(), vsStr)
 	resp, err := c.HTTPClient.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").
@@ -71,7 +81,7 @@ func (c *CoinGeckoClient) GetCryptoPriceInFiat(ctx context.Context, coinID, fiat
 	if coinID == "" {
 		return 0, false
 	}
-	url := fmt.Sprintf("https://api.coingecko.com/api/v3/simple/price?ids=%s&vs_currencies=%s", coinID, fiat)
+	url := fmt.Sprintf("%s/api/v3/simple/price?ids=%s&vs_currencies=%s", c.apiOrigin(), coinID, fiat)
 	resp, err := c.HTTPClient.R().
 		SetContext(ctx).
 		SetHeader("Accept", "application/json").

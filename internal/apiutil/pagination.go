@@ -35,6 +35,10 @@ func ParsePagination(c *gin.Context, defaultPageSize, maxPageSize int) Paginatio
 	if page < 1 {
 		page = 1
 	}
+	const maxPage = 1_000_000
+	if page > maxPage {
+		page = maxPage
+	}
 
 	pageSize, _ := strconv.Atoi(c.DefaultQuery("page_size", strconv.Itoa(defaultPageSize)))
 	if pageSize < 1 {
@@ -44,7 +48,14 @@ func ParsePagination(c *gin.Context, defaultPageSize, maxPageSize int) Paginatio
 		pageSize = maxPageSize
 	}
 
-	offset := (page - 1) * pageSize
+	offset64 := int64(page-1) * int64(pageSize)
+	maxInt := int64(^uint(0) >> 1)
+	if offset64 < 0 || offset64 > maxInt {
+		page = 1
+		pageSize = defaultPageSize
+		offset64 = 0
+	}
+	offset := int(offset64)
 
 	return Pagination{
 		Page:     page,

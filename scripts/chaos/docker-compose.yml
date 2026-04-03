@@ -1,0 +1,24 @@
+# Redis behind Shopify Toxiproxy for optional chaos / resilience drills (ROADMAP task 28).
+# Start: docker compose -f scripts/chaos/docker-compose.yml up -d
+# API: http://127.0.0.1:8474 — proxied Redis for a host app: REDIS_HOST=127.0.0.1 REDIS_PORT=6380
+
+networks:
+  chaos:
+    name: blockchain-explorer-chaos
+
+services:
+  redis:
+    image: redis:7
+    networks: [chaos]
+
+  toxiproxy:
+    image: ghcr.io/shopify/toxiproxy:2.9.0
+    depends_on:
+      - redis
+    networks: [chaos]
+    ports:
+      - "8474:8474"
+      - "6380:6379"
+    volumes:
+      - ./toxiproxy-bootstrap.sh:/toxiproxy-bootstrap.sh:ro
+    entrypoint: ["/bin/sh", "/toxiproxy-bootstrap.sh"]

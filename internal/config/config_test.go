@@ -8,6 +8,8 @@ import (
 func minimalValidBase() *Config {
 	return &Config{
 		AppEnv:              "development",
+		RedisHost:           "localhost",
+		RedisPort:           6379,
 		GetBlockBaseURL:     "https://example.test",
 		GetBlockAccessToken: "token",
 	}
@@ -58,5 +60,13 @@ func TestValidate_SMTPPort(t *testing.T) {
 	c.SMTPPort = 70000
 	if err := c.Validate(); err == nil {
 		t.Fatal("expected error for SMTP port")
+	}
+}
+
+func TestValidate_RedisPort(t *testing.T) {
+	c := minimalValidBase()
+	c.RedisPort = 0
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "REDIS_PORT") {
+		t.Fatalf("expected REDIS_PORT error, got %v", err)
 	}
 }

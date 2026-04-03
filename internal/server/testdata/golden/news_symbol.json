@@ -1,0 +1,16 @@
+{
+  "data": [
+    {
+      "headline": "Golden headline",
+      "source": "golden",
+      "summary": "Summary line",
+      "url": "https://example.com/article"
+    }
+  ],
+  "meta": {
+    "cached": false,
+    "provider": "golden",
+    "query": "(BTC | \"BTC\")",
+    "stale": false
+  }
+}

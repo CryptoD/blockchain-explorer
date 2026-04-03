@@ -46,6 +46,14 @@ docker-compose.override.yml
 **/redis-data/
 
 ################################
+# Playwright                   #
+################################
+
+playwright-report/
+test-results/
+blob-report/
+
+################################
 # Logs / coverage              #
 ################################
 

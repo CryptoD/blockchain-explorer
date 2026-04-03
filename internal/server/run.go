@@ -97,7 +97,7 @@ func Run() error {
 
 	// Initialize Redis client
 	rdb = redis.NewClient(&redis.Options{
-		Addr: cfg.RedisHost + ":6379",
+		Addr: cfg.RedisAddr(),
 	})
 	appRepos = repos.NewStores(rdb)
 

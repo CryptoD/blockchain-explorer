@@ -1,0 +1,35 @@
+# Runs `go test -race` on pushes to the default branches, on a weekly schedule,
+# and on demand. Keeps the race detector out of the hot path of every PR (see ci.yml).
+name: Race
+
+on:
+  push:
+    branches: [ main, master ]
+  schedule:
+    - cron: '0 6 * * 1' # Mondays 06:00 UTC
+  workflow_dispatch:
+
+jobs:
+  race:
+    runs-on: ubuntu-latest
+    steps:
+    - uses: actions/checkout@v4
+
+    - name: Set up Go
+      uses: actions/setup-go@v4
+      with:
+        go-version: '1.24'
+
+    - name: Cache Go modules
+      uses: actions/cache@v3
+      with:
+        path: ~/go/pkg/mod
+        key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+        restore-keys: |
+          ${{ runner.os }}-go-
+
+    - name: Download dependencies
+      run: go mod download
+
+    - name: Run tests with race detector
+      run: go test -race -count=1 ./...

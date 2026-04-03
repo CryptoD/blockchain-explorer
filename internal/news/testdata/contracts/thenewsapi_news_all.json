@@ -1,0 +1,12 @@
+{
+  "data": [
+    {
+      "title": "Contract headline",
+      "description": "Summary line",
+      "url": "https://example.com/article",
+      "image_url": "https://example.com/i.png",
+      "source": "Example News",
+      "published_at": "2020-06-15T12:00:00Z"
+    }
+  ]
+}

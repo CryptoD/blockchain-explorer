@@ -1,0 +1,6 @@
+{
+  "error": {
+    "code": "missing_query",
+    "message": "Missing query parameter"
+  }
+}

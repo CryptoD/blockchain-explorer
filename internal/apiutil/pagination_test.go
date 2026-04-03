@@ -74,6 +74,11 @@ func TestParsePagination_Table(t *testing.T) {
 			defaultSize: 50, maxSize: 200,
 			wantPage: 1, wantPageSize: 50, wantOffset: 0,
 		},
+		{
+			name: "page_capped_at_maxPage", query: "page=2000000&page_size=10",
+			defaultSize: 20, maxSize: 100,
+			wantPage: 1_000_000, wantPageSize: 10, wantOffset: (1_000_000 - 1) * 10,
+		},
 	}
 
 	for _, tt := range tests {
