@@ -168,3 +168,27 @@ func TestValidate_ConnectionPools(t *testing.T) {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
+
+func TestValidate_CDNBaseURL(t *testing.T) {
+	c := minimalValidBase()
+	c.CDNBaseURL = "https://d111111abcdef8.cloudfront.net"
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+	c.CDNBaseURL = "https://cdn.example.com/prefix"
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "CDN_BASE_URL") {
+		t.Fatalf("expected CDN_BASE_URL error, got %v", err)
+	}
+}
+
+func TestValidate_StaticAssetCacheMaxAge(t *testing.T) {
+	c := minimalValidBase()
+	c.StaticAssetCacheMaxAgeSeconds = -1
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "STATIC_ASSET_CACHE_MAX_AGE_SECONDS") {
+		t.Fatalf("expected static cache error, got %v", err)
+	}
+	c.StaticAssetCacheMaxAgeSeconds = 31536000
+	if err := c.Validate(); err != nil {
+		t.Fatal(err)
+	}
+}

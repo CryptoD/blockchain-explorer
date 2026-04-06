@@ -2,6 +2,7 @@ package server
 
 import (
 	"fmt"
+	"net/url"
 	"strings"
 
 	"github.com/CryptoD/blockchain-explorer/internal/config"
@@ -12,7 +13,7 @@ import (
 // HSTS is emitted only when the request is HTTPS (TLS or X-Forwarded-Proto: https) and
 // cfg.HSTSMaxAgeSeconds > 0 — set HSTS_MAX_AGE_SECONDS in production behind TLS (see docs/SECURITY_HEADERS.md).
 func securityHeadersMiddleware(cfg *config.Config) gin.HandlerFunc {
-	csp := buildContentSecurityPolicy()
+	csp := buildContentSecurityPolicy(cfg)
 	return func(c *gin.Context) {
 		h := c.Writer.Header()
 		h.Set("X-Content-Type-Options", "nosniff")
@@ -43,19 +44,34 @@ func isHTTPSRequest(c *gin.Context) bool {
 // buildContentSecurityPolicy matches static pages under /static/js and CDNs (Chart.js, qrcode).
 // No script 'unsafe-inline': page logic lives in external files (roadmap task 39). Styles may still use
 // 'unsafe-inline' where Tailwind or dynamic HTML requires it.
-func buildContentSecurityPolicy() string {
-	const (
-		// semicolons separate directives; keep single line for one header value
-		policy = "default-src 'self'; " +
-			"script-src 'self' https://cdn.jsdelivr.net; " +
-			"style-src 'self' 'unsafe-inline'; " +
-			"img-src 'self' data: https:; " +
-			"font-src 'self'; " +
-			"connect-src 'self'; " +
-			"frame-ancestors 'none'; " +
-			"base-uri 'self'; " +
-			"form-action 'self'; " +
-			"object-src 'none'"
-	)
-	return policy
+// When CDN_BASE_URL is set (same host used at build time for stamped HTML), allow that origin for scripts, styles, and images.
+func buildContentSecurityPolicy(cfg *config.Config) string {
+	scriptSrc := "'self' https://cdn.jsdelivr.net"
+	styleSrc := "'self'"
+	imgSrc := "'self' data: https:"
+	if cfg != nil {
+		if o := cdnOriginForCSP(cfg.CDNBaseURL); o != "" {
+			scriptSrc += " " + o
+			styleSrc += " " + o
+			imgSrc += " " + o
+		}
+	}
+	return "default-src 'self'; " +
+		"script-src " + scriptSrc + "; " +
+		"style-src " + styleSrc + " 'unsafe-inline'; " +
+		"img-src " + imgSrc + "; " +
+		"font-src 'self'; " +
+		"connect-src 'self'; " +
+		"frame-ancestors 'none'; " +
+		"base-uri 'self'; " +
+		"form-action 'self'; " +
+		"object-src 'none'"
+}
+
+func cdnOriginForCSP(cdnBaseURL string) string {
+	u, err := url.Parse(strings.TrimSpace(cdnBaseURL))
+	if err != nil || u.Scheme == "" || u.Host == "" {
+		return ""
+	}
+	return u.Scheme + "://" + u.Host
 }

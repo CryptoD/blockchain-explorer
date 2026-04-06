@@ -16,6 +16,8 @@
   },
   "scripts": {
     "build:css": "mkdir -p dist .tmp && sass src/styles/theme.scss .tmp/theme.css --no-source-map && npx tailwindcss -i .tmp/theme.css -o dist/styles.css --minify",
+    "stamp:assets": "node scripts/stamp-frontend-assets.cjs",
+    "build": "npm run build:css && npm run stamp:assets",
     "watch:css": "mkdir -p dist .tmp && sass --watch src/styles/theme.scss:.tmp/theme.css & npx tailwindcss -i .tmp/theme.css -o dist/styles.css --watch",
     "test:e2e": "playwright test",
     "test:e2e:ui": "playwright test --ui"

@@ -3,6 +3,8 @@ package server
 import (
 	"net/http"
 	"net/http/pprof"
+	"os"
+	"path/filepath"
 
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
@@ -27,16 +29,27 @@ func registerPprofRoutes(r *gin.Engine, cfg *config.Config) {
 
 // Route registration is split by bounded context so Run() does not contain a single mega route list (ROADMAP task 5).
 
+// htmlRootForStaticFiles returns build/stamped when present (npm run build output for versioned/CDN URLs),
+// else the repo root for unstamped *.html during local development.
+func htmlRootForStaticFiles() string {
+	const stampedIndex = "build/stamped/index.html"
+	if _, err := os.Stat(stampedIndex); err == nil {
+		return "build/stamped"
+	}
+	return "."
+}
+
 func registerStaticRoutes(r *gin.Engine) {
 	r.Static("/images", "./images")
 	r.Static("/dist", "./dist")
 	r.Static("/static", "./static")
-	r.StaticFile("/bitcoin.html", "bitcoin.html")
-	r.StaticFile("/", "index.html")
-	r.StaticFile("/admin", "admin.html")
-	r.StaticFile("/dashboard", "dashboard.html")
-	r.StaticFile("/profile", "profile.html")
-	r.StaticFile("/symbols", "symbols.html")
+	htmlRoot := htmlRootForStaticFiles()
+	r.StaticFile("/bitcoin.html", filepath.Join(htmlRoot, "bitcoin.html"))
+	r.StaticFile("/", filepath.Join(htmlRoot, "index.html"))
+	r.StaticFile("/admin", filepath.Join(htmlRoot, "admin.html"))
+	r.StaticFile("/dashboard", filepath.Join(htmlRoot, "dashboard.html"))
+	r.StaticFile("/profile", filepath.Join(htmlRoot, "profile.html"))
+	r.StaticFile("/symbols", filepath.Join(htmlRoot, "symbols.html"))
 
 	r.GET("/bitcoin", func(c *gin.Context) {
 		query := c.Query("q")

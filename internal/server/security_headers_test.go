@@ -58,7 +58,7 @@ func TestSecurityHeadersMiddleware_HSTS_https(t *testing.T) {
 }
 
 func TestBuildContentSecurityPolicy_ScriptsExternalAndCDN(t *testing.T) {
-	csp := buildContentSecurityPolicy()
+	csp := buildContentSecurityPolicy(nil)
 	for _, needle := range []string{
 		"default-src 'self'",
 		"script-src 'self' https://cdn.jsdelivr.net",
@@ -72,5 +72,13 @@ func TestBuildContentSecurityPolicy_ScriptsExternalAndCDN(t *testing.T) {
 	}
 	if strings.Contains(csp, "script-src 'self' 'unsafe-inline'") {
 		t.Fatalf("script-src should not allow inline scripts: %s", csp)
+	}
+}
+
+func TestBuildContentSecurityPolicy_CDNBaseURL(t *testing.T) {
+	cfg := &config.Config{CDNBaseURL: "https://d111111abcdef8.cloudfront.net"}
+	csp := buildContentSecurityPolicy(cfg)
+	if !strings.Contains(csp, "https://d111111abcdef8.cloudfront.net") {
+		t.Fatalf("expected CDN host in CSP: %s", csp)
 	}
 }

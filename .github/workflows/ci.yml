@@ -179,8 +179,8 @@ jobs:
     - name: Install dependencies
       run: npm ci
 
-    - name: Build CSS
-      run: npm run build:css
+    - name: Build frontend (CSS + stamped HTML)
+      run: npm run build
 
   docker:
     runs-on: ubuntu-latest
@@ -189,7 +189,7 @@ jobs:
     - uses: actions/checkout@v4
 
     - name: Build Docker image
-      run: docker build -t blockchain-explorer:latest .
+      run: docker build -t blockchain-explorer:latest --build-arg "ASSET_VERSION=${GITHUB_SHA:0:7}" .
 
     - name: Trivy image scan
       uses: aquasecurity/trivy-action@v0.35.0

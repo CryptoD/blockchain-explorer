@@ -2,6 +2,7 @@ package config
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 	"strconv"
 	"strings"
@@ -114,6 +115,13 @@ type Config struct {
 	ResponseCompressionEnabled bool
 	ResponseCompressionBrotli  bool
 
+	// CDNBaseURL is optional; must match CDN_BASE_URL used when running stamp-frontend-assets (no trailing slash).
+	// Expands CSP script-src / style-src / img-src for static assets served from a CDN (roadmap 49).
+	CDNBaseURL string
+	// StaticAssetCacheMaxAgeSeconds: when > 0, emit Cache-Control public,max-age,immutable for /static,/dist,/images.
+	// Use only with versioned asset URLs (npm run build). Env STATIC_ASSET_CACHE_MAX_AGE_SECONDS.
+	StaticAssetCacheMaxAgeSeconds int
+
 	// Sentry (optional; DSN from SENTRY_DSN)
 	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
 	SentryRelease          string  // SENTRY_RELEASE (build/version)
@@ -192,6 +200,8 @@ func Load() (*Config, error) {
 		OutboundHTTPIdleConnTimeoutSeconds:       GetEnvIntWithDefault("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS", 90),
 		ResponseCompressionEnabled:               responseCompressionEnabledFromEnv(),
 		ResponseCompressionBrotli:                responseCompressionBrotliFromEnv(),
+		CDNBaseURL:                               strings.TrimRight(strings.TrimSpace(os.Getenv("CDN_BASE_URL")), "/"),
+		StaticAssetCacheMaxAgeSeconds:            GetEnvIntWithDefault("STATIC_ASSET_CACHE_MAX_AGE_SECONDS", 0),
 		SentryEnvironment:                        strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
 		SentryRelease:                            strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:                   sentryTracesSampleRateForEnv(appEnv),
@@ -290,6 +300,16 @@ func (c *Config) Validate() error {
 
 	if err := c.validateConnectionPools(); err != nil {
 		return err
+	}
+
+	if c.StaticAssetCacheMaxAgeSeconds < 0 || c.StaticAssetCacheMaxAgeSeconds > 63072000 {
+		return fmt.Errorf("STATIC_ASSET_CACHE_MAX_AGE_SECONDS must be between 0 and 63072000 (0 disables long-cache headers)")
+	}
+	if strings.TrimSpace(c.CDNBaseURL) != "" {
+		u, err := url.Parse(c.CDNBaseURL)
+		if err != nil || u.Scheme == "" || u.Host == "" || u.Path != "" && u.Path != "/" {
+			return fmt.Errorf("CDN_BASE_URL must be a valid absolute URL with scheme and host only (no path), got %q", c.CDNBaseURL)
+		}
 	}
 
 	return nil

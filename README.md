@@ -333,6 +333,8 @@ npx playwright install chromium
 PLAYWRIGHT_BASE_URL=http://127.0.0.1:8080 npm run test:e2e
 ```
 
+Production Docker and CDN-oriented builds run **`npm run build`** (CSS + stamped HTML under `build/stamped/`). See [docs/CDN_STATIC_ASSETS.md](docs/CDN_STATIC_ASSETS.md) for versioned URLs, **`STATIC_ASSET_CACHE_MAX_AGE_SECONDS`**, and **`CDN_BASE_URL`**.
+
 ### Mutation testing (optional)
 
 [Gremlins](https://github.com/go-gremlins/gremlins) runs mutation testing on small, mostly pure packages to find gaps in unit tests. The repo provides [`scripts/mutation_test.sh`](scripts/mutation_test.sh) for **`internal/apperrors`**, **`internal/correlation`**, and **`internal/apiutil`** (fuzz test files are excluded). Install the CLI pinned to **v0.5.1** (compatible with the project Go toolchain), then run from the repository root:
