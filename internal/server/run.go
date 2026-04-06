@@ -48,6 +48,7 @@ func Run() error {
 		logging.WithComponent(logging.ComponentServer).WithError(err).Fatal("Failed to load configuration")
 	}
 	appConfig = cfg
+	httpClient = newRestyClientForConfig(cfg)
 
 	appEnv := cfg.AppEnv
 	if appEnv == "development" {
@@ -97,10 +98,8 @@ func Run() error {
 	r.Use(rateLimitMiddleware)
 	r.Use(csrfMiddleware)
 
-	// Initialize Redis client
-	rdb = redis.NewClient(&redis.Options{
-		Addr: cfg.RedisAddr(),
-	})
+	// Initialize Redis client (pool size, max active conns, and timeouts from config / env).
+	rdb = redis.NewClient(redisOptionsFromConfig(cfg))
 	appRepos = repos.NewStores(rdb)
 
 	// Configure Redis for LRU eviction

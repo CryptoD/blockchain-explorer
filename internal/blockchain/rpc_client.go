@@ -30,7 +30,7 @@ type GetBlockRPCClient struct {
 func NewGetBlockRPCClient(baseURL, apiKey string, httpClient *resty.Client) *GetBlockRPCClient {
 	if httpClient == nil {
 		httpClient = resty.New().
-			SetTimeout(10 * time.Second).
+			SetTimeout(30 * time.Second).
 			SetRetryCount(3)
 	}
 	return &GetBlockRPCClient{

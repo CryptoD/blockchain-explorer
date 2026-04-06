@@ -142,3 +142,29 @@ func TestValidate_HSTSMaxAge(t *testing.T) {
 		t.Fatalf("unexpected: %v", err)
 	}
 }
+
+func TestValidate_ConnectionPools(t *testing.T) {
+	c := minimalValidBase()
+	c.RedisPoolSize = 100
+	c.RedisMaxActiveConns = 50
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "REDIS_MAX_ACTIVE_CONNS") {
+		t.Fatalf("expected pool vs max-active error, got %v", err)
+	}
+	c.RedisMaxActiveConns = 128
+	c.OutboundHTTPTimeoutSeconds = 15
+	c.OutboundHTTPResponseHeaderTimeoutSeconds = 30
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_HTTP_RESPONSE_HEADER_TIMEOUT") {
+		t.Fatalf("expected response header timeout error, got %v", err)
+	}
+	c.OutboundHTTPResponseHeaderTimeoutSeconds = 10
+	c.OutboundHTTPMaxIdleConns = 10
+	c.OutboundHTTPMaxIdleConnsPerHost = 40
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_HTTP_MAX_IDLE_CONNS") {
+		t.Fatalf("expected max idle conns error, got %v", err)
+	}
+	c.OutboundHTTPMaxIdleConns = 128
+	c.OutboundHTTPMaxIdleConnsPerHost = 32
+	if err := c.Validate(); err != nil {
+		t.Fatalf("unexpected: %v", err)
+	}
+}

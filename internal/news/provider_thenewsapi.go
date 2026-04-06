@@ -51,7 +51,7 @@ func (p *TheNewsAPIProvider) Fetch(ctx context.Context, query string, limit int)
 		base = "https://api.thenewsapi.com"
 	}
 	if p.Client == nil {
-		p.Client = resty.New().SetTimeout(10 * time.Second).SetRetryCount(2)
+		p.Client = resty.New().SetTimeout(30 * time.Second).SetRetryCount(2)
 	}
 	if limit <= 0 {
 		limit = 20

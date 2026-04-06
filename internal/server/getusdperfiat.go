@@ -188,7 +188,7 @@ var (
 	apiKey  string
 	// httpClient is injectable for tests; production code uses a default resty client.
 	httpClient = resty.New().
-			SetTimeout(10 * time.Second).
+			SetTimeout(30 * time.Second).
 			SetRetryCount(3)
 	// blockchainClient is the pluggable blockchain data provider (nil uses baseURL/apiKey/httpClient).
 	blockchainClient blockchain.Blockchain

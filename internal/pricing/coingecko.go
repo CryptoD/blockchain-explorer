@@ -23,7 +23,7 @@ type CoinGeckoClient struct {
 func NewCoinGeckoClient(httpClient *resty.Client) *CoinGeckoClient {
 	if httpClient == nil {
 		httpClient = resty.New().
-			SetTimeout(10 * time.Second).
+			SetTimeout(30 * time.Second).
 			SetRetryCount(3)
 	}
 	return &CoinGeckoClient{HTTPClient: httpClient}
