@@ -5,6 +5,8 @@ import (
 	"strings"
 	"sync"
 	"time"
+
+	"golang.org/x/sync/singleflight"
 )
 
 // CachingClient wraps Client with an in-memory TTL cache for successful rate responses.
@@ -16,9 +18,11 @@ type CachingClient struct {
 	ratesAt     time.Time
 	ratesCached map[string]interface{}
 	ratesKey    string
+	ratesFlight singleflight.Group
 
 	btcUSDAt     time.Time
 	btcUSDCached float64
+	btcFlight    singleflight.Group
 }
 
 // NewCachingClient returns a Client that caches GetMultiCurrencyRatesIn and GetBTCUSD results.
@@ -55,17 +59,31 @@ func (c *CachingClient) GetMultiCurrencyRatesIn(ctx context.Context, currencies 
 	}
 	c.mu.Unlock()
 
-	rates, err := c.underlying.GetMultiCurrencyRatesIn(ctx, currencies)
+	v, err, _ := c.ratesFlight.Do(key, func() (interface{}, error) {
+		now := time.Now()
+		c.mu.Lock()
+		if c.ratesCached != nil && c.ratesKey == key && !now.After(c.ratesAt.Add(c.ttl)) {
+			out := shallowCopyRatesMap(c.ratesCached)
+			c.mu.Unlock()
+			return out, nil
+		}
+		c.mu.Unlock()
+
+		rates, err := c.underlying.GetMultiCurrencyRatesIn(ctx, currencies)
+		if err != nil {
+			return nil, err
+		}
+		c.mu.Lock()
+		c.ratesCached = rates
+		c.ratesKey = key
+		c.ratesAt = now
+		c.mu.Unlock()
+		return rates, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-
-	c.mu.Lock()
-	c.ratesCached = rates
-	c.ratesKey = key
-	c.ratesAt = now
-	c.mu.Unlock()
-	return rates, nil
+	return shallowCopyRatesMap(v.(map[string]interface{})), nil
 }
 
 func shallowCopyRatesMap(m map[string]interface{}) map[string]interface{} {
@@ -82,23 +100,37 @@ func shallowCopyRatesMap(m map[string]interface{}) map[string]interface{} {
 func (c *CachingClient) GetBTCUSD(ctx context.Context) (float64, error) {
 	now := time.Now()
 	c.mu.Lock()
-	if !now.After(c.btcUSDAt.Add(c.ttl)) && c.btcUSDAt != (time.Time{}) {
+	if !c.btcUSDAt.IsZero() && !now.After(c.btcUSDAt.Add(c.ttl)) {
 		v := c.btcUSDCached
 		c.mu.Unlock()
 		return v, nil
 	}
 	c.mu.Unlock()
 
-	v, err := c.underlying.GetBTCUSD(ctx)
+	v, err, _ := c.btcFlight.Do("btcusd", func() (interface{}, error) {
+		now := time.Now()
+		c.mu.Lock()
+		if !c.btcUSDAt.IsZero() && !now.After(c.btcUSDAt.Add(c.ttl)) {
+			x := c.btcUSDCached
+			c.mu.Unlock()
+			return x, nil
+		}
+		c.mu.Unlock()
+
+		val, err := c.underlying.GetBTCUSD(ctx)
+		if err != nil {
+			return float64(0), err
+		}
+		c.mu.Lock()
+		c.btcUSDCached = val
+		c.btcUSDAt = now
+		c.mu.Unlock()
+		return val, nil
+	})
 	if err != nil {
 		return 0, err
 	}
-
-	c.mu.Lock()
-	c.btcUSDCached = v
-	c.btcUSDAt = now
-	c.mu.Unlock()
-	return v, nil
+	return v.(float64), nil
 }
 
 // CachingCryptoFetcher wraps CryptoPriceFetcher with per-(coinID,fiat) TTL caching.
@@ -106,8 +138,14 @@ type CachingCryptoFetcher struct {
 	underlying CryptoPriceFetcher
 	ttl        time.Duration
 
-	mu    sync.Mutex
-	entry map[string]cachedCrypto
+	mu          sync.Mutex
+	entry       map[string]cachedCrypto
+	priceFlight singleflight.Group
+}
+
+type cryptoSFResult struct {
+	price float64
+	ok    bool
 }
 
 type cachedCrypto struct {
@@ -144,12 +182,24 @@ func (c *CachingCryptoFetcher) GetCryptoPriceInFiat(ctx context.Context, coinID,
 	}
 	c.mu.Unlock()
 
-	price, ok := c.underlying.GetCryptoPriceInFiat(ctx, coinID, fiat)
+	v, _, _ := c.priceFlight.Do(key, func() (interface{}, error) {
+		now := time.Now()
+		c.mu.Lock()
+		if e, ok := c.entry[key]; ok && !now.After(e.at.Add(c.ttl)) {
+			r := cryptoSFResult{price: e.price, ok: e.ok}
+			c.mu.Unlock()
+			return r, nil
+		}
+		c.mu.Unlock()
 
-	c.mu.Lock()
-	c.entry[key] = cachedCrypto{at: now, price: price, ok: ok}
-	c.mu.Unlock()
-	return price, ok
+		price, ok := c.underlying.GetCryptoPriceInFiat(ctx, coinID, fiat)
+		c.mu.Lock()
+		c.entry[key] = cachedCrypto{at: now, price: price, ok: ok}
+		c.mu.Unlock()
+		return cryptoSFResult{price: price, ok: ok}, nil
+	})
+	res := v.(cryptoSFResult)
+	return res.price, res.ok
 }
 
 // Compile-time check (underlying must implement CryptoPriceFetcher).

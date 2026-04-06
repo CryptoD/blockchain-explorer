@@ -23,6 +23,7 @@ import (
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/go-resty/resty/v2"
+	"golang.org/x/sync/singleflight"
 )
 
 func getUSDPerFiat(ctx context.Context, fiatCode string) (float64, bool) {
@@ -491,10 +492,25 @@ func isValidBlockHeight(blockHeight string) bool {
 	return err == nil
 }
 
+// Coalesces concurrent Redis miss + RPC rebuild for network:status (cache stampede protection).
+var networkStatusFlight singleflight.Group
+
+func shallowCopyStringMap(m map[string]interface{}) map[string]interface{} {
+	if m == nil {
+		return nil
+	}
+	out := make(map[string]interface{}, len(m))
+	for k, v := range m {
+		out[k] = v
+	}
+	return out
+}
+
 // updated to use rdb Redis client
 func getNetworkStatus() (map[string]interface{}, error) {
-	cacheKey := "network:status"
-	cached, err := rdb.Get(context.Background(), cacheKey).Result()
+	const cacheKey = "network:status"
+	bg := context.Background()
+	cached, err := rdb.Get(bg, cacheKey).Result()
 	if err == nil {
 		var data map[string]interface{}
 		if json.Unmarshal([]byte(cached), &data) == nil {
@@ -503,65 +519,74 @@ func getNetworkStatus() (map[string]interface{}, error) {
 		}
 	}
 	metrics.RecordNetworkStatus(false)
-	ctx := context.Background()
 
-	// Fetch block height
-	blockCountResp, err := callBlockchain(ctx, "getblockcount", []interface{}{})
+	v, err, _ := networkStatusFlight.Do(cacheKey, func() (interface{}, error) {
+		if cached2, err2 := rdb.Get(bg, cacheKey).Result(); err2 == nil {
+			var data map[string]interface{}
+			if json.Unmarshal([]byte(cached2), &data) == nil {
+				return data, nil
+			}
+		}
+		ctx := bg
+
+		blockCountResp, err := callBlockchain(ctx, "getblockcount", []interface{}{})
+		if err != nil {
+			return nil, err
+		}
+		var blockCountData map[string]interface{}
+		if err := json.Unmarshal(blockCountResp.Body(), &blockCountData); err != nil {
+			return nil, err
+		}
+		blockHeight, ok := blockCountData["result"].(float64)
+		if !ok {
+			return nil, errors.New("invalid block height response")
+		}
+
+		difficultyResp, err := callBlockchain(ctx, "getdifficulty", []interface{}{})
+		if err != nil {
+			return nil, err
+		}
+		var difficultyData map[string]interface{}
+		if err := json.Unmarshal(difficultyResp.Body(), &difficultyData); err != nil {
+			return nil, err
+		}
+		difficulty, ok := difficultyData["result"].(float64)
+		if !ok {
+			return nil, errors.New("invalid difficulty response")
+		}
+
+		hashRateResp, err := callBlockchain(ctx, "getnetworkhashps", []interface{}{})
+		if err != nil {
+			return nil, err
+		}
+		var hashRateData map[string]interface{}
+		if err := json.Unmarshal(hashRateResp.Body(), &hashRateData); err != nil {
+			return nil, err
+		}
+		raw, exists := hashRateData["result"]
+		if !exists {
+			return nil, errors.New("missing hash rate in response")
+		}
+		hashRate, ok := raw.(float64)
+		if !ok {
+			return nil, errors.New("invalid hash rate response")
+		}
+
+		result := map[string]interface{}{
+			"block_height": blockHeight,
+			"difficulty":   difficulty,
+			"hash_rate":    hashRate,
+		}
+		resultJSON, _ := json.Marshal(result)
+		if err := rdb.Set(bg, cacheKey, resultJSON, 1*time.Minute).Err(); err != nil {
+			logging.WithComponent(logging.ComponentNetwork).WithError(err).WithField(logging.FieldEvent, "cache_set_failed").Warn("redis set failed in getNetworkStatus")
+		}
+		return result, nil
+	})
 	if err != nil {
 		return nil, err
 	}
-	var blockCountData map[string]interface{}
-	if err := json.Unmarshal(blockCountResp.Body(), &blockCountData); err != nil {
-		return nil, err
-	}
-	blockHeight, ok := blockCountData["result"].(float64)
-	if !ok {
-		return nil, errors.New("invalid block height response")
-	}
-
-	// Fetch difficulty
-	difficultyResp, err := callBlockchain(ctx, "getdifficulty", []interface{}{})
-	if err != nil {
-		return nil, err
-	}
-	var difficultyData map[string]interface{}
-	if err := json.Unmarshal(difficultyResp.Body(), &difficultyData); err != nil {
-		return nil, err
-	}
-	difficulty, ok := difficultyData["result"].(float64)
-	if !ok {
-		return nil, errors.New("invalid difficulty response")
-	}
-
-	// Fetch network hash rate
-	hashRateResp, err := callBlockchain(ctx, "getnetworkhashps", []interface{}{})
-	if err != nil {
-		return nil, err
-	}
-	var hashRateData map[string]interface{}
-	if err := json.Unmarshal(hashRateResp.Body(), &hashRateData); err != nil {
-		return nil, err
-	}
-	raw, exists := hashRateData["result"]
-	if !exists {
-		return nil, errors.New("missing hash rate in response")
-	}
-	hashRate, ok := raw.(float64)
-	if !ok {
-		return nil, errors.New("invalid hash rate response")
-	}
-
-	result := map[string]interface{}{
-		"block_height": blockHeight,
-		"difficulty":   difficulty,
-		"hash_rate":    hashRate,
-	}
-	resultJSON, _ := json.Marshal(result)
-	err = rdb.Set(context.Background(), cacheKey, resultJSON, 1*time.Minute).Err()
-	if err != nil {
-		logging.WithComponent(logging.ComponentNetwork).WithError(err).WithField(logging.FieldEvent, "cache_set_failed").Warn("redis set failed in getNetworkStatus")
-	}
-	return result, nil
+	return shallowCopyStringMap(v.(map[string]interface{})), nil
 }
 
 // updated to use rdb Redis client
