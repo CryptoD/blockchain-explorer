@@ -2,7 +2,6 @@ package server
 
 import (
 	"context"
-	"crypto/sha256"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -92,29 +91,22 @@ func searchHandler(c *gin.Context) {
 		errorResponseFrom(c, err)
 		return
 	}
-	// Single marshal for ETag and body (avoids gin.JSON re-marshaling the same payload).
 	payload := gin.H{"type": resultType, "result": result}
-	jsonBytes, err := json.Marshal(payload)
+	nm, err := writeJSONConditional(c, payload, "public, max-age=60", "search", func() {
+		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_cache_hit").Debug("search cache hit")
+	})
 	if err != nil {
 		logging.WithComponent(logging.ComponentSearch).WithError(err).WithFields(qf).WithField(logging.FieldEvent, "marshal_failed").Error("failed to marshal search response")
 		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
 		return
 	}
-	etag := fmt.Sprintf("\"%x\"", sha256.Sum256(jsonBytes))
-	c.Header("ETag", etag)
-	c.Header("Cache-Control", "public, max-age=60")
-	if match := c.GetHeader("If-None-Match"); match == etag {
-		logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "search_cache_hit").Debug("search cache hit")
-		metrics.RecordSearchETag(true)
-		c.Status(304)
+	if nm {
 		return
 	}
-	metrics.RecordSearchETag(false)
 	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithFields(log.Fields{
 		logging.FieldResult: resultType,
 		logging.FieldEvent:  "search_success",
 	}).Info("search completed")
-	c.Data(http.StatusOK, "application/json; charset=utf-8", jsonBytes)
 }
 
 // exportSearchHandler returns blockchain search results as machine-friendly JSON for archival or analysis.
@@ -155,7 +147,9 @@ func exportSearchHandler(c *gin.Context) {
 func autocompleteHandler(c *gin.Context) {
 	query := c.Query("q")
 	if query == "" {
-		c.JSON(http.StatusOK, gin.H{"suggestions": []map[string]string{}})
+		if _, err := writeJSONConditional(c, gin.H{"suggestions": []map[string]string{}}, "public, max-age=300", "autocomplete", nil); err != nil {
+			errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		}
 		return
 	}
 
@@ -176,7 +170,9 @@ func autocompleteHandler(c *gin.Context) {
 		suggestions = append(suggestions, map[string]string{"type": "block", "value": query, "label": "Block " + query})
 	}
 
-	c.JSON(http.StatusOK, gin.H{"suggestions": suggestions})
+	if _, err := writeJSONConditional(c, gin.H{"suggestions": suggestions}, "public, max-age=60", "autocomplete", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+	}
 }
 
 // SymbolInfo represents a cryptocurrency or asset symbol
@@ -462,7 +458,7 @@ func advancedSearchHandler(c *gin.Context) {
 		"sort_dir":         sortOpts.Direction,
 	}).Info("advanced search completed")
 
-	c.JSON(http.StatusOK, gin.H{
+	resp := gin.H{
 		"data": paginatedResults,
 		"pagination": gin.H{
 			"page":        pagination.Page,
@@ -486,7 +482,10 @@ func advancedSearchHandler(c *gin.Context) {
 			"types":      advancedSearchAvailableTypes,
 			"categories": advancedSearchAvailableCategories,
 		},
-	})
+	}
+	if _, err := writeJSONConditional(c, resp, "public, max-age=60", "advanced_search", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+	}
 }
 
 // exportAdvancedSearchHandler returns advanced symbol search results as machine-friendly JSON for archival or analysis.
@@ -569,12 +568,17 @@ func getSymbolCategoriesHandler(c *gin.Context) {
 		"types":      {"crypto", "stock", "commodity", "forex"},
 		"categories": {"layer1", "layer2", "defi", "nft", "stablecoin", "payment", "exchange", "meme", "privacy", "infrastructure"},
 	}
-	c.JSON(http.StatusOK, categories)
+	if _, err := writeJSONConditional(c, categories, "public, max-age=3600", "symbol_categories", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+	}
 }
 
 func metricsHandler(c *gin.Context) {
 	if rdb == nil {
-		c.JSON(http.StatusOK, gin.H{"mempool_size": []map[string]interface{}{}, "block_times": []map[string]interface{}{}, "tx_volume": []map[string]interface{}{}})
+		payload := gin.H{"mempool_size": []map[string]interface{}{}, "block_times": []map[string]interface{}{}, "tx_volume": []map[string]interface{}{}}
+		if _, err := writeJSONConditional(c, payload, "public, max-age=30", "explorer_metrics", nil); err != nil {
+			errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		}
 		return
 	}
 	mempoolData, _ := rdb.ZRangeWithScores(ctx, "mempool_size", -100, -1).Result()
@@ -612,11 +616,14 @@ func metricsHandler(c *gin.Context) {
 		})
 	}
 
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"mempool_size": mempool,
 		"block_times":  blockTimes,
 		"tx_volume":    txVolumes,
-	})
+	}
+	if _, err := writeJSONConditional(c, payload, "public, max-age=30", "explorer_metrics", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+	}
 }
 
 func networkStatusHandler(c *gin.Context) {
@@ -625,7 +632,9 @@ func networkStatusHandler(c *gin.Context) {
 		handleError(c, err, http.StatusInternalServerError)
 		return
 	}
-	c.JSON(http.StatusOK, data)
+	if _, err := writeJSONConditional(c, data, "public, max-age=15", "network_status_http", nil); err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+	}
 }
 
 // Default and max points for price history (5-min interval: 288 = 24h, 8640 = 30d).
@@ -686,7 +695,9 @@ func priceHistoryHandler(c *gin.Context) {
 	}
 
 	c.Header("X-Price-History-Currency", currency)
-	c.JSON(http.StatusOK, result)
+	if _, err := writeJSONConditional(c, result, "public, max-age=60", "price_history", nil); err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+	}
 }
 
 // Redis key for BTC multi-currency rates. TTL set by RATES_CACHE_TTL_SECONDS (default 60s).
@@ -722,7 +733,11 @@ func ratesHandler(c *gin.Context) {
 			if unmarshalErr := json.Unmarshal([]byte(cached), &data); unmarshalErr == nil {
 				metrics.RecordRates(true)
 				rates := filterRatesByCurrencies(data, wantCurrencies)
-				c.JSON(http.StatusOK, rates)
+				ttl := ratesCacheTTL()
+				cc := fmt.Sprintf("public, max-age=%d", int(ttl.Seconds()))
+				if _, err := writeJSONConditional(c, rates, cc, "rates", nil); err != nil {
+					handleError(c, err, http.StatusInternalServerError)
+				}
 				return
 			}
 		}
@@ -752,7 +767,10 @@ func ratesHandler(c *gin.Context) {
 	ttl := ratesCacheTTL()
 	c.Header("X-Rates-Cache-TTL-Seconds", strconv.Itoa(int(ttl.Seconds())))
 	c.Header("X-Rates-Updated-At", time.Now().UTC().Format(time.RFC3339))
-	c.JSON(http.StatusOK, out)
+	cc := fmt.Sprintf("public, max-age=%d", int(ttl.Seconds()))
+	if _, err := writeJSONConditional(c, out, cc, "rates", nil); err != nil {
+		handleError(c, err, http.StatusInternalServerError)
+	}
 }
 
 // filterRatesByCurrencies returns a copy of the rates map containing only the requested currencies.

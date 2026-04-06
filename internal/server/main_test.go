@@ -447,6 +447,13 @@ func TestAdvancedSearchHandler(t *testing.T) {
 		if w.Code != 200 {
 			t.Fatalf("expected 200 for categories endpoint, got %d", w.Code)
 		}
+		etag := w.Header().Get("ETag")
+		if etag == "" {
+			t.Fatal("expected ETag on categories response")
+		}
+		if w.Header().Get("Cache-Control") == "" {
+			t.Fatal("expected Cache-Control on categories response")
+		}
 		var result map[string][]string
 		if err := json.Unmarshal(w.Body.Bytes(), &result); err != nil {
 			t.Fatalf("failed to parse categories response: %v", err)
@@ -456,6 +463,14 @@ func TestAdvancedSearchHandler(t *testing.T) {
 		}
 		if _, ok := result["categories"]; !ok {
 			t.Fatalf("expected 'categories' field in categories response")
+		}
+
+		req304 := httptest.NewRequest("GET", "/api/search/categories", nil)
+		req304.Header.Set("If-None-Match", etag)
+		w304 := httptest.NewRecorder()
+		router.ServeHTTP(w304, req304)
+		if w304.Code != 304 {
+			t.Fatalf("expected 304 for If-None-Match on categories, got %d", w304.Code)
 		}
 	})
 }

@@ -151,13 +151,19 @@ func constantTimeEqual(a, b string) bool {
 	return subtle.ConstantTimeCompare([]byte(a), []byte(b)) == 1
 }
 
-// RecordSearchETag records HTTP-level ETag cache hits (304) vs full responses.
-func RecordSearchETag(hit bool) {
+// RecordHTTPETag304 records conditional GET revalidation: notModified=true means 304 Not Modified.
+// endpoint is a low-cardinality label suffix (e.g. "search", "rates"); metrics layer is "{endpoint}_etag".
+func RecordHTTPETag304(endpoint string, notModified bool) {
 	outcome := "miss"
-	if hit {
+	if notModified {
 		outcome = "hit"
 	}
-	cacheEvents.WithLabelValues("search_etag", outcome).Inc()
+	cacheEvents.WithLabelValues(endpoint+"_etag", outcome).Inc()
+}
+
+// RecordSearchETag records HTTP-level ETag cache hits (304) vs full responses.
+func RecordSearchETag(hit bool) {
+	RecordHTTPETag304("search", hit)
 }
 
 // RecordNews records news cache: fresh Redis hit, stale fallback, or fetch from provider.

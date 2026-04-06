@@ -512,7 +512,7 @@ func newsBySymbolHandler(c *gin.Context) {
 	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
 	articles = applyUserNewsPrefs(articles, user, favoritesOnly)
 
-	c.JSON(http.StatusOK, news.ListResponse{
+	resp := news.ListResponse{
 		Data: articles,
 		Meta: news.Meta{
 			Provider: newsService.ProviderName(),
@@ -520,7 +520,11 @@ func newsBySymbolHandler(c *gin.Context) {
 			Stale:    stale,
 			Query:    query,
 		},
-	})
+	}
+	if _, err := writeJSONConditional(c, resp, "public, max-age=120", "news_symbol", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		return
+	}
 }
 
 // GET /api/news/portfolio/:id and GET /api/v1/news/portfolio/:id
@@ -586,7 +590,7 @@ func newsByPortfolioHandler(c *gin.Context) {
 	favoritesOnly := strings.ToLower(strings.TrimSpace(c.Query("favorites_only"))) == "true"
 	articles = applyUserNewsPrefs(articles, u, favoritesOnly)
 
-	c.JSON(http.StatusOK, news.ListResponse{
+	resp := news.ListResponse{
 		Data: articles,
 		Meta: news.Meta{
 			Provider: newsService.ProviderName(),
@@ -594,7 +598,11 @@ func newsByPortfolioHandler(c *gin.Context) {
 			Stale:    stale,
 			Query:    query,
 		},
-	})
+	}
+	if _, err := writeJSONConditional(c, resp, "private, max-age=60", "news_portfolio", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		return
+	}
 }
 
 func buildNewsQueryForSymbol(symbol string, cfg *config.Config) string {

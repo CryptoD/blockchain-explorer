@@ -671,7 +671,9 @@ func userProfileHandler(c *gin.Context) {
 		return
 	}
 
-	c.JSON(http.StatusOK, user)
+	if _, err := writeJSONConditional(c, user, "private, no-cache", "user_profile", nil); err != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+	}
 }
 
 // updateProfileRequest is the body for PATCH /api/user/profile (profile settings).
