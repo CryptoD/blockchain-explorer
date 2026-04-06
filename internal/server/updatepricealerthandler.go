@@ -9,6 +9,7 @@ import (
 	"regexp"
 	"sort"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
@@ -196,8 +197,25 @@ func applyPriceAlertUpdate(existing PriceAlert, req updatePriceAlertRequest) (Pr
 	return out, nil
 }
 
-// evaluatePriceAlerts periodically checks active alerts against current prices
-// and marks triggered alerts in Redis.
+// Background tick: one Redis SCAN iteration (COUNT hint) per call so work spreads across
+// 60s ticker invocations instead of scanning the full keyspace every time.
+const alertEvalScanCount = 200
+
+var (
+	alertEvalMu         sync.Mutex
+	alertEvalScanCursor uint64
+)
+
+// resetAlertEvalScanState resets the incremental SCAN cursor (e.g. after FlushDB in tests).
+func resetAlertEvalScanState() {
+	alertEvalMu.Lock()
+	alertEvalScanCursor = 0
+	alertEvalMu.Unlock()
+}
+
+// evaluatePriceAlerts checks one SCAN batch of alerts against current prices (MGET for values)
+// and marks triggered alerts in Redis. The next tick continues from the saved SCAN cursor until
+// the cursor returns to 0 (full pass over the keyspace for this iteration).
 func evaluatePriceAlerts() {
 	start := time.Now()
 	cid := correlation.NewID()
@@ -205,7 +223,7 @@ func evaluatePriceAlerts() {
 	if rdb == nil || assetPricer == nil {
 		return
 	}
-	jobLog.WithField(logging.FieldEvent, "alert_eval_cycle_start").Debug("alert evaluation cycle started")
+	jobLog.WithField(logging.FieldEvent, "alert_eval_tick_start").Debug("alert evaluation tick started")
 
 	ctx := context.Background()
 	var (
@@ -218,116 +236,149 @@ func evaluatePriceAlerts() {
 		updateErrors int
 	)
 
-	// Per-cycle price cache to avoid repeated upstream calls.
+	// Per-tick price cache to avoid repeated upstream calls within this batch.
 	priceCache := make(map[string]float64) // key: symbol|currency
 	priceOK := make(map[string]bool)
 
-	var cursor uint64
 	pattern := priceAlertKeyPrefix + "*"
-	for {
-		keys, next, err := rdb.Scan(ctx, cursor, pattern, 200).Result()
-		if err != nil {
-			jobLog.WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("alert evaluation scan failed")
+
+	alertEvalMu.Lock()
+	prevCursor := alertEvalScanCursor
+	keys, next, err := rdb.Scan(ctx, prevCursor, pattern, alertEvalScanCount).Result()
+	if err != nil {
+		alertEvalMu.Unlock()
+		jobLog.WithError(err).WithField(logging.FieldEvent, "redis_scan_failed").Warn("alert evaluation scan failed")
+		return
+	}
+	scannedKeys = len(keys)
+
+	if len(keys) == 0 {
+		alertEvalScanCursor = next
+		alertEvalMu.Unlock()
+		elapsed := time.Since(start)
+		metrics.RecordAlertEval(elapsed, triggered)
+		jobLog.WithFields(log.Fields{
+			logging.FieldEvent:   "alert_eval_tick",
+			"scanned_keys":       scannedKeys,
+			"evaluated":          evaluated,
+			"triggered":          triggered,
+			"skipped":            skipped,
+			"decode_errors":      decodeErrors,
+			"price_errors":       priceErrors,
+			"update_errors":      updateErrors,
+			"duration_ms":        elapsed.Milliseconds(),
+			"redis_scan_next":    next,
+			"full_keyspace_pass": next == 0,
+		}).Info("price alert evaluation tick complete")
+		return
+	}
+
+	vals, err := rdb.MGet(ctx, keys...).Result()
+	if err != nil {
+		alertEvalMu.Unlock()
+		jobLog.WithError(err).WithField(logging.FieldEvent, "redis_mget_failed").Warn("alert evaluation MGET failed")
+		return
+	}
+	alertEvalScanCursor = next
+	alertEvalMu.Unlock()
+
+	for i, key := range keys {
+		if i >= len(vals) {
 			break
 		}
-		cursor = next
-		scannedKeys += len(keys)
-		for _, key := range keys {
-			raw, err := rdb.Get(ctx, key).Result()
-			if err != nil || raw == "" {
-				continue
-			}
-			var a PriceAlert
-			if err := json.Unmarshal([]byte(raw), &a); err != nil {
-				decodeErrors++
-				continue
-			}
-			if !a.IsActive || a.Symbol == "" || a.Currency == "" || a.Threshold <= 0 || (a.Direction != "above" && a.Direction != "below") {
-				skipped++
-				continue
-			}
-			if a.TriggeredAt != nil {
-				skipped++
-				continue
-			}
+		raw, ok := vals[i].(string)
+		if !ok || raw == "" {
+			continue
+		}
+		var a PriceAlert
+		if err := json.Unmarshal([]byte(raw), &a); err != nil {
+			decodeErrors++
+			continue
+		}
+		if !a.IsActive || a.Symbol == "" || a.Currency == "" || a.Threshold <= 0 || (a.Direction != "above" && a.Direction != "below") {
+			skipped++
+			continue
+		}
+		if a.TriggeredAt != nil {
+			skipped++
+			continue
+		}
 
-			evaluated++
-			symbol := strings.ToLower(strings.TrimSpace(a.Symbol))
-			currency := strings.ToLower(strings.TrimSpace(a.Currency))
-			cacheKey := symbol + "|" + currency
+		evaluated++
+		symbol := strings.ToLower(strings.TrimSpace(a.Symbol))
+		currency := strings.ToLower(strings.TrimSpace(a.Currency))
+		cacheKey := symbol + "|" + currency
 
-			var price float64
-			ok := false
-			if v, exists := priceCache[cacheKey]; exists {
-				price = v
-				ok = priceOK[cacheKey]
+		var price float64
+		priceFound := false
+		if v, exists := priceCache[cacheKey]; exists {
+			price = v
+			priceFound = priceOK[cacheKey]
+		} else {
+			// Currently we treat alerts as crypto pricing (CoinGecko-backed).
+			if p, ok2 := assetPricer.GetAssetPriceInFiat(ctx, pricing.AssetClassCrypto, symbol, currency, 1); ok2 && p > 0 {
+				price = p
+				priceFound = true
 			} else {
-				// Currently we treat alerts as crypto pricing (CoinGecko-backed).
-				if p, ok2 := assetPricer.GetAssetPriceInFiat(ctx, pricing.AssetClassCrypto, symbol, currency, 1); ok2 && p > 0 {
-					price = p
-					ok = true
-				} else {
-					ok = false
-				}
-				priceCache[cacheKey] = price
-				priceOK[cacheKey] = ok
+				priceFound = false
 			}
-
-			if !ok {
-				priceErrors++
-				continue
-			}
-
-			isTriggered := (a.Direction == "above" && price >= a.Threshold) || (a.Direction == "below" && price <= a.Threshold)
-			if !isTriggered {
-				continue
-			}
-
-			now := time.Now().UTC()
-			a.IsActive = false
-			a.TriggeredAt = &now
-			a.Updated = now
-
-			b, _ := json.Marshal(a)
-			if err := rdb.Set(ctx, key, b, 0).Err(); err != nil {
-				updateErrors++
-				continue
-			}
-			triggered++
-
-			// Always create an in-app notification for a triggered alert.
-			createUserNotification(a.Username, Notification{
-				Type:    "price_alert",
-				Title:   "Price alert triggered",
-				Message: fmt.Sprintf("%s %s %.6g %s", strings.ToUpper(a.Symbol), a.Direction, a.Threshold, strings.ToUpper(a.Currency)),
-			})
-
-			// Best-effort email delivery for triggered alerts.
-			if strings.ToLower(strings.TrimSpace(a.DeliveryMethod)) == "email" {
-				user, ok := getUser(a.Username)
-				if ok && user.NotificationsEmail && user.EmailPriceAlerts && strings.TrimSpace(user.Email) != "" {
-					sendAlertTriggeredEmail(user, a)
-				}
-			}
+			priceCache[cacheKey] = price
+			priceOK[cacheKey] = priceFound
 		}
-		if cursor == 0 {
-			break
+
+		if !priceFound {
+			priceErrors++
+			continue
+		}
+
+		isTriggered := (a.Direction == "above" && price >= a.Threshold) || (a.Direction == "below" && price <= a.Threshold)
+		if !isTriggered {
+			continue
+		}
+
+		now := time.Now().UTC()
+		a.IsActive = false
+		a.TriggeredAt = &now
+		a.Updated = now
+
+		b, _ := json.Marshal(a)
+		if err := rdb.Set(ctx, key, b, 0).Err(); err != nil {
+			updateErrors++
+			continue
+		}
+		triggered++
+
+		// Always create an in-app notification for a triggered alert.
+		createUserNotification(a.Username, Notification{
+			Type:    "price_alert",
+			Title:   "Price alert triggered",
+			Message: fmt.Sprintf("%s %s %.6g %s", strings.ToUpper(a.Symbol), a.Direction, a.Threshold, strings.ToUpper(a.Currency)),
+		})
+
+		// Best-effort email delivery for triggered alerts.
+		if strings.ToLower(strings.TrimSpace(a.DeliveryMethod)) == "email" {
+			user, ok := getUser(a.Username)
+			if ok && user.NotificationsEmail && user.EmailPriceAlerts && strings.TrimSpace(user.Email) != "" {
+				sendAlertTriggeredEmail(user, a)
+			}
 		}
 	}
 
 	elapsed := time.Since(start)
 	metrics.RecordAlertEval(elapsed, triggered)
 	jobLog.WithFields(log.Fields{
-		logging.FieldEvent: "alert_eval_cycle",
-		"scanned_keys":     scannedKeys,
-		"evaluated":        evaluated,
-		"triggered":        triggered,
-		"skipped":          skipped,
-		"decode_errors":    decodeErrors,
-		"price_errors":     priceErrors,
-		"update_errors":    updateErrors,
-		"duration_ms":      elapsed.Milliseconds(),
-	}).Info("price alert evaluation cycle complete")
+		logging.FieldEvent:   "alert_eval_tick",
+		"scanned_keys":       scannedKeys,
+		"evaluated":          evaluated,
+		"triggered":          triggered,
+		"skipped":            skipped,
+		"decode_errors":      decodeErrors,
+		"price_errors":       priceErrors,
+		"update_errors":      updateErrors,
+		"duration_ms":        elapsed.Milliseconds(),
+		"redis_scan_next":    next,
+		"full_keyspace_pass": next == 0,
+	}).Info("price alert evaluation tick complete")
 }
 
 // -----------------------------

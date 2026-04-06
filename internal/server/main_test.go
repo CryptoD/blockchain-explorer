@@ -102,6 +102,7 @@ func TestSetPricingClient_MockNoNetwork(t *testing.T) {
 // helper to reset global cache between tests
 func resetCache() {
 	rdb.FlushDB(ctx)
+	resetAlertEvalScanState()
 }
 
 // helper to set cache for tests
