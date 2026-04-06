@@ -122,6 +122,11 @@ type Config struct {
 	// Use only with versioned asset URLs (npm run build). Env STATIC_ASSET_CACHE_MAX_AGE_SECONDS.
 	StaticAssetCacheMaxAgeSeconds int
 
+	// ShutdownGraceSeconds: max time for http.Server.Shutdown to drain in-flight requests on SIGINT/SIGTERM (default 30).
+	ShutdownGraceSeconds int
+	// RedisCloseTimeoutSeconds: max time to wait for Redis client Close() during shutdown (default 5).
+	RedisCloseTimeoutSeconds int
+
 	// Sentry (optional; DSN from SENTRY_DSN)
 	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
 	SentryRelease          string  // SENTRY_RELEASE (build/version)
@@ -202,6 +207,8 @@ func Load() (*Config, error) {
 		ResponseCompressionBrotli:                responseCompressionBrotliFromEnv(),
 		CDNBaseURL:                               strings.TrimRight(strings.TrimSpace(os.Getenv("CDN_BASE_URL")), "/"),
 		StaticAssetCacheMaxAgeSeconds:            GetEnvIntWithDefault("STATIC_ASSET_CACHE_MAX_AGE_SECONDS", 0),
+		ShutdownGraceSeconds:                     GetEnvIntWithDefault("SHUTDOWN_GRACE_SECONDS", 30),
+		RedisCloseTimeoutSeconds:                 GetEnvIntWithDefault("REDIS_CLOSE_TIMEOUT_SECONDS", 5),
 		SentryEnvironment:                        strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
 		SentryRelease:                            strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:                   sentryTracesSampleRateForEnv(appEnv),
@@ -222,6 +229,7 @@ func (c *Config) Validate() error {
 	}
 
 	c.ensureConnectionPoolDefaults()
+	c.ensureShutdownDefaults()
 
 	if strings.TrimSpace(c.GetBlockBaseURL) == "" || strings.TrimSpace(c.GetBlockAccessToken) == "" {
 		return fmt.Errorf("GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN are required")
@@ -312,6 +320,13 @@ func (c *Config) Validate() error {
 		}
 	}
 
+	if c.ShutdownGraceSeconds < 1 || c.ShutdownGraceSeconds > 600 {
+		return fmt.Errorf("SHUTDOWN_GRACE_SECONDS must be between 1 and 600")
+	}
+	if c.RedisCloseTimeoutSeconds < 1 || c.RedisCloseTimeoutSeconds > 120 {
+		return fmt.Errorf("REDIS_CLOSE_TIMEOUT_SECONDS must be between 1 and 120")
+	}
+
 	return nil
 }
 
@@ -349,6 +364,15 @@ func (c *Config) ensureConnectionPoolDefaults() {
 	}
 	if c.RedisMinIdleConns < 0 {
 		c.RedisMinIdleConns = 0
+	}
+}
+
+func (c *Config) ensureShutdownDefaults() {
+	if c.ShutdownGraceSeconds <= 0 {
+		c.ShutdownGraceSeconds = 30
+	}
+	if c.RedisCloseTimeoutSeconds <= 0 {
+		c.RedisCloseTimeoutSeconds = 5
 	}
 }
 

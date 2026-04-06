@@ -3,6 +3,7 @@ package server
 import (
 	"context"
 	"encoding/json"
+	"net/http"
 	"os"
 	"strings"
 	"time"
@@ -17,7 +18,6 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/pricing"
 	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/CryptoD/blockchain-explorer/internal/sentryutil"
-	"github.com/getsentry/sentry-go"
 	sentrygin "github.com/getsentry/sentry-go/gin"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -66,13 +66,6 @@ func Run() error {
 	baseURL = cfg.GetBlockBaseURL
 	apiKey = cfg.GetBlockAccessToken
 
-	pong, err := rdb.Ping(context.Background()).Result()
-	if err != nil {
-		logging.WithComponent(logging.ComponentRedis).WithError(err).WithField(logging.FieldEvent, "ping_failed").Warn("redis ping failed before startup")
-	}
-
-	// Initialize Sentry
-	_ = pong
 	if cfg.SentryDSN != "" {
 		if initErr := sentryutil.Init(cfg); initErr != nil {
 			logging.WithComponent(logging.ComponentSentry).WithError(initErr).Fatal("sentry.Init failed")
@@ -107,6 +100,10 @@ func Run() error {
 	// Configure Redis for LRU eviction
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")
 	rdb.ConfigSet(ctx, "maxmemory-policy", "allkeys-lru")
+
+	if _, err := rdb.Ping(context.Background()).Result(); err != nil {
+		logging.WithComponent(logging.ComponentRedis).WithError(err).WithField(logging.FieldEvent, "ping_failed").Warn("redis ping failed at startup")
+	}
 
 	// Initialize pluggable service clients
 	blockchainClient = blockchain.NewGetBlockRPCClient(baseURL, apiKey, httpClient)
@@ -187,6 +184,8 @@ func Run() error {
 	registerAPIV1Routes(r)
 	registerLegacyAPIRoutes(r)
 
+	shutdownBg, cancelBg := context.WithCancel(context.Background())
+
 	// Start background job to prefetch latest blocks and transactions
 	go func() {
 		ticker := time.NewTicker(30 * time.Second)
@@ -220,7 +219,11 @@ func Run() error {
 				}
 				metrics.RecordPrefetchTick(blocksErr, txsErr)
 			}()
-			<-ticker.C
+			select {
+			case <-shutdownBg.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
 
@@ -230,7 +233,11 @@ func Run() error {
 		defer ticker.Stop()
 		for {
 			collectMetrics()
-			<-ticker.C
+			select {
+			case <-shutdownBg.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
 
@@ -239,14 +246,14 @@ func Run() error {
 		ticker := time.NewTicker(60 * time.Second)
 		defer ticker.Stop()
 		for {
-			alertSvc.EvaluateAll(context.Background())
-			<-ticker.C
+			alertSvc.EvaluateAll(shutdownBg)
+			select {
+			case <-shutdownBg.Done():
+				return
+			case <-ticker.C:
+			}
 		}
 	}()
-
-	if cfg.SentryDSN != "" {
-		defer sentry.Flush(2 * time.Second)
-	}
 
 	addr := listenAddr()
 	logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
@@ -254,7 +261,11 @@ func Run() error {
 		"addr":             addr,
 	}).Info("HTTP server listening")
 
-	if err := r.Run(addr); err != nil {
+	srv := &http.Server{
+		Addr:    addr,
+		Handler: r,
+	}
+	if err := serveUntilShutdown(srv, cfg, cancelBg); err != nil {
 		logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
 			logging.FieldEvent: "server_exit",
 			"error":            err.Error(),

@@ -192,3 +192,16 @@ func TestValidate_StaticAssetCacheMaxAge(t *testing.T) {
 		t.Fatal(err)
 	}
 }
+
+func TestValidate_ShutdownTimeouts(t *testing.T) {
+	c := minimalValidBase()
+	c.ShutdownGraceSeconds = 601
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "SHUTDOWN_GRACE_SECONDS") {
+		t.Fatalf("expected SHUTDOWN_GRACE_SECONDS error, got %v", err)
+	}
+	c.ShutdownGraceSeconds = 30
+	c.RedisCloseTimeoutSeconds = 200
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "REDIS_CLOSE_TIMEOUT_SECONDS") {
+		t.Fatalf("expected REDIS_CLOSE_TIMEOUT_SECONDS error, got %v", err)
+	}
+}
