@@ -8,6 +8,9 @@
 // Optional:
 //   LOADTEST_SEARCH_QUERY — query string for /api/search (default: 1 block height)
 //
+// Profiling while load runs: start server with PPROF_ENABLED=true, then run
+//   ./scripts/loadtest/profile-with-k6.sh
+//
 // Scenarios run in parallel with separate arrival rates; tune in options below.
 
 import http from "k6/http";

@@ -59,7 +59,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 ## Phase 14 — Performance & scale
 
-- [ ] **41. Profile production-like load** — CPU/memory profiles under k6; fix top 3 alloc hotspots.
+- [x] **41. Profile production-like load** — CPU/memory profiles under k6; fix top 3 alloc hotspots. **Done:** opt-in `PPROF_ENABLED` + `/debug/pprof` ([`internal/server/routes.go`](internal/server/routes.go), [`internal/config/config.go`](internal/config/config.go)); [`scripts/loadtest/profile-with-k6.sh`](scripts/loadtest/profile-with-k6.sh); alloc/CPU fixes: single JSON marshal + `Data` for [`searchHandler`](internal/server/searchblockchain.go), compiled block-hash regexp, advanced search hoisted `strings.ToLower(query)`, `sort.Slice` instead of bubble sort, cached `available_filters` slices (init).
 - [ ] **42. Connection pool tuning** — Redis and HTTP client `MaxConns`, timeouts aligned with SLAs.
 - [ ] **43. Response compression** — gzip/brotli for JSON/HTML where beneficial; measure CPU tradeoff.
 - [ ] **44. Cache stampede protection** — Singleflight or short-lived locks for hot keys (network status, price).

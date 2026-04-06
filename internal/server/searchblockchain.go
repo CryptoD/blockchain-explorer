@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/http"
 	"regexp"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -21,6 +22,9 @@ import (
 	"github.com/gin-gonic/gin"
 	log "github.com/sirupsen/logrus"
 )
+
+// blockHashHexRE matches a 64-character hex string (possible block hash). Compiled once — regexp.MatchString per request allocated a new program.
+var blockHashHexRE = regexp.MustCompile(`^[0-9a-fA-F]{64}$`)
 
 func searchBlockchain(query string) (string, map[string]interface{}, error) {
 	query = strings.TrimSpace(query)
@@ -54,8 +58,7 @@ func searchBlockchain(query string) (string, map[string]interface{}, error) {
 
 	// Check if it might be a block hash (64-char hex, but not a tx ID)
 	if len(query) == 64 {
-		matched, _ := regexp.MatchString("^[0-9a-fA-F]{64}$", query)
-		if matched {
+		if blockHashHexRE.MatchString(query) {
 			blockDetails, err := getBlockDetails(query)
 			if err == nil {
 				return "block", blockDetails, nil
@@ -89,8 +92,9 @@ func searchHandler(c *gin.Context) {
 		errorResponseFrom(c, err)
 		return
 	}
-	// Marshal the result to JSON for ETag calculation
-	jsonBytes, err := json.Marshal(result)
+	// Single marshal for ETag and body (avoids gin.JSON re-marshaling the same payload).
+	payload := gin.H{"type": resultType, "result": result}
+	jsonBytes, err := json.Marshal(payload)
 	if err != nil {
 		logging.WithComponent(logging.ComponentSearch).WithError(err).WithFields(qf).WithField(logging.FieldEvent, "marshal_failed").Error("failed to marshal search response")
 		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
@@ -110,7 +114,7 @@ func searchHandler(c *gin.Context) {
 		logging.FieldResult: resultType,
 		logging.FieldEvent:  "search_success",
 	}).Info("search completed")
-	c.JSON(200, gin.H{"type": resultType, "result": result})
+	c.Data(http.StatusOK, "application/json; charset=utf-8", jsonBytes)
 }
 
 // exportSearchHandler returns blockchain search results as machine-friendly JSON for archival or analysis.
@@ -232,7 +236,30 @@ var (
 		{Symbol: "BAL", Name: "Balancer", Type: "crypto", Category: "defi", MarketCap: 180000000, Price: 3.20, Volume24h: 12000000, Change24h: -0.5, Rank: 20, IsActive: true, ListedSince: 1590969600},
 	}
 	symbolDBMutex sync.RWMutex
+
+	// Derived once from symbolDatabase — avoids per-request map/slice allocations in advanced search.
+	advancedSearchAvailableTypes      []string
+	advancedSearchAvailableCategories []string
 )
+
+func init() {
+	typeSet := make(map[string]struct{})
+	catSet := make(map[string]struct{})
+	for _, s := range symbolDatabase {
+		typeSet[s.Type] = struct{}{}
+		catSet[s.Category] = struct{}{}
+	}
+	advancedSearchAvailableTypes = make([]string, 0, len(typeSet))
+	for t := range typeSet {
+		advancedSearchAvailableTypes = append(advancedSearchAvailableTypes, t)
+	}
+	sort.Strings(advancedSearchAvailableTypes)
+	advancedSearchAvailableCategories = make([]string, 0, len(catSet))
+	for c := range catSet {
+		advancedSearchAvailableCategories = append(advancedSearchAvailableCategories, c)
+	}
+	sort.Strings(advancedSearchAvailableCategories)
+}
 
 // parseSearchFilters parses filter parameters from the request
 func parseSearchFilters(c *gin.Context) SearchFilters {
@@ -342,10 +369,10 @@ func matchesFilters(symbol SymbolInfo, filters SearchFilters) bool {
 }
 
 // sortSymbols sorts the symbols based on the given options
-func sortSymbols(symbols []SymbolInfo, sort SortOptions) {
-	less := func(i, j int) bool {
+func sortSymbols(symbols []SymbolInfo, opts SortOptions) {
+	sort.Slice(symbols, func(i, j int) bool {
 		var result bool
-		switch sort.Field {
+		switch opts.Field {
 		case "symbol":
 			result = symbols[i].Symbol < symbols[j].Symbol
 		case "name":
@@ -370,21 +397,11 @@ func sortSymbols(symbols []SymbolInfo, sort SortOptions) {
 			result = symbols[i].Rank < symbols[j].Rank
 		}
 
-		if sort.Direction == "desc" {
+		if opts.Direction == "desc" {
 			return !result
 		}
 		return result
-	}
-
-	// Simple bubble sort for simplicity (for larger datasets, use sort.Slice)
-	n := len(symbols)
-	for i := 0; i < n-1; i++ {
-		for j := 0; j < n-i-1; j++ {
-			if !less(j, j+1) {
-				symbols[j], symbols[j+1] = symbols[j+1], symbols[j]
-			}
-		}
-	}
+	})
 }
 
 // advancedSearchHandler handles advanced symbol search with filters and sorting
@@ -398,7 +415,9 @@ func advancedSearchHandler(c *gin.Context) {
 
 	// Parse filters and sort options
 	filters := parseSearchFilters(c)
-	sort := parseSortOptions(c)
+	sortOpts := parseSortOptions(c)
+
+	queryLower := strings.ToLower(query)
 
 	// Search and filter symbols
 	symbolDBMutex.RLock()
@@ -406,7 +425,6 @@ func advancedSearchHandler(c *gin.Context) {
 	for _, symbol := range symbolDatabase {
 		// Text search on symbol or name
 		if query != "" {
-			queryLower := strings.ToLower(query)
 			if !strings.Contains(strings.ToLower(symbol.Symbol), queryLower) &&
 				!strings.Contains(strings.ToLower(symbol.Name), queryLower) {
 				continue
@@ -421,7 +439,7 @@ func advancedSearchHandler(c *gin.Context) {
 	symbolDBMutex.RUnlock()
 
 	// Sort results
-	sortSymbols(results, sort)
+	sortSymbols(results, sortOpts)
 
 	// Pagination
 	total := len(results)
@@ -435,33 +453,13 @@ func advancedSearchHandler(c *gin.Context) {
 	}
 	paginatedResults := results[start:end]
 
-	// Get available filter options
-	availableTypes := make(map[string]bool)
-	availableCategories := make(map[string]bool)
-	symbolDBMutex.RLock()
-	for _, symbol := range symbolDatabase {
-		availableTypes[symbol.Type] = true
-		availableCategories[symbol.Category] = true
-	}
-	symbolDBMutex.RUnlock()
-
-	typeList := make([]string, 0, len(availableTypes))
-	for t := range availableTypes {
-		typeList = append(typeList, t)
-	}
-
-	categoryList := make([]string, 0, len(availableCategories))
-	for c := range availableCategories {
-		categoryList = append(categoryList, c)
-	}
-
 	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithFields(log.Fields{
 		logging.FieldEvent: "advanced_search_completed",
 		"result_count":     len(paginatedResults),
 		"total":            total,
 		"page":             pagination.Page,
-		"sort_by":          sort.Field,
-		"sort_dir":         sort.Direction,
+		"sort_by":          sortOpts.Field,
+		"sort_dir":         sortOpts.Direction,
 	}).Info("advanced search completed")
 
 	c.JSON(http.StatusOK, gin.H{
@@ -481,12 +479,12 @@ func advancedSearchHandler(c *gin.Context) {
 			"max_market_cap": filters.MaxMarketCap,
 		},
 		"sort_applied": gin.H{
-			"field":     sort.Field,
-			"direction": sort.Direction,
+			"field":     sortOpts.Field,
+			"direction": sortOpts.Direction,
 		},
 		"available_filters": gin.H{
-			"types":      typeList,
-			"categories": categoryList,
+			"types":      advancedSearchAvailableTypes,
+			"categories": advancedSearchAvailableCategories,
 		},
 	})
 }
@@ -501,13 +499,14 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 	query := strings.TrimSpace(c.Query("q"))
 	pagination := apiutil.ParsePagination(c, 20, 100)
 	filters := parseSearchFilters(c)
-	sort := parseSortOptions(c)
+	sortOpts := parseSortOptions(c)
+
+	queryLower := strings.ToLower(query)
 
 	symbolDBMutex.RLock()
 	var results []SymbolInfo
 	for _, symbol := range symbolDatabase {
 		if query != "" {
-			queryLower := strings.ToLower(query)
 			if !strings.Contains(strings.ToLower(symbol.Symbol), queryLower) &&
 				!strings.Contains(strings.ToLower(symbol.Name), queryLower) {
 				continue
@@ -519,7 +518,7 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 	}
 	symbolDBMutex.RUnlock()
 
-	sortSymbols(results, sort)
+	sortSymbols(results, sortOpts)
 
 	total := len(results)
 	start := pagination.Offset
@@ -550,8 +549,8 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 				"max_market_cap": filters.MaxMarketCap,
 			},
 			"sort_applied": gin.H{
-				"field":     sort.Field,
-				"direction": sort.Direction,
+				"field":     sortOpts.Field,
+				"direction": sortOpts.Direction,
 			},
 		},
 		"pagination": gin.H{

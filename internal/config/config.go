@@ -86,6 +86,9 @@ type Config struct {
 	MetricsToken          string // optional; if set, require Authorization: Bearer <token> or X-Metrics-Token
 	MetricsRateLimitPerIP int    // when MetricsEnabled and MetricsToken is empty: max GET /metrics per IP per window (0 = unlimited)
 
+	// Runtime profiling at /debug/pprof (net/http/pprof). Off by default; enable only for load/perf diagnosis.
+	PPROFEnabled bool
+
 	// Sentry (optional; DSN from SENTRY_DSN)
 	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
 	SentryRelease          string  // SENTRY_RELEASE (build/version)
@@ -146,6 +149,7 @@ func Load() (*Config, error) {
 		MetricsEnabled:              metricsEnabledFromEnv(),
 		MetricsToken:                strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
 		MetricsRateLimitPerIP:       GetEnvIntWithDefault("METRICS_RATE_LIMIT_PER_IP", 120),
+		PPROFEnabled:                strings.EqualFold(strings.TrimSpace(os.Getenv("PPROF_ENABLED")), "true"),
 		SentryEnvironment:           strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
 		SentryRelease:               strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:      sentryTracesSampleRateForEnv(appEnv),

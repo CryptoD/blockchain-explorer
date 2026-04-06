@@ -2,11 +2,28 @@ package server
 
 import (
 	"net/http"
+	"net/http/pprof"
 
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
 )
+
+// registerPprofRoutes mounts runtime profiling handlers (heap, CPU, etc.). Call only when cfg.PPROFEnabled.
+func registerPprofRoutes(r *gin.Engine, cfg *config.Config) {
+	if cfg == nil || !cfg.PPROFEnabled {
+		return
+	}
+	logging.WithComponent(logging.ComponentServer).WithFields(log.Fields{
+		logging.FieldEvent: "pprof_enabled",
+		"path":             "/debug/pprof/",
+	}).Warn("pprof endpoints are exposed; disable PPROF_ENABLED in production when not profiling")
+	// Index dispatches heap, profile, trace, cmdline, symbol, etc. (see net/http/pprof).
+	r.Any("/debug/pprof/*path", gin.WrapF(pprof.Index))
+	r.Any("/debug/pprof", gin.WrapF(pprof.Index))
+}
 
 // Route registration is split by bounded context so Run() does not contain a single mega route list (ROADMAP task 5).
 
@@ -28,6 +45,7 @@ func registerStaticRoutes(r *gin.Engine) {
 }
 
 func registerHealthAndMetricsRoutes(r *gin.Engine, cfg *config.Config) {
+	registerPprofRoutes(r, cfg)
 	r.GET("/healthz", healthHandler)
 	r.GET("/readyz", readinessHandler)
 

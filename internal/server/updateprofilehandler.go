@@ -333,6 +333,10 @@ func enforceMetricsUnauthenticatedRateLimit(c *gin.Context) bool {
 // Exempt paths (orchestrator probes, Prometheus): see docs/RATE_LIMITS.md.
 func rateLimitMiddleware(c *gin.Context) {
 	path := c.Request.URL.Path
+	if strings.HasPrefix(path, "/debug/pprof") {
+		c.Next()
+		return
+	}
 	if path == "/metrics" {
 		if enforceMetricsUnauthenticatedRateLimit(c) {
 			return
