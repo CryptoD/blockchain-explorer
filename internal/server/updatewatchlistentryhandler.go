@@ -490,7 +490,7 @@ func exportPortfoliosHandler(c *gin.Context) {
 		}
 	}
 
-	pagination := apiutil.ParsePagination(c, 20, 100)
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 	total := len(portfolios)
 	start := pagination.Offset
 	end := start + pagination.PageSize

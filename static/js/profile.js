@@ -210,7 +210,7 @@
         emptyEl.classList.add('hidden');
         listEl.innerHTML = '<tr><td class="py-3 text-text-secondary" colspan="7">Loading…</td></tr>';
         try {
-            const res = await authFetch(API_BASE + '/user/alerts');
+            const res = await authFetch(API_BASE + '/user/alerts?page_size=100');
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const payload = await res.json();
             const alerts = (payload && Array.isArray(payload.data)) ? payload.data : [];

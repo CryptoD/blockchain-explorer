@@ -6,6 +6,14 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
+// Standard list pagination defaults for JSON list endpoints (query: page, page_size).
+const (
+	DefaultPageSize = 20
+	MaxPageSize     = 100
+	// MaxPageSizeNews caps news feeds backed by external providers.
+	MaxPageSizeNews = 50
+)
+
 // Pagination captures common pagination parameters for list endpoints.
 type Pagination struct {
 	Page     int `json:"page"`

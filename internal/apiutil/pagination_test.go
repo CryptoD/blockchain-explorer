@@ -107,3 +107,10 @@ func TestParsePagination_Table(t *testing.T) {
 		})
 	}
 }
+
+func TestPaginationConstants(t *testing.T) {
+	if DefaultPageSize != 20 || MaxPageSize != 100 || MaxPageSizeNews != 50 {
+		t.Fatalf("unexpected pagination constants: DefaultPageSize=%d MaxPageSize=%d MaxPageSizeNews=%d",
+			DefaultPageSize, MaxPageSize, MaxPageSizeNews)
+	}
+}

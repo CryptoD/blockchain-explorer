@@ -489,7 +489,7 @@ func newsBySymbolHandler(c *gin.Context) {
 	}
 	symbol = sanitizeText(symbol, 50)
 
-	limit := apiutil.ParsePagination(c, 20, 50).PageSize
+	limit := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSizeNews).PageSize
 
 	// Build query: caller symbol plus default search (if configured).
 	query := buildNewsQueryForSymbol(symbol, appConfig)
@@ -561,7 +561,7 @@ func newsByPortfolioHandler(c *gin.Context) {
 		return
 	}
 
-	limit := apiutil.ParsePagination(c, 20, 50).PageSize
+	limit := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSizeNews).PageSize
 
 	query := buildNewsQueryForPortfolio(&p, appConfig)
 	if query == "" {
@@ -857,7 +857,27 @@ func listPriceAlertsHandler(c *gin.Context) {
 		return alerts[i].Created.After(alerts[j].Created)
 	})
 
-	c.JSON(http.StatusOK, gin.H{"data": alerts})
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
+	total := len(alerts)
+	start := pagination.Offset
+	if start > total {
+		start = total
+	}
+	end := start + pagination.PageSize
+	if end > total {
+		end = total
+	}
+	pageSlice := alerts[start:end]
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": pageSlice,
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+	})
 }
 
 func createPriceAlertHandler(c *gin.Context) {

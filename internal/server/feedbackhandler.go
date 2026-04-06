@@ -204,7 +204,7 @@ func listPortfoliosHandler(c *gin.Context) {
 	}
 
 	// Apply pagination using shared primitive
-	pagination := apiutil.ParsePagination(c, 20, 100)
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 	total := len(portfolios)
 	start := pagination.Offset
 	end := start + pagination.PageSize
@@ -482,7 +482,26 @@ func listWatchlistsHandler(c *gin.Context) {
 	sort.Slice(watchlists, func(i, j int) bool {
 		return watchlists[i].Updated.After(watchlists[j].Updated)
 	})
-	c.JSON(http.StatusOK, gin.H{"data": watchlists})
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
+	total := len(watchlists)
+	start := pagination.Offset
+	if start > total {
+		start = total
+	}
+	end := start + pagination.PageSize
+	if end > total {
+		end = total
+	}
+	pageSlice := watchlists[start:end]
+	c.JSON(http.StatusOK, gin.H{
+		"data": pageSlice,
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+	})
 }
 
 // createWatchlistHandler creates a new watchlist. Enforces per-user watchlist quota.

@@ -411,7 +411,7 @@ func advancedSearchHandler(c *gin.Context) {
 	logging.WithComponent(logging.ComponentSearch).WithFields(qf).WithField(logging.FieldEvent, "advanced_search_request").Debug("advanced search request received")
 
 	// Parse pagination (reused primitive)
-	pagination := apiutil.ParsePagination(c, 20, 100)
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 
 	// Parse filters and sort options
 	filters := parseSearchFilters(c)
@@ -497,7 +497,7 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 		return
 	}
 	query := strings.TrimSpace(c.Query("q"))
-	pagination := apiutil.ParsePagination(c, 20, 100)
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 	filters := parseSearchFilters(c)
 	sortOpts := parseSortOptions(c)
 

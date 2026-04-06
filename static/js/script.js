@@ -1092,7 +1092,7 @@
                 const target = window.__watchlistTarget;
                 if (!target || !target.address) return;
                 if (dropdown.classList.contains("hidden")) {
-                    fetch(API_BASE + "/user/watchlists", { credentials: "include" })
+                    fetch(API_BASE + "/user/watchlists?page_size=100", { credentials: "include" })
                         .then(function(res) {
                             if (res.status === 401) {
                                 if (errEl) {

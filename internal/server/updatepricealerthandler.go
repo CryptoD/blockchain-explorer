@@ -353,7 +353,7 @@ func listNotificationsHandler(c *gin.Context) {
 
 	includeDismissed := strings.ToLower(strings.TrimSpace(c.Query("include_dismissed"))) == "true"
 	unreadOnly := strings.ToLower(strings.TrimSpace(c.Query("unread_only"))) == "true"
-	limit := apiutil.ParsePagination(c, 20, 100).PageSize
+	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 
 	items := make([]Notification, 0, 64)
 	var cursor uint64
@@ -390,10 +390,26 @@ func listNotificationsHandler(c *gin.Context) {
 	sort.Slice(items, func(i, j int) bool {
 		return items[i].Created.After(items[j].Created)
 	})
-	if len(items) > limit {
-		items = items[:limit]
+	total := len(items)
+	start := pagination.Offset
+	if start > total {
+		start = total
 	}
-	c.JSON(http.StatusOK, gin.H{"data": items})
+	end := start + pagination.PageSize
+	if end > total {
+		end = total
+	}
+	pageItems := items[start:end]
+
+	c.JSON(http.StatusOK, gin.H{
+		"data": pageItems,
+		"pagination": gin.H{
+			"page":        pagination.Page,
+			"page_size":   pagination.PageSize,
+			"total":       total,
+			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
+		},
+	})
 }
 
 func updateNotificationHandler(c *gin.Context) {

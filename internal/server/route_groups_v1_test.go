@@ -9,6 +9,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
 	"github.com/gin-gonic/gin"
@@ -159,13 +160,22 @@ func TestV1_User_Notifications_Smoke(t *testing.T) {
 		t.Fatalf("notifications: %d %s", w.Code, w.Body.String())
 	}
 	var out struct {
-		Data []interface{} `json:"data"`
+		Data       []interface{} `json:"data"`
+		Pagination struct {
+			Page       int `json:"page"`
+			PageSize   int `json:"page_size"`
+			Total      int `json:"total"`
+			TotalPages int `json:"total_pages"`
+		} `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
 		t.Fatal(err)
 	}
 	if out.Data == nil {
 		t.Fatal("expected data array")
+	}
+	if out.Pagination.PageSize != apiutil.DefaultPageSize {
+		t.Fatalf("default page_size: want %d, got %d", apiutil.DefaultPageSize, out.Pagination.PageSize)
 	}
 }
 
@@ -195,6 +205,50 @@ func TestV1_User_Alerts_Unauthorized_Error(t *testing.T) {
 	w := getReq(t, r, "/api/v1/user/alerts", nil)
 	if w.Code != http.StatusUnauthorized {
 		t.Fatalf("want 401, got %d", w.Code)
+	}
+}
+
+func TestV1_User_Notifications_PageSizeCapped(t *testing.T) {
+	resetAuthState(t)
+	r := newAPITestRouter()
+	registerV1(t, r, "notifcap", "Str0ngPass")
+	cookie, csrf := loginV1(t, r, "notifcap", "Str0ngPass")
+	w := getReq(t, r, "/api/v1/user/notifications?page_size=99999", authHeader(cookie, csrf))
+	if w.Code != http.StatusOK {
+		t.Fatalf("notifications: %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Pagination struct {
+			PageSize int `json:"page_size"`
+		} `json:"pagination"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Pagination.PageSize != apiutil.MaxPageSize {
+		t.Fatalf("page_size capped: want %d, got %d", apiutil.MaxPageSize, out.Pagination.PageSize)
+	}
+}
+
+func TestV1_User_Alerts_PageSizeCapped(t *testing.T) {
+	resetAuthState(t)
+	r := newAPITestRouter()
+	registerV1(t, r, "alertcap", "Str0ngPass")
+	cookie, csrf := loginV1(t, r, "alertcap", "Str0ngPass")
+	w := getReq(t, r, "/api/v1/user/alerts?page_size=99999", authHeader(cookie, csrf))
+	if w.Code != http.StatusOK {
+		t.Fatalf("alerts: %d %s", w.Code, w.Body.String())
+	}
+	var out struct {
+		Pagination struct {
+			PageSize int `json:"page_size"`
+		} `json:"pagination"`
+	}
+	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
+		t.Fatal(err)
+	}
+	if out.Pagination.PageSize != apiutil.MaxPageSize {
+		t.Fatalf("page_size capped: want %d, got %d", apiutil.MaxPageSize, out.Pagination.PageSize)
 	}
 }
 

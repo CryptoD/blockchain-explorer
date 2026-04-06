@@ -7,6 +7,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **33**. I
 | **Request body size** | [`requestBodyLimitsMiddleware`](../internal/server/request_limits.go) on **POST**, **PUT**, **PATCH** | `MAX_REQUEST_BODY_BYTES` (default **1048576** = 1 MiB). **0** = unlimited (not recommended on the public internet). Maximum validated: **104857600** (100 MiB). |
 | **JSON nesting depth** | Same middleware for `Content-Type: application/json`; streaming parse via [`apiutil.ValidateJSONDepth`](../internal/apiutil/json_depth.go) | `MAX_JSON_DEPTH` (default **64**). **0** = skip nesting check (body size limit still applies). |
 | **CSV export rows** | Block and transaction CSV handlers cap the `limit` query parameter | `EXPORT_MAX_BLOCK_CSV_ROWS` and `EXPORT_MAX_TRANSACTION_CSV_ROWS` (default **0** = use package caps only). Non-zero values **lower** the effective cap but cannot exceed [`export.MaxBlockRows`](../internal/export/meta.go) / [`export.MaxTxRows`](../internal/export/meta.go). |
+| **List `page` / `page_size` (GET)** | [`apiutil.ParsePagination`](../internal/apiutil/pagination.go) on paginated list endpoints | Default **20** (`DefaultPageSize`), max **100** (`MaxPageSize`). Authenticated news portfolio/symbol lists use max **50** (`MaxPageSizeNews`). |
 
 ---
 
