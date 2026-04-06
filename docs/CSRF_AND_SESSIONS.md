@@ -2,6 +2,8 @@
 
 This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **31**. It describes how **sessions**, **CSRF tokens**, and **password change** interact, and where the behavior is implemented.
 
+For **multiple app replicas** behind a load balancer, see [HORIZONTAL_SCALING.md](HORIZONTAL_SCALING.md) (task **51**): shared Redis allows **non-sticky** sessions when Redis is healthy.
+
 ---
 
 ## Session lifecycle
