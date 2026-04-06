@@ -88,6 +88,7 @@ func Run() error {
 	r := gin.Default()
 
 	r.Use(securityHeadersMiddleware(cfg))
+	r.Use(responseCompressionMiddleware(cfg))
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: true, Timeout: 2 * time.Second}))
 	r.Use(correlationIDMiddleware())
 	r.Use(sentryUserScopeMiddleware())

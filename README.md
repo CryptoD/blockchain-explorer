@@ -270,6 +270,8 @@ bitcoin-explorer/
 
 [k6](https://k6.io/) and [Vegeta](https://github.com/tsenart/vegeta) scripts live under [`scripts/loadtest/`](scripts/loadtest/) (`k6.js`, `run-vegeta.sh`). Record baseline latency and error rates in [`scripts/loadtest/BASELINE.md`](scripts/loadtest/BASELINE.md) after runs on a consistent environment.
 
+The server applies **gzip** (and optionally **brotli** when clients advertise `br`) to JSON/HTML/text responses by default; set `RESPONSE_COMPRESSION_ENABLED=false` if a reverse proxy already compresses. Compare encoder CPU cost with `go test ./internal/server -bench=BenchmarkCompressLargeJSON -benchmem -run=^$`.
+
 ### Code style (Go)
 
 CI runs **`gofmt -s`**, **`goimports`**, and **[golangci-lint](https://golangci-lint.run/)** using [`.golangci.yml`](.golangci.yml) (standard preset). Formatting or lint failures fail the build.

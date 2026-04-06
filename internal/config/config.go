@@ -109,6 +109,11 @@ type Config struct {
 	OutboundHTTPMaxIdleConnsPerHost          int
 	OutboundHTTPIdleConnTimeoutSeconds       int
 
+	// Response compression for HTML/JSON/text (skips already-compressed static types).
+	// When Brotli is enabled, negotiates br then gzip via Accept-Encoding; otherwise gzip only (less CPU).
+	ResponseCompressionEnabled bool
+	ResponseCompressionBrotli  bool
+
 	// Sentry (optional; DSN from SENTRY_DSN)
 	SentryEnvironment      string  // SENTRY_ENVIRONMENT; defaults to AppEnv
 	SentryRelease          string  // SENTRY_RELEASE (build/version)
@@ -185,6 +190,8 @@ func Load() (*Config, error) {
 		OutboundHTTPMaxIdleConns:                 GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS", 128),
 		OutboundHTTPMaxIdleConnsPerHost:          GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS_PER_HOST", 32),
 		OutboundHTTPIdleConnTimeoutSeconds:       GetEnvIntWithDefault("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS", 90),
+		ResponseCompressionEnabled:               responseCompressionEnabledFromEnv(),
+		ResponseCompressionBrotli:                responseCompressionBrotliFromEnv(),
 		SentryEnvironment:                        strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
 		SentryRelease:                            strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:                   sentryTracesSampleRateForEnv(appEnv),
@@ -434,6 +441,26 @@ func metricsEnabledFromEnv() bool {
 	switch v {
 	case "", "1", "true", "yes":
 		return true
+	case "0", "false", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+func responseCompressionEnabledFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("RESPONSE_COMPRESSION_ENABLED")))
+	switch v {
+	case "0", "false", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+func responseCompressionBrotliFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("RESPONSE_COMPRESSION_BROTLI")))
+	switch v {
 	case "0", "false", "no":
 		return false
 	default:
