@@ -17,6 +17,8 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) tasks **34** (
 - **Never** build queries with string concatenation of untrusted input (e.g. `"... WHERE id = '" + id + "'"`).
 - Prefer ORM/query builders that bind parameters explicitly.
 
+A **Postgres-oriented schema sketch** for moving durable user state off Redis (not implemented) lives in [POSTGRES_MIGRATION_SKETCH.md](POSTGRES_MIGRATION_SKETCH.md) ([ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **50**).
+
 Re-audit when the first SQL-backed store is added.
 
 ---
