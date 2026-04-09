@@ -412,6 +412,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [SQL (N/A) and Redis key safety](docs/SQL_AND_REDIS_SAFETY.md) - no SQL in app; Redis keys, SCAN patterns, future SQL/Lua guidance
 - [Redis backup and restore](docs/REDIS_BACKUP_AND_RESTORE.md) - RDB/AOF, managed vs self-hosted, restore outline, data lost on total loss
 - [Disaster recovery drill (quarterly)](docs/DISASTER_RECOVERY_DRILL.md) - simulated Redis wipe, restore from backup, validation checklist, record template
+- [Feature flags (news & price alerts)](docs/FEATURE_FLAGS.md) - env defaults plus Redis `feature:news` / `feature:price_alerts` overrides
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 - [External penetration testing](docs/PENETRATION_TESTING.md) - cadence (annual / pre-launch), tracking findings in issues

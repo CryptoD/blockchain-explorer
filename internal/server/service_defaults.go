@@ -230,4 +230,5 @@ func ResetDefaultServices() {
 	alertSvc = &defaultAlertService{}
 	adminSvc = &defaultAdminService{}
 	feedbackSvc = &defaultFeedbackService{}
+	SetFeatureFlagsResolver(nil)
 }

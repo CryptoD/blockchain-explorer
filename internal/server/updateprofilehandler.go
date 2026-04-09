@@ -478,6 +478,9 @@ func IsInvalidCachedJSON(err error) bool {
 // GET /api/news/:symbol and GET /api/v1/news/:symbol
 // Public endpoint; returns deduplicated articles for the given symbol/keyword.
 func newsBySymbolHandler(c *gin.Context) {
+	if rejectIfNewsDisabled(c) {
+		return
+	}
 	if newsService == nil {
 		errorResponse(c, http.StatusServiceUnavailable, "news_unavailable", "News service is not configured")
 		return
@@ -530,6 +533,9 @@ func newsBySymbolHandler(c *gin.Context) {
 // GET /api/news/portfolio/:id and GET /api/v1/news/portfolio/:id
 // Authenticated endpoint; returns deduplicated articles relevant to the portfolio's assets.
 func newsByPortfolioHandler(c *gin.Context) {
+	if rejectIfNewsDisabled(c) {
+		return
+	}
 	if newsService == nil {
 		errorResponse(c, http.StatusServiceUnavailable, "news_unavailable", "News service is not configured")
 		return
@@ -830,6 +836,9 @@ func listPriceAlertsHandler(c *gin.Context) {
 		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
 		return
 	}
+	if rejectIfPriceAlertsDisabled(c) {
+		return
+	}
 	if rdb == nil {
 		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
 		return
@@ -893,6 +902,9 @@ func createPriceAlertHandler(c *gin.Context) {
 	username, _ := usernameVal.(string)
 	if strings.TrimSpace(username) == "" {
 		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rejectIfPriceAlertsDisabled(c) {
 		return
 	}
 	if rdb == nil {

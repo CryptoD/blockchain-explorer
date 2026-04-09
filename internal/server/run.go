@@ -12,6 +12,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/correlation"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
+	"github.com/CryptoD/blockchain-explorer/internal/featureflags"
 	"github.com/CryptoD/blockchain-explorer/internal/idempotency"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
@@ -99,6 +100,7 @@ func Run() error {
 	rdb = redis.NewClient(redisOptionsFromConfig(cfg))
 	appRepos = repos.NewStores(rdb)
 	idempotencyStore = idempotency.NewStore(rdb, cfg)
+	featureFlags = featureflags.NewResolver(rdb, cfg)
 
 	// Configure Redis for LRU eviction
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")

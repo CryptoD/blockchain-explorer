@@ -30,6 +30,9 @@ func updatePriceAlertHandler(c *gin.Context) {
 		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
 		return
 	}
+	if rejectIfPriceAlertsDisabled(c) {
+		return
+	}
 	if rdb == nil {
 		errorResponse(c, http.StatusServiceUnavailable, "storage_unavailable", "Alerts require Redis")
 		return
@@ -80,6 +83,9 @@ func deletePriceAlertHandler(c *gin.Context) {
 	username, _ := usernameVal.(string)
 	if strings.TrimSpace(username) == "" {
 		errorResponse(c, http.StatusUnauthorized, "unauthorized", "Login required")
+		return
+	}
+	if rejectIfPriceAlertsDisabled(c) {
 		return
 	}
 	if rdb == nil {
@@ -217,6 +223,9 @@ func resetAlertEvalScanState() {
 // and marks triggered alerts in Redis. The next tick continues from the saved SCAN cursor until
 // the cursor returns to 0 (full pass over the keyspace for this iteration).
 func evaluatePriceAlerts() {
+	if !priceAlertsFeatureAllowed(context.Background()) {
+		return
+	}
 	start := time.Now()
 	cid := correlation.NewID()
 	jobLog := logging.WithComponent(logging.ComponentAlerts).WithField(logging.FieldCorrelationID, cid)

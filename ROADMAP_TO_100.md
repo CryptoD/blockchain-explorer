@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–60** are **done** (Phases **11–15** through reliability: SLOs, health/readiness, circuit breakers, retry budgets, export idempotency, email dead-letter + metrics, Redis backup runbook, quarterly DR drill). Tasks **61–100** are **open** (feature flags through release certification). Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–61** are **done** (through **feature flags** for news and price alerts). Tasks **62–100** are **open**. Update this sentence when you complete more tasks.
 
 ---
 
@@ -84,7 +84,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **58. Dead letter for email queue** — If queue full persists: metrics + admin visibility. **Done:** in-process dead-letter ring ([`internal/email/email.go`](internal/email/email.go)); Prometheus `explorer_email_queue_depth`, `explorer_email_enqueue_dropped_total`, `explorer_email_dead_letter_entries` ([`internal/metrics/metrics.go`](internal/metrics/metrics.go)); `email_queue` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
 - [x] **59. Backup/restore runbook** — Redis RDB/AOF strategy; what user data is lost on total loss. **Done:** [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md).
 - [x] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup. **Done:** [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md); see also [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) §6.
-- [ ] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag).
+- [x] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag). **Done:** [`FEATURE_NEWS_ENABLED` / `FEATURE_PRICE_ALERTS_ENABLED`](internal/config/config.go); Redis `feature:news`, `feature:price_alerts` ([`internal/featureflags`](internal/featureflags/featureflags.go)); [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md); admin `feature_flags` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
 - [ ] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap.
 - [ ] **63. Queue depth alerts** — Prometheus alerts for email queue, background job backlog.
 

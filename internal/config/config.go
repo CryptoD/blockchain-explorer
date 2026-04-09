@@ -115,6 +115,10 @@ type Config struct {
 	// OutboundHTTPInboundAttemptBudget: when >0, each inbound HTTP request gets a cap on total outbound RoundTrip calls (context-propagated). 0 = off.
 	OutboundHTTPInboundAttemptBudget int
 
+	// FeatureFlags — env defaults; optional Redis overrides (see docs/FEATURE_FLAGS.md).
+	FeatureNewsEnabled        bool
+	FeaturePriceAlertsEnabled bool
+
 	// Idempotency* — Idempotency-Key on export routes; see internal/idempotency and docs/IDEMPOTENCY_KEYS.md.
 	IdempotencyEnabled          bool
 	IdempotencyTTLSeconds       int
@@ -223,6 +227,8 @@ func Load() (*Config, error) {
 		OutboundHTTPIdleConnTimeoutSeconds:        GetEnvIntWithDefault("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS", 90),
 		OutboundHTTPRetryCount:                    GetEnvIntWithDefault("OUTBOUND_HTTP_RETRY_COUNT", 3),
 		OutboundHTTPInboundAttemptBudget:          GetEnvIntWithDefault("OUTBOUND_HTTP_INBOUND_ATTEMPT_BUDGET", 0),
+		FeatureNewsEnabled:                        featureEnabledFromEnv("FEATURE_NEWS_ENABLED", true),
+		FeaturePriceAlertsEnabled:                 featureEnabledFromEnv("FEATURE_PRICE_ALERTS_ENABLED", true),
 		IdempotencyEnabled:                        idempotencyEnabledFromEnv(),
 		IdempotencyTTLSeconds:                     GetEnvIntWithDefault("IDEMPOTENCY_TTL_SECONDS", 86400),
 		IdempotencyMaxResponseBytes:               GetEnvIntWithDefault("IDEMPOTENCY_MAX_RESPONSE_BYTES", 262144),
@@ -463,6 +469,20 @@ func idempotencyEnabledFromEnv() bool {
 		return false
 	}
 	return strings.EqualFold(s, "true") || s == "1"
+}
+
+func featureEnabledFromEnv(key string, defaultOn bool) bool {
+	s := strings.TrimSpace(os.Getenv(key))
+	if s == "" {
+		return defaultOn
+	}
+	if strings.EqualFold(s, "false") || s == "0" {
+		return false
+	}
+	if strings.EqualFold(s, "true") || s == "1" {
+		return true
+	}
+	return defaultOn
 }
 
 func (c *Config) ensureIdempotencyDefaults() {

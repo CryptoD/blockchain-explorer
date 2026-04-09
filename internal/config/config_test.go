@@ -193,6 +193,26 @@ func TestValidate_StaticAssetCacheMaxAge(t *testing.T) {
 	}
 }
 
+func TestLoad_FeatureFlagsEnv(t *testing.T) {
+	t.Setenv("APP_ENV", "development")
+	t.Setenv("REDIS_HOST", "localhost")
+	t.Setenv("REDIS_PORT", "6379")
+	t.Setenv("GETBLOCK_BASE_URL", "https://example.test")
+	t.Setenv("GETBLOCK_ACCESS_TOKEN", "token")
+	t.Setenv("FEATURE_NEWS_ENABLED", "false")
+	t.Setenv("FEATURE_PRICE_ALERTS_ENABLED", "0")
+	cfg, err := Load()
+	if err != nil {
+		t.Fatal(err)
+	}
+	if cfg.FeatureNewsEnabled {
+		t.Fatal("expected FEATURE_NEWS_ENABLED=false")
+	}
+	if cfg.FeaturePriceAlertsEnabled {
+		t.Fatal("expected FEATURE_PRICE_ALERTS_ENABLED=0 to be false")
+	}
+}
+
 func TestValidate_Idempotency(t *testing.T) {
 	c := minimalValidBase()
 	c.IdempotencyTTLSeconds = 30

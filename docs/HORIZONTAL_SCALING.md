@@ -56,5 +56,6 @@ Set the same values on **every** app pod (Kubernetes Deployment, ECS tasks, etc.
 - [SQL_AND_REDIS_SAFETY.md](SQL_AND_REDIS_SAFETY.md) — Redis key layout.
 - [REDIS_BACKUP_AND_RESTORE.md](REDIS_BACKUP_AND_RESTORE.md) — RDB/AOF, backups, what is lost on total Redis loss.
 - [DISASTER_RECOVERY_DRILL.md](DISASTER_RECOVERY_DRILL.md) — quarterly simulated wipe + restore drill.
+- [FEATURE_FLAGS.md](FEATURE_FLAGS.md) — toggle news and price alerts via env or Redis without redeploy.
 - [THREAT_MODEL.md](THREAT_MODEL.md) — trust boundaries.
 - [POSTGRES_MIGRATION_SKETCH.md](POSTGRES_MIGRATION_SKETCH.md) — if you later move durable user state off Redis.

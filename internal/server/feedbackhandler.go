@@ -93,6 +93,15 @@ func adminStatusHandler(c *gin.Context) {
 	if emailService != nil {
 		payload["email_queue"] = emailService.QueueAdminSnapshot()
 	}
+	reqCtx := c.Request.Context()
+	if featureFlags != nil {
+		payload["feature_flags"] = featureFlags.Snapshot(reqCtx)
+	} else if appConfig != nil {
+		payload["feature_flags"] = gin.H{
+			"news":         appConfig.FeatureNewsEnabled,
+			"price_alerts": appConfig.FeaturePriceAlertsEnabled,
+		}
+	}
 	c.JSON(http.StatusOK, payload)
 }
 

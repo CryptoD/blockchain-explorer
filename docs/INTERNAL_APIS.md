@@ -4,7 +4,7 @@ Go’s `internal/` rule means code under `github.com/CryptoD/blockchain-explorer
 
 This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. Update it when you add a new `internal/` package or change a stability tier.
 
-**Inventory note:** The table below includes packages added through roadmap work through task **60** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). Extend the table when new `internal/` boundaries appear.
+**Inventory note:** The table below includes packages added through roadmap work through task **61** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/featureflags`](../internal/featureflags/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). Extend the table when new `internal/` boundaries appear.
 
 ---
 
@@ -33,6 +33,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. U
 | [`internal/outboundbreaker`](../internal/outboundbreaker/) | Evolving | [`WrapRoundTripper`](../internal/outboundbreaker/transport.go) per-host [`gobreaker`](https://github.com/sony/gobreaker) on shared outbound HTTP |
 | [`internal/retrybudget`](../internal/retrybudget/) | Evolving | [`WithAttemptBudget`](../internal/retrybudget/budget.go), [`WrapRoundTripper`](../internal/retrybudget/transport.go) for optional per-inbound caps |
 | [`internal/idempotency`](../internal/idempotency/) | Evolving | Redis-backed export idempotency ([`Store`](../internal/idempotency/store.go), [`RequestFingerprint`](../internal/idempotency/fingerprint.go)) |
+| [`internal/featureflags`](../internal/featureflags/) | Evolving | News and price-alert enablement ([`Resolver`](../internal/featureflags/featureflags.go)); Redis keys `feature:news`, `feature:price_alerts` ([`docs/FEATURE_FLAGS.md`](FEATURE_FLAGS.md)) |
 | [`internal/metrics`](../internal/metrics/) | Evolving | Histogram/counter names and [`Middleware`](../internal/metrics/metrics.go) labels—treat as operational contract, not semver |
 | [`internal/correlation`](../internal/correlation/) | Evolving | Request ID helpers and header names |
 | [`internal/sentryutil`](../internal/sentryutil/) | Evolving | `Init` and options (see package) |

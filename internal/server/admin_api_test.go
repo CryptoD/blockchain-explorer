@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
@@ -99,6 +100,42 @@ func TestAdmin_Status_IncludesEmailQueueWhenConfigured(t *testing.T) {
 	}
 	if _, ok := eq["dead_letter"]; !ok {
 		t.Fatalf("email_queue missing dead_letter: %#v", eq)
+	}
+}
+
+func TestAdmin_Status_IncludesFeatureFlagsFromAppConfig(t *testing.T) {
+	resetAuthState(t)
+	old := appConfig
+	t.Cleanup(func() { appConfig = old })
+	appConfig = &config.Config{
+		AppEnv:                    "development",
+		FeatureNewsEnabled:        true,
+		FeaturePriceAlertsEnabled: false,
+	}
+
+	r := adminTestRouter()
+	cookie, csrf := loginV1(t, r, "admin", "admin123")
+	w := getReq(t, r, "/api/v1/admin/status", authHeader(cookie, csrf))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	raw, ok := body["feature_flags"]
+	if !ok {
+		t.Fatal("missing feature_flags")
+	}
+	ff, ok := raw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("feature_flags type %T", raw)
+	}
+	if ff["news"] != true {
+		t.Fatalf("news: %v", ff["news"])
+	}
+	if ff["price_alerts"] != false {
+		t.Fatalf("price_alerts: %v", ff["price_alerts"])
 	}
 }
 
