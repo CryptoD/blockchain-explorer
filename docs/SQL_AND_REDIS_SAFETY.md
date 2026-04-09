@@ -43,6 +43,7 @@ Risks to manage are different:
 
 - Redis is reachable only from the **application network** (see [THREAT_MODEL.md](THREAT_MODEL.md)).
 - Compromise of Redis still exposes data at rest; this document does not replace **encryption at rest** or **Redis ACLs** where required by policy.
+- **Backups and disaster recovery:** see [REDIS_BACKUP_AND_RESTORE.md](REDIS_BACKUP_AND_RESTORE.md) (RDB/AOF, restore outline, what user data is lost if Redis is wiped without backup).
 
 ---
 

@@ -59,7 +59,9 @@ func registerStaticRoutes(r *gin.Engine) {
 
 func registerHealthAndMetricsRoutes(r *gin.Engine, cfg *config.Config) {
 	registerPprofRoutes(r, cfg)
-	r.GET("/healthz", healthHandler)
+	r.GET("/health", livenessHandler)
+	r.GET("/healthz", livenessHandler)
+	r.GET("/ready", readinessHandler)
 	r.GET("/readyz", readinessHandler)
 
 	if cfg.MetricsEnabled {

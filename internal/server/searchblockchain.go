@@ -124,13 +124,16 @@ func exportSearchHandler(c *gin.Context) {
 		errorResponse(c, http.StatusBadRequest, "query_too_long", "Query too long")
 		return
 	}
+	idemKey, idemDone := beginExportIdempotency(c)
+	if idemDone {
+		return
+	}
 	resultType, result, err := explorerSvc.SearchBlockchain(c.Request.Context(), query)
 	if err != nil {
 		errorResponseFrom(c, err)
 		return
 	}
-	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"export_meta": gin.H{
 			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
 			"export_version":   export.Version,
@@ -141,7 +144,16 @@ func exportSearchHandler(c *gin.Context) {
 			"type":   resultType,
 			"result": result,
 		},
-	})
+	}
+	body, mErr := json.Marshal(payload)
+	if mErr != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		return
+	}
+	const ct = "application/json; charset=utf-8"
+	commitExportJSONIdempotency(c, idemKey, http.StatusOK, ct, body)
+	c.Header("Content-Type", ct)
+	c.Data(http.StatusOK, ct, body)
 }
 
 func autocompleteHandler(c *gin.Context) {
@@ -495,6 +507,10 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 	if !checkExportRateLimit(c, false) {
 		return
 	}
+	idemKey, idemDone := beginExportIdempotency(c)
+	if idemDone {
+		return
+	}
 	query := strings.TrimSpace(c.Query("q"))
 	pagination := apiutil.ParsePagination(c, apiutil.DefaultPageSize, apiutil.MaxPageSize)
 	filters := parseSearchFilters(c)
@@ -532,8 +548,7 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 	if total >= 50 || pagination.PageSize >= 50 {
 		logLargeExport(c, "search/advanced/export", map[string]interface{}{"total": total, "page_size": pagination.PageSize, "query": query})
 	}
-	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"export_meta": gin.H{
 			"export_timestamp": time.Now().UTC().Format(time.RFC3339),
 			"export_version":   export.Version,
@@ -559,7 +574,16 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
 		},
 		"data": paginatedResults,
-	})
+	}
+	body, mErr := json.Marshal(payload)
+	if mErr != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		return
+	}
+	const ctAdv = "application/json; charset=utf-8"
+	commitExportJSONIdempotency(c, idemKey, http.StatusOK, ctAdv, body)
+	c.Header("Content-Type", ctAdv)
+	c.Data(http.StatusOK, ctAdv, body)
 }
 
 // getSymbolCategoriesHandler returns available symbol categories

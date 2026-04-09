@@ -344,7 +344,7 @@ func rateLimitMiddleware(c *gin.Context) {
 		c.Next()
 		return
 	}
-	if path == "/healthz" || path == "/readyz" {
+	if path == "/health" || path == "/healthz" || path == "/ready" || path == "/readyz" {
 		c.Next()
 		return
 	}

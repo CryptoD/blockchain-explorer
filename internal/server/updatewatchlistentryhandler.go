@@ -2,6 +2,7 @@ package server
 
 import (
 	"encoding/csv"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -130,6 +131,10 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 		}
 		return
 	}
+	idemKey, idemDone := beginExportIdempotency(c)
+	if idemDone {
+		return
+	}
 
 	// Safe filename: alphanumeric, dash, underscore only
 	var b strings.Builder
@@ -171,7 +176,9 @@ func exportPortfolioCSVHandler(c *gin.Context) {
 	snap := portfolioExportSnapshot(p)
 	if err := export.WritePortfolioHoldingsCSV(ctx, c.Writer, valuationCurrency, usdPerFiat, p.Created, p.Updated, snap, exportPriceResolver()); err != nil {
 		logging.WithComponent(logging.ComponentExport).WithError(err).WithField(logging.FieldEvent, "csv_write_failed").Error("CSV export write failed")
+		return
 	}
+	commitExportStreamIdempotency(c, idemKey)
 }
 
 // exportPortfolioPDFHandler generates and streams a portfolio summary report as PDF. Requires authentication.
@@ -188,6 +195,10 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 		} else {
 			errorResponse(c, http.StatusInternalServerError, "portfolio_fetch_failed", "Failed to load portfolio")
 		}
+		return
+	}
+	idemKeyPDF, idemDonePDF := beginExportIdempotency(c)
+	if idemDonePDF {
 		return
 	}
 	if len(p.Items) > 20 {
@@ -230,6 +241,7 @@ func exportPortfolioPDFHandler(c *gin.Context) {
 		errorResponse(c, http.StatusInternalServerError, "pdf_generation_failed", "Failed to generate PDF")
 		return
 	}
+	commitExportStreamIdempotency(c, idemKeyPDF)
 }
 
 func effectiveBlockCSVRowCap() int {
@@ -305,6 +317,10 @@ func exportBlocksCSVHandler(c *gin.Context) {
 	if rangeSize >= 100 || limit >= 1000 {
 		logLargeExport(c, "blocks/export/csv", map[string]interface{}{"start_height": start, "end_height": end, "range_size": rangeSize, "limit": limit})
 	}
+	idemKeyBlocks, idemDoneBlocks := beginExportIdempotency(c)
+	if idemDoneBlocks {
+		return
+	}
 	filename := fmt.Sprintf("blocks-%d-%d.csv", start, end)
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
@@ -341,7 +357,9 @@ func exportBlocksCSVHandler(c *gin.Context) {
 	w.Flush()
 	if w.Error() != nil {
 		logging.WithComponent(logging.ComponentExport).WithError(w.Error()).WithField(logging.FieldEvent, "csv_write_failed").Error("blocks CSV export write failed")
+		return
 	}
+	commitExportStreamIdempotency(c, idemKeyBlocks)
 }
 
 // exportTransactionsCSVHandler streams transactions from blocks in a height range as CSV.
@@ -397,6 +415,10 @@ func exportTransactionsCSVHandler(c *gin.Context) {
 	if rangeSize >= 50 || limit >= 2000 {
 		logLargeExport(c, "transactions/export/csv", map[string]interface{}{"start_height": start, "end_height": end, "range_size": rangeSize, "limit": limit})
 	}
+	idemKeyTx, idemDoneTx := beginExportIdempotency(c)
+	if idemDoneTx {
+		return
+	}
 	filename := fmt.Sprintf("transactions-%d-%d.csv", start, end)
 	c.Header("Content-Type", "text/csv; charset=utf-8")
 	c.Header("Content-Disposition", fmt.Sprintf("attachment; filename=%q", filename))
@@ -441,13 +463,19 @@ func exportTransactionsCSVHandler(c *gin.Context) {
 	w.Flush()
 	if w.Error() != nil {
 		logging.WithComponent(logging.ComponentExport).WithError(w.Error()).WithField(logging.FieldEvent, "csv_write_failed").Error("transactions CSV export write failed")
+		return
 	}
+	commitExportStreamIdempotency(c, idemKeyTx)
 }
 
 // exportPortfoliosHandler returns portfolios as machine-friendly JSON for archival or analysis.
 // Requires authentication. Respects pagination (page, page_size) and sort (sort_by, sort_dir).
 func exportPortfoliosHandler(c *gin.Context) {
 	if !checkExportRateLimit(c, false) {
+		return
+	}
+	idemKey, idemDone := beginExportIdempotency(c)
+	if idemDone {
 		return
 	}
 	username, _ := c.Get("username")
@@ -530,8 +558,7 @@ func exportPortfoliosHandler(c *gin.Context) {
 			Items:             itemsWithVal,
 		})
 	}
-	c.Header("Content-Type", "application/json; charset=utf-8")
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"export_meta": gin.H{
 			"export_timestamp":    time.Now().UTC().Format(time.RFC3339),
 			"export_version":      export.Version,
@@ -546,5 +573,14 @@ func exportPortfoliosHandler(c *gin.Context) {
 			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
 		},
 		"data": dataWithValuation,
-	})
+	}
+	body, mErr := json.Marshal(payload)
+	if mErr != nil {
+		errorResponse(c, http.StatusInternalServerError, "marshal_failed", "Failed to marshal response")
+		return
+	}
+	const ctPF = "application/json; charset=utf-8"
+	commitExportJSONIdempotency(c, idemKey, http.StatusOK, ctPF, body)
+	c.Header("Content-Type", ctPF)
+	c.Data(http.StatusOK, ctPF, body)
 }

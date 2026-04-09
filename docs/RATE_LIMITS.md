@@ -24,8 +24,8 @@ These routes are **not** counted against `RATE_LIMIT_PER_IP` / `RATE_LIMIT_PER_U
 
 | Path | Reason |
 |------|--------|
-| **`GET /healthz`** | Liveness: one Redis `PING` + small JSON (`healthHandler`). Orchestrators often probe **more than** 10×/min per IP; exempting avoids **429** on healthy pods. |
-| **`GET /readyz`** | Readiness: Redis `PING` and optionally a lightweight external RPC when `READY_CHECK_EXTERNAL=true`. Same probe-frequency rationale as liveness. **Note:** `readyz` can do more work per request when external checks are enabled; keep scrape intervals conservative and prefer network isolation. |
+| **`GET /health`**, **`GET /healthz`** | **Liveness** (aliases): small JSON only—**no** Redis or RPC ([`livenessHandler`](../internal/server/getusdperfiat.go)). Orchestrators often probe **more than** 10×/min per IP; exempting avoids **429** on healthy pods. |
+| **`GET /ready`**, **`GET /readyz`** | **Readiness** (aliases): Redis `PING` and optionally a lightweight external RPC when `READY_CHECK_EXTERNAL=true` ([`readinessHandler`](../internal/server/getusdperfiat.go)). Same probe-frequency rationale. **Note:** readiness can do more work per request when external checks are enabled; keep intervals conservative. |
 
 All other routes are subject to the global limit, including **`GET /api/v1/metrics`** (explorer JSON metrics) and **API search** routes.
 
@@ -45,7 +45,7 @@ Prometheus scrapes are **exempt from the global** limiter so scrape intervals do
 ## Operational guidance
 
 - **Public deployments:** Set **`METRICS_TOKEN`**, restrict `/metrics` at the **load balancer** or network policy (Prometheus only), and keep **`METRICS_RATE_LIMIT_PER_IP`** at a sensible default.
-- **High-frequency probes:** `/healthz` and `/readyz` are exempt from the global limit; tune **`READY_CHECK_EXTERNAL`** (and external RPC cost) if you rely on deep readiness checks.
+- **High-frequency probes:** `/health`, `/healthz`, `/ready`, and `/readyz` are exempt from the global limit; tune **`READY_CHECK_EXTERNAL`** (and external RPC cost) if you rely on deep readiness checks.
 - **Per-route limits:** Stricter limits apply to **export** endpoints (`EXPORT_RATE_LIMIT_*` in config); see [`checkExportRateLimit`](../internal/server/init.go).
 
 ---

@@ -82,14 +82,18 @@ func adminStatusHandler(c *gin.Context) {
 	// Get rate limiting stats
 	activeLimits := adminSvc.ActiveRateLimitEntries(ctx)
 
-	c.JSON(http.StatusOK, gin.H{
+	payload := gin.H{
 		"status":             "ok",
 		"user":               username,
 		"role":               role,
 		"redis_memory":       info,
 		"active_rate_limits": activeLimits,
 		"timestamp":          time.Now().Unix(),
-	})
+	}
+	if emailService != nil {
+		payload["email_queue"] = emailService.QueueAdminSnapshot()
+	}
+	c.JSON(http.StatusOK, payload)
 }
 
 // getActiveRateLimitCount returns the number of active rate limit entries.

@@ -12,6 +12,7 @@ import (
 	"github.com/CryptoD/blockchain-explorer/internal/config"
 	"github.com/CryptoD/blockchain-explorer/internal/correlation"
 	"github.com/CryptoD/blockchain-explorer/internal/email"
+	"github.com/CryptoD/blockchain-explorer/internal/idempotency"
 	"github.com/CryptoD/blockchain-explorer/internal/logging"
 	"github.com/CryptoD/blockchain-explorer/internal/metrics"
 	"github.com/CryptoD/blockchain-explorer/internal/news"
@@ -85,6 +86,7 @@ func Run() error {
 	r.Use(responseCompressionMiddleware(cfg))
 	r.Use(sentrygin.New(sentrygin.Options{Repanic: true, Timeout: 2 * time.Second}))
 	r.Use(correlationIDMiddleware())
+	r.Use(inboundRetryBudgetMiddleware(cfg))
 	r.Use(sentryUserScopeMiddleware())
 	r.Use(requestBodyLimitsMiddleware(cfg))
 	if cfg.MetricsEnabled {
@@ -96,6 +98,7 @@ func Run() error {
 	// Initialize Redis client (pool size, max active conns, and timeouts from config / env).
 	rdb = redis.NewClient(redisOptionsFromConfig(cfg))
 	appRepos = repos.NewStores(rdb)
+	idempotencyStore = idempotency.NewStore(rdb, cfg)
 
 	// Configure Redis for LRU eviction
 	rdb.ConfigSet(ctx, "maxmemory", "100mb")

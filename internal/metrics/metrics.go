@@ -94,6 +94,44 @@ var (
 		},
 		[]string{"method"},
 	)
+
+	outboundCircuitBreakerTransitions = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "explorer_outbound_circuit_breaker_transitions_total",
+			Help: "Outbound HTTP circuit breaker state changes per upstream host (see internal/outboundbreaker).",
+		},
+		[]string{"host", "from_state", "to_state"},
+	)
+
+	outboundCircuitBreakerRejections = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "explorer_outbound_circuit_breaker_rejections_total",
+			Help: "Requests blocked by an open breaker or saturated half-open limit.",
+		},
+		[]string{"host", "reason"},
+	)
+
+	emailQueueDepth = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "explorer_email_queue_depth",
+			Help: "Current number of outbound emails waiting in the in-process queue (buffered channel length).",
+		},
+	)
+
+	emailEnqueueDropped = promauto.NewCounterVec(
+		prometheus.CounterOpts{
+			Name: "explorer_email_enqueue_dropped_total",
+			Help: "Emails not queued because the buffer was full (dead-lettered in-process for admin inspection).",
+		},
+		[]string{"reason"},
+	)
+
+	emailDeadLetterEntries = promauto.NewGauge(
+		prometheus.GaugeOpts{
+			Name: "explorer_email_dead_letter_entries",
+			Help: "Number of dead-letter records retained for admin visibility (ring buffer; capped).",
+		},
+	)
 )
 
 // Handler returns the Prometheus scrape handler (default registry).
@@ -262,4 +300,38 @@ func RecordAlertEval(elapsed time.Duration, triggered int) {
 	if triggered > 0 {
 		alertEvalTriggered.Add(float64(triggered))
 	}
+}
+
+// RecordOutboundCircuitBreakerTransition records a gobreaker state change for an upstream host label.
+func RecordOutboundCircuitBreakerTransition(host, fromState, toState string) {
+	outboundCircuitBreakerTransitions.WithLabelValues(host, fromState, toState).Inc()
+}
+
+// RecordOutboundCircuitBreakerReject records a short-circuited outbound request (reason: open | half_open).
+func RecordOutboundCircuitBreakerReject(host, reason string) {
+	outboundCircuitBreakerRejections.WithLabelValues(host, reason).Inc()
+}
+
+// SetEmailQueueDepth sets the scrape-time gauge for buffered outbound email count.
+func SetEmailQueueDepth(n int) {
+	if n < 0 {
+		n = 0
+	}
+	emailQueueDepth.Set(float64(n))
+}
+
+// RecordEmailEnqueueDrop increments when Enqueue cannot accept a message (e.g. queue_full).
+func RecordEmailEnqueueDrop(reason string) {
+	if reason == "" {
+		reason = "unknown"
+	}
+	emailEnqueueDropped.WithLabelValues(reason).Inc()
+}
+
+// SetEmailDeadLetterGauge sets the number of retained dead-letter rows (admin / ops visibility).
+func SetEmailDeadLetterGauge(n int) {
+	if n < 0 {
+		n = 0
+	}
+	emailDeadLetterEntries.Set(float64(n))
 }

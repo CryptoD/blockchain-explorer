@@ -193,6 +193,40 @@ func TestValidate_StaticAssetCacheMaxAge(t *testing.T) {
 	}
 }
 
+func TestValidate_Idempotency(t *testing.T) {
+	c := minimalValidBase()
+	c.IdempotencyTTLSeconds = 30
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "IDEMPOTENCY_TTL_SECONDS") {
+		t.Fatalf("expected idempotency TTL error, got %v", err)
+	}
+}
+
+func TestValidate_OutboundRetryBudget(t *testing.T) {
+	c := minimalValidBase()
+	c.OutboundHTTPRetryCount = 11
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_HTTP_RETRY_COUNT") {
+		t.Fatalf("expected retry count error, got %v", err)
+	}
+	c.OutboundHTTPRetryCount = 3
+	c.OutboundHTTPInboundAttemptBudget = -1
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_HTTP_INBOUND_ATTEMPT_BUDGET") {
+		t.Fatalf("expected inbound budget error, got %v", err)
+	}
+}
+
+func TestValidate_OutboundCircuitBreaker(t *testing.T) {
+	c := minimalValidBase()
+	c.OutboundCircuitBreakerOpenTimeoutSeconds = 700
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS") {
+		t.Fatalf("expected open timeout error, got %v", err)
+	}
+	c.OutboundCircuitBreakerOpenTimeoutSeconds = 60
+	c.OutboundCircuitBreakerTripAfterConsecutiveFailures = 101
+	if err := c.Validate(); err == nil || !strings.Contains(err.Error(), "OUTBOUND_CIRCUIT_BREAKER_TRIP_AFTER_CONSECUTIVE_FAILURES") {
+		t.Fatalf("expected trip threshold error, got %v", err)
+	}
+}
+
 func TestValidate_ShutdownTimeouts(t *testing.T) {
 	c := minimalValidBase()
 	c.ShutdownGraceSeconds = 601

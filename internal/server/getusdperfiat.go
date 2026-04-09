@@ -98,43 +98,20 @@ type PortfolioWithValuation struct {
 	Items             []PortfolioItemWithValue `json:"items"`
 }
 
-// healthHandler is a simple liveness probe. It reports basic process health
-// and whether core configuration is present, but does not force external
-// dependency checks to succeed.
-func healthHandler(c *gin.Context) {
-	status := "ok"
-	details := gin.H{}
-
-	// Basic Redis check (non-fatal)
-	if rdb != nil {
-		if err := rdb.Ping(ctx).Err(); err != nil {
-			status = "degraded"
-			details["redis_error"] = err.Error()
-		}
-	} else {
-		status = "degraded"
-		details["redis_error"] = "redis client not initialized"
-	}
-
-	// Configuration check
-	if baseURL == "" || apiKey == "" {
-		status = "degraded"
-		details["config_error"] = "GETBLOCK_BASE_URL or GETBLOCK_ACCESS_TOKEN not set"
-	}
-
+// livenessHandler answers container **liveness** probes (`GET /health`, `GET /healthz`).
+// It does not call Redis, the blockchain RPC, or other dependencies: if Redis or RPC is
+// down, readiness should fail (`GET /ready` / `GET /readyz`) while the process stays up.
+func livenessHandler(c *gin.Context) {
 	c.JSON(http.StatusOK, mergeCorrelationID(c, gin.H{
-		"status":     status,
-		"details":    details,
-		"timestamp":  time.Now().Unix(),
-		"app_env":    config.GetAppEnv(),
-		"version":    "v1",
-		"api_prefix": "/api/v1",
+		"status":    "ok",
+		"timestamp": time.Now().Unix(),
+		"app_env":   config.GetAppEnv(),
 	}))
 }
 
-// readinessHandler is a readiness probe. It checks core dependencies such as
-// Redis and (optionally) the external GetBlock API. If these checks fail, the
-// endpoint returns 503 so orchestrators can avoid routing traffic.
+// readinessHandler answers **readiness** probes (`GET /ready`, `GET /readyz`). It requires Redis
+// and (when `READY_CHECK_EXTERNAL=true`) a shallow GetBlock JSON-RPC check. On failure it returns
+// **503** so load balancers stop sending traffic without restarting the process.
 func readinessHandler(c *gin.Context) {
 	if rdb == nil {
 		c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": "redis client not initialized"}))

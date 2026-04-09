@@ -74,13 +74,13 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 ## Phase 15 — Reliability & resilience
 
-- [ ] **53. SLO definitions** — e.g. 99% of search &lt;500ms; document error budget.
-- [ ] **54. Health vs. readiness** — `/health` liveness; `/ready` checks Redis and critical deps (optional separate).
-- [ ] **55. Circuit breakers for outbound HTTP** — Per-host breakers for pricing, news, RPC with half-open recovery.
-- [ ] **56. Retry budgets** — Cap total retries per request across layers; avoid retry storms.
-- [ ] **57. Idempotency keys** — For exports or payments (if ever): safe replays.
-- [ ] **58. Dead letter for email queue** — If queue full persists: metrics + admin visibility.
-- [ ] **59. Backup/restore runbook** — Redis RDB/AOF strategy; what user data is lost on total loss.
+- [x] **53. SLO definitions** — e.g. 99% of search &lt;500ms; document error budget. **Done:** [docs/SLO_AND_ERROR_BUDGET.md](docs/SLO_AND_ERROR_BUDGET.md).
+- [x] **54. Health vs. readiness** — `/health` liveness; `/ready` checks Redis and critical deps (optional separate). **Done:** [`GET /health`](internal/server/routes.go) / [`GET /ready`](internal/server/routes.go) ([`livenessHandler`](internal/server/getusdperfiat.go) has no deps; [`readinessHandler`](internal/server/getusdperfiat.go) + `READY_CHECK_EXTERNAL`); `/healthz` / `/readyz` remain aliases; [docs/HEALTH_AND_READINESS.md](docs/HEALTH_AND_READINESS.md).
+- [x] **55. Circuit breakers for outbound HTTP** — Per-host breakers for pricing, news, RPC with half-open recovery. **Done:** [`internal/outboundbreaker`](internal/outboundbreaker) ([`WrapRoundTripper`](internal/outboundbreaker/transport.go)) on shared outbound transport in [`internal/server/outbound_wire.go`](internal/server/outbound_wire.go); config `OUTBOUND_CIRCUIT_BREAKER_*`; metrics `explorer_outbound_circuit_breaker_*`; [docs/CIRCUIT_BREAKERS.md](docs/CIRCUIT_BREAKERS.md).
+- [x] **56. Retry budgets** — Cap total retries per request across layers; avoid retry storms. **Done:** `OUTBOUND_HTTP_RETRY_COUNT` → Resty [`SetRetryCount`](../internal/server/outbound_wire.go); optional `OUTBOUND_HTTP_INBOUND_ATTEMPT_BUDGET` + [`internal/retrybudget`](../internal/retrybudget/) + [`inboundRetryBudgetMiddleware`](../internal/server/retry_budget_middleware.go); [docs/RETRY_BUDGET.md](docs/RETRY_BUDGET.md).
+- [x] **57. Idempotency keys** — For exports or payments (if ever): safe replays. **Done:** [`Idempotency-Key`](docs/IDEMPOTENCY_KEYS.md) on export routes; [`internal/idempotency`](internal/idempotency) + [`export_idempotency.go`](internal/server/export_idempotency.go); JSON replay + stream de-dupe (409 on replay); [docs/IDEMPOTENCY_KEYS.md](docs/IDEMPOTENCY_KEYS.md).
+- [x] **58. Dead letter for email queue** — If queue full persists: metrics + admin visibility. **Done:** in-process dead-letter ring ([`internal/email/email.go`](internal/email/email.go)); Prometheus `explorer_email_queue_depth`, `explorer_email_enqueue_dropped_total`, `explorer_email_dead_letter_entries` ([`internal/metrics/metrics.go`](internal/metrics/metrics.go)); `email_queue` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
+- [x] **59. Backup/restore runbook** — Redis RDB/AOF strategy; what user data is lost on total loss. **Done:** [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md).
 - [ ] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup.
 - [ ] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag).
 - [ ] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap.

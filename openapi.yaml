@@ -621,18 +621,38 @@ paths:
         '403':
           $ref: '#/components/responses/Forbidden'
 
-  /healthz:
+  /health:
     get:
       tags: [System]
       summary: Liveness probe
+      description: Process is alive. Does not check Redis or RPC (use /ready for dependencies).
       responses:
         '200':
-          description: Process is alive (may be degraded)
+          description: OK
+
+  /healthz:
+    get:
+      tags: [System]
+      summary: Liveness probe (alias of /health)
+      responses:
+        '200':
+          description: OK
+
+  /ready:
+    get:
+      tags: [System]
+      summary: Readiness probe
+      description: Checks Redis and optionally GetBlock when READY_CHECK_EXTERNAL=true.
+      responses:
+        '200':
+          description: Instance is ready to receive traffic
+        '503':
+          description: Instance is not ready
 
   /readyz:
     get:
       tags: [System]
-      summary: Readiness probe
+      summary: Readiness probe (alias of /ready)
       responses:
         '200':
           description: Instance is ready to receive traffic

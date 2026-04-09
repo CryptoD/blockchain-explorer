@@ -71,6 +71,7 @@ type NewsAppService interface {
 type EmailAppService interface {
 	Enabled() bool
 	Enqueue(msg email.Message) bool
+	QueueAdminSnapshot() email.QueueAdminSnapshot
 }
 
 var (

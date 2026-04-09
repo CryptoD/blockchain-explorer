@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/email"
 	"github.com/CryptoD/blockchain-explorer/internal/repos"
 	"github.com/gin-gonic/gin"
 	"github.com/redis/go-redis/v9"
@@ -61,6 +62,43 @@ func TestAdmin_Status_Shape_V1(t *testing.T) {
 	}
 	if body["user"] != "admin" || body["role"] != "admin" {
 		t.Fatalf("user/role: %#v / %#v", body["user"], body["role"])
+	}
+	if _, has := body["email_queue"]; has {
+		t.Fatalf("expected no email_queue without email service, got %#v", body["email_queue"])
+	}
+}
+
+func TestAdmin_Status_IncludesEmailQueueWhenConfigured(t *testing.T) {
+	resetAuthState(t)
+	t.Cleanup(func() { SetEmailAppService(nil) })
+	SetEmailAppService(email.NewService(email.NoopEmailSender{}, email.Address{Email: "ops@example.com"}))
+
+	r := adminTestRouter()
+	cookie, csrf := loginV1(t, r, "admin", "admin123")
+	w := getReq(t, r, "/api/v1/admin/status", authHeader(cookie, csrf))
+	if w.Code != http.StatusOK {
+		t.Fatalf("status: %d %s", w.Code, w.Body.String())
+	}
+	var body map[string]interface{}
+	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
+		t.Fatal(err)
+	}
+	raw, ok := body["email_queue"]
+	if !ok {
+		t.Fatal("missing email_queue")
+	}
+	eq, ok := raw.(map[string]interface{})
+	if !ok {
+		t.Fatalf("email_queue type: %T", raw)
+	}
+	if _, ok := eq["depth"]; !ok {
+		t.Fatalf("email_queue missing depth: %#v", eq)
+	}
+	if _, ok := eq["capacity"]; !ok {
+		t.Fatalf("email_queue missing capacity: %#v", eq)
+	}
+	if _, ok := eq["dead_letter"]; !ok {
+		t.Fatalf("email_queue missing dead_letter: %#v", eq)
 	}
 }
 

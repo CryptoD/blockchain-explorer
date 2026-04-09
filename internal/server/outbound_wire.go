@@ -6,6 +6,8 @@ import (
 	"time"
 
 	"github.com/CryptoD/blockchain-explorer/internal/config"
+	"github.com/CryptoD/blockchain-explorer/internal/outboundbreaker"
+	"github.com/CryptoD/blockchain-explorer/internal/retrybudget"
 	"github.com/go-resty/resty/v2"
 	"github.com/redis/go-redis/v9"
 )
@@ -29,12 +31,16 @@ func newRestyClientForConfig(cfg *config.Config) *resty.Client {
 	tr.ResponseHeaderTimeout = time.Duration(cfg.OutboundHTTPResponseHeaderTimeoutSeconds) * time.Second
 	tr.ExpectContinueTimeout = 1 * time.Second
 
+	var rt http.RoundTripper = tr
+	rt = retrybudget.WrapRoundTripper(rt)
+	rt = outboundbreaker.WrapRoundTripper(rt, cfg)
+
 	hc := &http.Client{
 		Timeout:   time.Duration(cfg.OutboundHTTPTimeoutSeconds) * time.Second,
-		Transport: tr,
+		Transport: rt,
 	}
 	return resty.NewWithClient(hc).
-		SetRetryCount(3).
+		SetRetryCount(cfg.OutboundHTTPRetryCount).
 		SetHeader("User-Agent", "blockchain-explorer/1.0")
 }
 

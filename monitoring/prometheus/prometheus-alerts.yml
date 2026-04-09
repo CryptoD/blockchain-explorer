@@ -35,7 +35,7 @@ groups:
         annotations:
           summary: Critical HTTP 5xx rate (>20% over 5m)
           description: >-
-            Majority of requests may be failing. Page on-call and check /healthz, /readyz, and Sentry.
+            Majority of requests may be failing. Page on-call and check /health, /ready (or /healthz, /readyz), and Sentry.
 
       - alert: HighLatencyP99
         expr: |

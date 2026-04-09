@@ -21,13 +21,18 @@ func TestRateLimit_HealthzExempt(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(rateLimitMiddleware)
-	r.GET("/healthz", healthHandler)
+	r.GET("/health", livenessHandler)
+	r.GET("/healthz", livenessHandler)
+	r.GET("/ready", readinessHandler)
+	r.GET("/readyz", readinessHandler)
 
+	paths := []string{"/health", "/healthz", "/ready", "/readyz"}
 	for i := 0; i < 25; i++ {
+		p := paths[i%len(paths)]
 		w := httptest.NewRecorder()
-		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/healthz", nil))
+		r.ServeHTTP(w, httptest.NewRequest(http.MethodGet, p, nil))
 		if w.Code != http.StatusOK {
-			t.Fatalf("iter %d: %d %s", i, w.Code, w.Body.String())
+			t.Fatalf("iter %d path %s: %d %s", i, p, w.Code, w.Body.String())
 		}
 	}
 }

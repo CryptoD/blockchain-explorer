@@ -110,6 +110,24 @@ type Config struct {
 	OutboundHTTPMaxIdleConnsPerHost          int
 	OutboundHTTPIdleConnTimeoutSeconds       int
 
+	// OutboundHTTPRetryCount is Resty's SetRetryCount (attempts = retryCount+1 per Resty request). See docs/RETRY_BUDGET.md.
+	OutboundHTTPRetryCount int
+	// OutboundHTTPInboundAttemptBudget: when >0, each inbound HTTP request gets a cap on total outbound RoundTrip calls (context-propagated). 0 = off.
+	OutboundHTTPInboundAttemptBudget int
+
+	// Idempotency* — Idempotency-Key on export routes; see internal/idempotency and docs/IDEMPOTENCY_KEYS.md.
+	IdempotencyEnabled          bool
+	IdempotencyTTLSeconds       int
+	IdempotencyMaxResponseBytes int
+	IdempotencyKeyMaxRunes      int
+
+	// OutboundCircuitBreaker* — per-host circuit breakers on the shared outbound http.Transport (GetBlock, CoinGecko, news). See internal/outboundbreaker.
+	OutboundCircuitBreakerEnabled                      bool
+	OutboundCircuitBreakerOpenTimeoutSeconds           int // open → half-open (default 60)
+	OutboundCircuitBreakerIntervalSeconds              int // closed-state Counts reset period; 0 = never (gobreaker default)
+	OutboundCircuitBreakerHalfOpenMaxRequests          int // probes allowed in half-open (default 1)
+	OutboundCircuitBreakerTripAfterConsecutiveFailures int // 0 = gobreaker default (trip when consecutive failures > 5)
+
 	// Response compression for HTML/JSON/text (skips already-compressed static types).
 	// When Brotli is enabled, negotiates br then gzip via Accept-Encoding; otherwise gzip only (less CPU).
 	ResponseCompressionEnabled bool
@@ -140,79 +158,90 @@ func Load() (*Config, error) {
 	appEnv := GetAppEnv()
 
 	cfg := &Config{
-		AppEnv:                                   appEnv,
-		RedisHost:                                GetEnvWithDefault("REDIS_HOST", "localhost"),
-		RedisPort:                                GetEnvIntWithDefault("REDIS_PORT", 6379),
-		AdminUsername:                            strings.TrimSpace(os.Getenv("ADMIN_USERNAME")),
-		AdminPassword:                            os.Getenv("ADMIN_PASSWORD"),
-		GetBlockBaseURL:                          strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
-		GetBlockAccessToken:                      strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
-		SentryDSN:                                strings.TrimSpace(os.Getenv("SENTRY_DSN")),
-		EmailProvider:                            strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_PROVIDER"))),
-		EmailFrom:                                strings.TrimSpace(os.Getenv("EMAIL_FROM")),
-		EmailFromName:                            strings.TrimSpace(os.Getenv("EMAIL_FROM_NAME")),
-		AdminEmail:                               strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
-		SMTPHost:                                 strings.TrimSpace(os.Getenv("SMTP_HOST")),
-		SMTPPort:                                 GetEnvIntWithDefault("SMTP_PORT", 587),
-		SMTPUsername:                             strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
-		SMTPPassword:                             strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
-		SMTPStartTLS:                             strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_STARTTLS"))) == "true",
-		SMTPSkipVerify:                           strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_VERIFY"))) == "true",
-		AppBaseURL:                               strings.TrimSpace(os.Getenv("APP_BASE_URL")),
-		NewsProvider:                             strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
-		TheNewsAPIBaseURL:                        strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
-		TheNewsAPIToken:                          strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),
-		TheNewsAPIDefaultSearch:                  strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_SEARCH")),
-		TheNewsAPIDefaultLanguage:                strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LANGUAGE")),
-		TheNewsAPIDefaultLocale:                  strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LOCALE")),
-		TheNewsAPIDefaultCategories:              strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_CATEGORIES")),
-		NewsCacheTTLSeconds:                      GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
-		NewsStaleTTLSeconds:                      GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
-		SecureCookies:                            UseSecureCookies(),
-		HSTSMaxAgeSeconds:                        GetEnvIntWithDefault("HSTS_MAX_AGE_SECONDS", 0),
-		HSTSIncludeSubdomains:                    strings.EqualFold(strings.TrimSpace(os.Getenv("HSTS_INCLUDE_SUBDOMAINS")), "true"),
-		RateLimitWindowSeconds:                   GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
-		RateLimitPerIP:                           GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
-		RateLimitPerUser:                         GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
-		ExportRateLimitPerIP:                     GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_IP", 5),
-		ExportRateLimitPerUser:                   GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
-		ExportRateLimitHeavyPerIP:                GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
-		ExportRateLimitHeavyPerUser:              GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
-		MaxRequestBodyBytes:                      GetEnvInt64WithDefault("MAX_REQUEST_BODY_BYTES", 1024*1024),
-		MaxJSONDepth:                             GetEnvIntWithDefault("MAX_JSON_DEPTH", 64),
-		ExportMaxBlockCSVRows:                    GetEnvIntWithDefault("EXPORT_MAX_BLOCK_CSV_ROWS", 0),
-		ExportMaxTransactionCSVRows:              GetEnvIntWithDefault("EXPORT_MAX_TRANSACTION_CSV_ROWS", 0),
-		ReadyCheckExternal:                       strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
-		RatesCacheTTLSeconds:                     GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
-		MetricsEnabled:                           metricsEnabledFromEnv(),
-		MetricsToken:                             strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
-		MetricsRateLimitPerIP:                    GetEnvIntWithDefault("METRICS_RATE_LIMIT_PER_IP", 120),
-		PPROFEnabled:                             strings.EqualFold(strings.TrimSpace(os.Getenv("PPROF_ENABLED")), "true"),
-		RedisPoolSize:                            GetEnvIntWithDefault("REDIS_POOL_SIZE", 0),
-		RedisMaxActiveConns:                      GetEnvIntWithDefault("REDIS_MAX_ACTIVE_CONNS", 128),
-		RedisDialTimeoutSeconds:                  GetEnvIntWithDefault("REDIS_DIAL_TIMEOUT_SECONDS", 5),
-		RedisReadTimeoutSeconds:                  GetEnvIntWithDefault("REDIS_READ_TIMEOUT_SECONDS", 5),
-		RedisWriteTimeoutSeconds:                 GetEnvIntWithDefault("REDIS_WRITE_TIMEOUT_SECONDS", 5),
-		RedisPoolTimeoutSeconds:                  GetEnvIntWithDefault("REDIS_POOL_TIMEOUT_SECONDS", 0),
-		RedisConnMaxIdleSeconds:                  GetEnvIntWithDefault("REDIS_CONN_MAX_IDLE_SECONDS", 300),
-		RedisMinIdleConns:                        GetEnvIntWithDefault("REDIS_MIN_IDLE_CONNS", 2),
-		OutboundHTTPTimeoutSeconds:               GetEnvIntWithDefault("OUTBOUND_HTTP_TIMEOUT_SECONDS", 30),
-		OutboundHTTPDialTimeoutSeconds:           GetEnvIntWithDefault("OUTBOUND_HTTP_DIAL_TIMEOUT_SECONDS", 10),
-		OutboundHTTPResponseHeaderTimeoutSeconds: GetEnvIntWithDefault("OUTBOUND_HTTP_RESPONSE_HEADER_TIMEOUT_SECONDS", 30),
-		OutboundHTTPMaxConnsPerHost:              GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_CONNS_PER_HOST", 64),
-		OutboundHTTPMaxIdleConns:                 GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS", 128),
-		OutboundHTTPMaxIdleConnsPerHost:          GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS_PER_HOST", 32),
-		OutboundHTTPIdleConnTimeoutSeconds:       GetEnvIntWithDefault("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS", 90),
-		ResponseCompressionEnabled:               responseCompressionEnabledFromEnv(),
-		ResponseCompressionBrotli:                responseCompressionBrotliFromEnv(),
-		CDNBaseURL:                               strings.TrimRight(strings.TrimSpace(os.Getenv("CDN_BASE_URL")), "/"),
-		StaticAssetCacheMaxAgeSeconds:            GetEnvIntWithDefault("STATIC_ASSET_CACHE_MAX_AGE_SECONDS", 0),
-		ShutdownGraceSeconds:                     GetEnvIntWithDefault("SHUTDOWN_GRACE_SECONDS", 30),
-		RedisCloseTimeoutSeconds:                 GetEnvIntWithDefault("REDIS_CLOSE_TIMEOUT_SECONDS", 5),
-		SentryEnvironment:                        strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
-		SentryRelease:                            strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
-		SentryTracesSampleRate:                   sentryTracesSampleRateForEnv(appEnv),
-		SentryErrorSampleRate:                    sentryErrorSampleRateFromEnv(),
+		AppEnv:                                    appEnv,
+		RedisHost:                                 GetEnvWithDefault("REDIS_HOST", "localhost"),
+		RedisPort:                                 GetEnvIntWithDefault("REDIS_PORT", 6379),
+		AdminUsername:                             strings.TrimSpace(os.Getenv("ADMIN_USERNAME")),
+		AdminPassword:                             os.Getenv("ADMIN_PASSWORD"),
+		GetBlockBaseURL:                           strings.TrimSpace(os.Getenv("GETBLOCK_BASE_URL")),
+		GetBlockAccessToken:                       strings.TrimSpace(os.Getenv("GETBLOCK_ACCESS_TOKEN")),
+		SentryDSN:                                 strings.TrimSpace(os.Getenv("SENTRY_DSN")),
+		EmailProvider:                             strings.ToLower(strings.TrimSpace(os.Getenv("EMAIL_PROVIDER"))),
+		EmailFrom:                                 strings.TrimSpace(os.Getenv("EMAIL_FROM")),
+		EmailFromName:                             strings.TrimSpace(os.Getenv("EMAIL_FROM_NAME")),
+		AdminEmail:                                strings.TrimSpace(os.Getenv("ADMIN_EMAIL")),
+		SMTPHost:                                  strings.TrimSpace(os.Getenv("SMTP_HOST")),
+		SMTPPort:                                  GetEnvIntWithDefault("SMTP_PORT", 587),
+		SMTPUsername:                              strings.TrimSpace(os.Getenv("SMTP_USERNAME")),
+		SMTPPassword:                              strings.TrimSpace(os.Getenv("SMTP_PASSWORD")),
+		SMTPStartTLS:                              strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_STARTTLS"))) == "true",
+		SMTPSkipVerify:                            strings.ToLower(strings.TrimSpace(os.Getenv("SMTP_SKIP_VERIFY"))) == "true",
+		AppBaseURL:                                strings.TrimSpace(os.Getenv("APP_BASE_URL")),
+		NewsProvider:                              strings.ToLower(strings.TrimSpace(os.Getenv("NEWS_PROVIDER"))),
+		TheNewsAPIBaseURL:                         strings.TrimSpace(os.Getenv("THENEWSAPI_BASE_URL")),
+		TheNewsAPIToken:                           strings.TrimSpace(os.Getenv("THENEWSAPI_API_TOKEN")),
+		TheNewsAPIDefaultSearch:                   strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_SEARCH")),
+		TheNewsAPIDefaultLanguage:                 strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LANGUAGE")),
+		TheNewsAPIDefaultLocale:                   strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_LOCALE")),
+		TheNewsAPIDefaultCategories:               strings.TrimSpace(os.Getenv("THENEWSAPI_DEFAULT_CATEGORIES")),
+		NewsCacheTTLSeconds:                       GetEnvIntWithDefault("NEWS_CACHE_TTL_SECONDS", 300),
+		NewsStaleTTLSeconds:                       GetEnvIntWithDefault("NEWS_STALE_TTL_SECONDS", 3600),
+		SecureCookies:                             UseSecureCookies(),
+		HSTSMaxAgeSeconds:                         GetEnvIntWithDefault("HSTS_MAX_AGE_SECONDS", 0),
+		HSTSIncludeSubdomains:                     strings.EqualFold(strings.TrimSpace(os.Getenv("HSTS_INCLUDE_SUBDOMAINS")), "true"),
+		RateLimitWindowSeconds:                    GetEnvIntWithDefault("RATE_LIMIT_WINDOW_SECONDS", 60),
+		RateLimitPerIP:                            GetEnvIntWithDefault("RATE_LIMIT_PER_IP", 10),
+		RateLimitPerUser:                          GetEnvIntWithDefault("RATE_LIMIT_PER_USER", 10),
+		ExportRateLimitPerIP:                      GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_IP", 5),
+		ExportRateLimitPerUser:                    GetEnvIntWithDefault("EXPORT_RATE_LIMIT_PER_USER", 20),
+		ExportRateLimitHeavyPerIP:                 GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_IP", 2),
+		ExportRateLimitHeavyPerUser:               GetEnvIntWithDefault("EXPORT_RATE_LIMIT_HEAVY_PER_USER", 5),
+		MaxRequestBodyBytes:                       GetEnvInt64WithDefault("MAX_REQUEST_BODY_BYTES", 1024*1024),
+		MaxJSONDepth:                              GetEnvIntWithDefault("MAX_JSON_DEPTH", 64),
+		ExportMaxBlockCSVRows:                     GetEnvIntWithDefault("EXPORT_MAX_BLOCK_CSV_ROWS", 0),
+		ExportMaxTransactionCSVRows:               GetEnvIntWithDefault("EXPORT_MAX_TRANSACTION_CSV_ROWS", 0),
+		ReadyCheckExternal:                        strings.ToLower(os.Getenv("READY_CHECK_EXTERNAL")) == "true",
+		RatesCacheTTLSeconds:                      GetEnvIntWithDefault("RATES_CACHE_TTL_SECONDS", 60),
+		MetricsEnabled:                            metricsEnabledFromEnv(),
+		MetricsToken:                              strings.TrimSpace(os.Getenv("METRICS_TOKEN")),
+		MetricsRateLimitPerIP:                     GetEnvIntWithDefault("METRICS_RATE_LIMIT_PER_IP", 120),
+		PPROFEnabled:                              strings.EqualFold(strings.TrimSpace(os.Getenv("PPROF_ENABLED")), "true"),
+		RedisPoolSize:                             GetEnvIntWithDefault("REDIS_POOL_SIZE", 0),
+		RedisMaxActiveConns:                       GetEnvIntWithDefault("REDIS_MAX_ACTIVE_CONNS", 128),
+		RedisDialTimeoutSeconds:                   GetEnvIntWithDefault("REDIS_DIAL_TIMEOUT_SECONDS", 5),
+		RedisReadTimeoutSeconds:                   GetEnvIntWithDefault("REDIS_READ_TIMEOUT_SECONDS", 5),
+		RedisWriteTimeoutSeconds:                  GetEnvIntWithDefault("REDIS_WRITE_TIMEOUT_SECONDS", 5),
+		RedisPoolTimeoutSeconds:                   GetEnvIntWithDefault("REDIS_POOL_TIMEOUT_SECONDS", 0),
+		RedisConnMaxIdleSeconds:                   GetEnvIntWithDefault("REDIS_CONN_MAX_IDLE_SECONDS", 300),
+		RedisMinIdleConns:                         GetEnvIntWithDefault("REDIS_MIN_IDLE_CONNS", 2),
+		OutboundHTTPTimeoutSeconds:                GetEnvIntWithDefault("OUTBOUND_HTTP_TIMEOUT_SECONDS", 30),
+		OutboundHTTPDialTimeoutSeconds:            GetEnvIntWithDefault("OUTBOUND_HTTP_DIAL_TIMEOUT_SECONDS", 10),
+		OutboundHTTPResponseHeaderTimeoutSeconds:  GetEnvIntWithDefault("OUTBOUND_HTTP_RESPONSE_HEADER_TIMEOUT_SECONDS", 30),
+		OutboundHTTPMaxConnsPerHost:               GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_CONNS_PER_HOST", 64),
+		OutboundHTTPMaxIdleConns:                  GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS", 128),
+		OutboundHTTPMaxIdleConnsPerHost:           GetEnvIntWithDefault("OUTBOUND_HTTP_MAX_IDLE_CONNS_PER_HOST", 32),
+		OutboundHTTPIdleConnTimeoutSeconds:        GetEnvIntWithDefault("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS", 90),
+		OutboundHTTPRetryCount:                    GetEnvIntWithDefault("OUTBOUND_HTTP_RETRY_COUNT", 3),
+		OutboundHTTPInboundAttemptBudget:          GetEnvIntWithDefault("OUTBOUND_HTTP_INBOUND_ATTEMPT_BUDGET", 0),
+		IdempotencyEnabled:                        idempotencyEnabledFromEnv(),
+		IdempotencyTTLSeconds:                     GetEnvIntWithDefault("IDEMPOTENCY_TTL_SECONDS", 86400),
+		IdempotencyMaxResponseBytes:               GetEnvIntWithDefault("IDEMPOTENCY_MAX_RESPONSE_BYTES", 262144),
+		IdempotencyKeyMaxRunes:                    GetEnvIntWithDefault("IDEMPOTENCY_KEY_MAX_RUNES", 128),
+		OutboundCircuitBreakerEnabled:             outboundCircuitBreakerEnabledFromEnv(),
+		OutboundCircuitBreakerOpenTimeoutSeconds:  GetEnvIntWithDefault("OUTBOUND_CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS", 60),
+		OutboundCircuitBreakerIntervalSeconds:     GetEnvIntWithDefault("OUTBOUND_CIRCUIT_BREAKER_INTERVAL_SECONDS", 0),
+		OutboundCircuitBreakerHalfOpenMaxRequests: GetEnvIntWithDefault("OUTBOUND_CIRCUIT_BREAKER_HALF_OPEN_MAX_REQUESTS", 1),
+		OutboundCircuitBreakerTripAfterConsecutiveFailures: GetEnvIntWithDefault("OUTBOUND_CIRCUIT_BREAKER_TRIP_AFTER_CONSECUTIVE_FAILURES", 0),
+		ResponseCompressionEnabled:                         responseCompressionEnabledFromEnv(),
+		ResponseCompressionBrotli:                          responseCompressionBrotliFromEnv(),
+		CDNBaseURL:                                         strings.TrimRight(strings.TrimSpace(os.Getenv("CDN_BASE_URL")), "/"),
+		StaticAssetCacheMaxAgeSeconds:                      GetEnvIntWithDefault("STATIC_ASSET_CACHE_MAX_AGE_SECONDS", 0),
+		ShutdownGraceSeconds:                               GetEnvIntWithDefault("SHUTDOWN_GRACE_SECONDS", 30),
+		RedisCloseTimeoutSeconds:                           GetEnvIntWithDefault("REDIS_CLOSE_TIMEOUT_SECONDS", 5),
+		SentryEnvironment:                                  strings.TrimSpace(os.Getenv("SENTRY_ENVIRONMENT")),
+		SentryRelease:                                      strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
+		SentryTracesSampleRate:                             sentryTracesSampleRateForEnv(appEnv),
+		SentryErrorSampleRate:                              sentryErrorSampleRateFromEnv(),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -230,6 +259,8 @@ func (c *Config) Validate() error {
 
 	c.ensureConnectionPoolDefaults()
 	c.ensureShutdownDefaults()
+	c.ensureOutboundBreakerDefaults()
+	c.ensureIdempotencyDefaults()
 
 	if strings.TrimSpace(c.GetBlockBaseURL) == "" || strings.TrimSpace(c.GetBlockAccessToken) == "" {
 		return fmt.Errorf("GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN are required")
@@ -376,6 +407,89 @@ func (c *Config) ensureShutdownDefaults() {
 	}
 }
 
+func (c *Config) ensureOutboundBreakerDefaults() {
+	if c.OutboundCircuitBreakerOpenTimeoutSeconds <= 0 {
+		c.OutboundCircuitBreakerOpenTimeoutSeconds = 60
+	}
+	if c.OutboundCircuitBreakerHalfOpenMaxRequests <= 0 {
+		c.OutboundCircuitBreakerHalfOpenMaxRequests = 1
+	}
+}
+
+func (c *Config) validateOutboundCircuitBreaker() error {
+	if c.OutboundCircuitBreakerOpenTimeoutSeconds < 1 || c.OutboundCircuitBreakerOpenTimeoutSeconds > 600 {
+		return fmt.Errorf("OUTBOUND_CIRCUIT_BREAKER_OPEN_TIMEOUT_SECONDS must be between 1 and 600")
+	}
+	if c.OutboundCircuitBreakerIntervalSeconds < 0 || c.OutboundCircuitBreakerIntervalSeconds > 86400 {
+		return fmt.Errorf("OUTBOUND_CIRCUIT_BREAKER_INTERVAL_SECONDS must be between 0 and 86400 (0 = do not reset Counts on an interval in closed state)")
+	}
+	if c.OutboundCircuitBreakerHalfOpenMaxRequests < 1 || c.OutboundCircuitBreakerHalfOpenMaxRequests > 64 {
+		return fmt.Errorf("OUTBOUND_CIRCUIT_BREAKER_HALF_OPEN_MAX_REQUESTS must be between 1 and 64")
+	}
+	thr := c.OutboundCircuitBreakerTripAfterConsecutiveFailures
+	if thr < 0 || thr > 100 {
+		return fmt.Errorf("OUTBOUND_CIRCUIT_BREAKER_TRIP_AFTER_CONSECUTIVE_FAILURES must be between 0 and 100 (0 = library default: trip when consecutive failures > 5)")
+	}
+	return nil
+}
+
+func (c *Config) validateOutboundRetryBudget() error {
+	if c.OutboundHTTPRetryCount < 0 || c.OutboundHTTPRetryCount > 10 {
+		return fmt.Errorf("OUTBOUND_HTTP_RETRY_COUNT must be between 0 and 10 (Resty retries per logical outbound call; 0 = no Resty retries)")
+	}
+	if c.OutboundHTTPInboundAttemptBudget < 0 || c.OutboundHTTPInboundAttemptBudget > 100000 {
+		return fmt.Errorf("OUTBOUND_HTTP_INBOUND_ATTEMPT_BUDGET must be between 0 and 100000 (0 = no per-request cap)")
+	}
+	return nil
+}
+
+func outboundCircuitBreakerEnabledFromEnv() bool {
+	s := strings.TrimSpace(os.Getenv("OUTBOUND_CIRCUIT_BREAKER_ENABLED"))
+	if s == "" {
+		return true
+	}
+	if strings.EqualFold(s, "false") || s == "0" {
+		return false
+	}
+	return strings.EqualFold(s, "true") || s == "1"
+}
+
+func idempotencyEnabledFromEnv() bool {
+	s := strings.TrimSpace(os.Getenv("IDEMPOTENCY_ENABLED"))
+	if s == "" {
+		return true
+	}
+	if strings.EqualFold(s, "false") || s == "0" {
+		return false
+	}
+	return strings.EqualFold(s, "true") || s == "1"
+}
+
+func (c *Config) ensureIdempotencyDefaults() {
+	if c.IdempotencyTTLSeconds <= 0 {
+		c.IdempotencyTTLSeconds = 86400
+	}
+	if c.IdempotencyMaxResponseBytes <= 0 {
+		c.IdempotencyMaxResponseBytes = 262144
+	}
+	if c.IdempotencyKeyMaxRunes <= 0 {
+		c.IdempotencyKeyMaxRunes = 128
+	}
+}
+
+func (c *Config) validateIdempotency() error {
+	if c.IdempotencyTTLSeconds < 60 || c.IdempotencyTTLSeconds > 6048000 {
+		return fmt.Errorf("IDEMPOTENCY_TTL_SECONDS must be between 60 and 6048000")
+	}
+	if c.IdempotencyMaxResponseBytes < 1024 || c.IdempotencyMaxResponseBytes > 10485760 {
+		return fmt.Errorf("IDEMPOTENCY_MAX_RESPONSE_BYTES must be between 1024 and 10485760")
+	}
+	if c.IdempotencyKeyMaxRunes < 8 || c.IdempotencyKeyMaxRunes > 256 {
+		return fmt.Errorf("IDEMPOTENCY_KEY_MAX_RUNES must be between 8 and 256")
+	}
+	return nil
+}
+
 func (c *Config) validateConnectionPools() error {
 	if c.RedisPoolSize < 0 || c.RedisPoolSize > 2000 {
 		return fmt.Errorf("REDIS_POOL_SIZE must be between 0 and 2000")
@@ -424,6 +538,15 @@ func (c *Config) validateConnectionPools() error {
 	}
 	if c.OutboundHTTPIdleConnTimeoutSeconds < 1 || c.OutboundHTTPIdleConnTimeoutSeconds > 600 {
 		return fmt.Errorf("OUTBOUND_HTTP_IDLE_CONN_TIMEOUT_SECONDS must be between 1 and 600")
+	}
+	if err := c.validateOutboundCircuitBreaker(); err != nil {
+		return err
+	}
+	if err := c.validateOutboundRetryBudget(); err != nil {
+		return err
+	}
+	if err := c.validateIdempotency(); err != nil {
+		return err
 	}
 	return nil
 }

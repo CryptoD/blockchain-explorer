@@ -286,6 +286,16 @@ func TestV1_Healthz_Smoke(t *testing.T) {
 	}
 }
 
+func TestV1_Health_Smoke(t *testing.T) {
+	r := newHealthTestRouter()
+	req := httptest.NewRequest(http.MethodGet, "/health", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("health: %d %s", w.Code, w.Body.String())
+	}
+}
+
 func TestV1_Readyz_Smoke(t *testing.T) {
 	r := newHealthTestRouter()
 	req := httptest.NewRequest(http.MethodGet, "/readyz", nil)
@@ -293,6 +303,16 @@ func TestV1_Readyz_Smoke(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusOK {
 		t.Fatalf("readyz: %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestV1_Ready_Smoke(t *testing.T) {
+	r := newHealthTestRouter()
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusOK {
+		t.Fatalf("ready: %d %s", w.Code, w.Body.String())
 	}
 }
 
@@ -307,5 +327,19 @@ func TestV1_Readyz_RedisNil_Error(t *testing.T) {
 	r.ServeHTTP(w, req)
 	if w.Code != http.StatusServiceUnavailable {
 		t.Fatalf("readyz with nil rdb: want 503, got %d %s", w.Code, w.Body.String())
+	}
+}
+
+func TestV1_Ready_RedisNil_Error(t *testing.T) {
+	old := rdb
+	rdb = nil
+	defer func() { rdb = old }()
+
+	r := newHealthTestRouter()
+	req := httptest.NewRequest(http.MethodGet, "/ready", nil)
+	w := httptest.NewRecorder()
+	r.ServeHTTP(w, req)
+	if w.Code != http.StatusServiceUnavailable {
+		t.Fatalf("ready with nil rdb: want 503, got %d %s", w.Code, w.Body.String())
 	}
 }

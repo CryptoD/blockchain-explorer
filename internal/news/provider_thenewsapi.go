@@ -51,7 +51,8 @@ func (p *TheNewsAPIProvider) Fetch(ctx context.Context, query string, limit int)
 		base = "https://api.thenewsapi.com"
 	}
 	if p.Client == nil {
-		p.Client = resty.New().SetTimeout(30 * time.Second).SetRetryCount(2)
+		// Standalone fallback: avoid stacking retries; production uses the shared client from wire.
+		p.Client = resty.New().SetTimeout(30 * time.Second).SetRetryCount(0)
 	}
 	if limit <= 0 {
 		limit = 20

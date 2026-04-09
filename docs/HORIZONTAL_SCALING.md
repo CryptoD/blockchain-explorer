@@ -47,12 +47,13 @@ Set the same values on **every** app pod (Kubernetes Deployment, ECS tasks, etc.
 1. **Confirm Redis is mandatory** for sessions in prod (no reliance on in-memory session fallback).
 2. **Acknowledge user-map limitation** or **fix auth** to load/refresh users from Redis on cache miss (future code change—not done in task 51).
 3. **Decide on background work**: accept duplicate jobs, scale replicas to 1 for the worker, or introduce a **cron / separate Deployment** with `replicas: 1` for evaluators.
-4. **Load balancer health checks**: `GET /healthz` / `GET /readyz` ([`RATE_LIMITS.md`](RATE_LIMITS.md))—ensure probes do not share the same rate-limit bucket as abusive clients if you tune limits down.
+4. **Load balancer health checks**: `GET /health` / `GET /ready` (or `GET /healthz` / `GET /readyz` aliases; see [`HEALTH_AND_READINESS.md`](HEALTH_AND_READINESS.md), [`RATE_LIMITS.md`](RATE_LIMITS.md))—ensure probes do not share the same rate-limit bucket as abusive clients if you tune limits down.
 5. **Metrics**: each pod exposes `/metrics` if enabled—scrape all targets or use a DaemonSet/sidecar pattern your observability stack expects.
 
 ## Related documents
 
 - [CSRF_AND_SESSIONS.md](CSRF_AND_SESSIONS.md) — session and CSRF lifecycle.
 - [SQL_AND_REDIS_SAFETY.md](SQL_AND_REDIS_SAFETY.md) — Redis key layout.
+- [REDIS_BACKUP_AND_RESTORE.md](REDIS_BACKUP_AND_RESTORE.md) — RDB/AOF, backups, what is lost on total Redis loss.
 - [THREAT_MODEL.md](THREAT_MODEL.md) — trust boundaries.
 - [POSTGRES_MIGRATION_SKETCH.md](POSTGRES_MIGRATION_SKETCH.md) — if you later move durable user state off Redis.

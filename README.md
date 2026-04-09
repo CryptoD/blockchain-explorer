@@ -400,9 +400,15 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [SMTP TLS](docs/SMTP_TLS.md) - verified TLS in production; `SMTP_SKIP_VERIFY` only in development (with startup warning)
 - [Security HTTP headers](docs/SECURITY_HEADERS.md) - CSP, HSTS, framing, env vars (`HSTS_*`)
 - [CSRF and sessions](docs/CSRF_AND_SESSIONS.md) - session TTL, CSRF rotation on password change, tests
-- [Rate limits and probe exemptions](docs/RATE_LIMITS.md) - global limits, `/healthz`/`/readyz`, `/metrics` + `METRICS_RATE_LIMIT_PER_IP`
+- [Rate limits and probe exemptions](docs/RATE_LIMITS.md) - global limits, `/health`/`/ready` (and `/healthz`/`/readyz` aliases), `/metrics` + `METRICS_RATE_LIMIT_PER_IP`
+- [Health vs. readiness](docs/HEALTH_AND_READINESS.md) - liveness (`/health`) vs readiness (`/ready`), Kubernetes probes
+- [SLOs and error budget](docs/SLO_AND_ERROR_BUDGET.md) - search latency targets (e.g. 99% &lt; 500 ms), Prometheus examples, budget policy
+- [Outbound circuit breakers](docs/CIRCUIT_BREAKERS.md) - per-host gobreaker on RPC/pricing/news HTTP, half-open recovery, env tuning
+- [Retry budgets](docs/RETRY_BUDGET.md) - Resty retry cap and optional per-inbound outbound attempt budget
+- [Idempotency keys (exports)](docs/IDEMPOTENCY_KEYS.md) - `Idempotency-Key` header, JSON replay and streaming de-dupe
 - [Input size limits](docs/INPUT_LIMITS.md) - max body, JSON depth, CSV export row caps
 - [SQL (N/A) and Redis key safety](docs/SQL_AND_REDIS_SAFETY.md) - no SQL in app; Redis keys, SCAN patterns, future SQL/Lua guidance
+- [Redis backup and restore](docs/REDIS_BACKUP_AND_RESTORE.md) - RDB/AOF, managed vs self-hosted, restore outline, data lost on total loss
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 - [External penetration testing](docs/PENETRATION_TESTING.md) - cadence (annual / pre-launch), tracking findings in issues
