@@ -6,6 +6,8 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
+**Progress (checklist in this file):** tasks **1–60** are **done** (Phases **11–15** through reliability: SLOs, health/readiness, circuit breakers, retry budgets, export idempotency, email dead-letter + metrics, Redis backup runbook, quarterly DR drill). Tasks **61–100** are **open** (feature flags through release certification). Update this sentence when you complete more tasks.
+
 ---
 
 ## Phase 11 — Architecture & modularity

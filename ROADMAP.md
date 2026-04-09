@@ -63,6 +63,8 @@
 
 This roadmap is the **historical phase checklist** (Phases 1–9 delivered; Phase 10 is future work below). **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)** is the **continuation**: **100 concrete tasks** with explanations to push the project toward world-class maintainability, security, performance, and competitive parity.
 
+**Status:** In **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)**, tasks **1–60** are marked **complete** (through Phase 15: operational resilience including backup/restore and disaster-recovery drill documentation). Tasks **61–100** remain **open**. That file is the live checklist—keep it updated as work lands.
+
 **Context:** an internal code review rated the codebase at **~72/100**—strong and launchable; the main gaps called out were monolith size, test depth vs. code volume, and hardening for extreme scale. Use the new file as the backlog to **perfect** the project beyond the original roadmap’s “done” milestones.
 
 ## Phase 10 — Future

@@ -24,6 +24,13 @@ Application listens on **`:8080`** by default (`GET /metrics`). Adjust host/port
 | `explorer_prefetch_last_success_unixtime` | — | **Staleness** of last good prefetch (compare to `time()`). |
 | `explorer_alert_eval_duration_seconds` | — | Price-alert evaluation duration. |
 | `explorer_alert_eval_triggered_total` | — | Cumulative in-app price alerts fired. |
+| `explorer_blockchain_rpc_calls_total` | `method`, `status` | JSON-RPC to blockchain provider. |
+| `explorer_blockchain_rpc_duration_seconds` | `method` | RPC latency. |
+| `explorer_outbound_circuit_breaker_transitions_total` | `host`, `from_state`, `to_state` | Per-upstream breaker state changes ([`internal/outboundbreaker`](../internal/outboundbreaker/transport.go)). |
+| `explorer_outbound_circuit_breaker_rejections_total` | `host`, `reason` | Requests short-circuited (`open` / `half_open`). |
+| `explorer_email_queue_depth` | — | Buffered outbound emails waiting in-process ([`internal/email`](../internal/email/email.go)). |
+| `explorer_email_enqueue_dropped_total` | `reason` | Emails not queued (e.g. `queue_full`); see admin `email_queue` on `/api/v1/admin/status`. |
+| `explorer_email_dead_letter_entries` | — | Rows retained in the in-process dead-letter ring. |
 
 **External APIs (GetBlock, CoinGecko, news):** the app does not yet export separate histograms per upstream. Treat **HTTP 5xx rate** and **latency** on routes that call those dependencies as a proxy (e.g. `/api/v1/search`, `/api/v1/rates`, `/api/v1/network-status`). For deeper visibility, add custom metrics or use Sentry performance traces.
 

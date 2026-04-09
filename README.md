@@ -392,6 +392,8 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 ## Documentation
 
+- [Roadmap (phases 1–10)](ROADMAP.md) - shipped features and Phase 10 follow-ups
+- [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (tasks 1–60 done in checklist; 61–100 open)
 - [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
