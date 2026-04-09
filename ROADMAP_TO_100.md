@@ -81,7 +81,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **57. Idempotency keys** — For exports or payments (if ever): safe replays. **Done:** [`Idempotency-Key`](docs/IDEMPOTENCY_KEYS.md) on export routes; [`internal/idempotency`](internal/idempotency) + [`export_idempotency.go`](internal/server/export_idempotency.go); JSON replay + stream de-dupe (409 on replay); [docs/IDEMPOTENCY_KEYS.md](docs/IDEMPOTENCY_KEYS.md).
 - [x] **58. Dead letter for email queue** — If queue full persists: metrics + admin visibility. **Done:** in-process dead-letter ring ([`internal/email/email.go`](internal/email/email.go)); Prometheus `explorer_email_queue_depth`, `explorer_email_enqueue_dropped_total`, `explorer_email_dead_letter_entries` ([`internal/metrics/metrics.go`](internal/metrics/metrics.go)); `email_queue` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
 - [x] **59. Backup/restore runbook** — Redis RDB/AOF strategy; what user data is lost on total loss. **Done:** [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md).
-- [ ] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup.
+- [x] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup. **Done:** [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md); see also [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) §6.
 - [ ] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag).
 - [ ] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap.
 - [ ] **63. Queue depth alerts** — Prometheus alerts for email queue, background job backlog.

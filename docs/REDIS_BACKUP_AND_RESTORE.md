@@ -88,18 +88,15 @@ If **all Redis data is permanently lost** and there is **no** backup, **no** exp
 
 ## 6. Testing restores
 
-At least annually (or per task **60** disaster drill):
+For **ad-hoc** verification: restore a **non-production** snapshot to a **scratch** Redis, point a **staging** build at it, and run smoke tests (login if users exist, list portfolios, one search).
 
-1. Restore a **non-production** snapshot to a **scratch** Redis.
-2. Point a **staging** build of the app at it.
-3. Run **smoke tests:** login (if users present), list portfolios, one search.
-
-Document gaps and update automation.
+For a **formal quarterly process** (simulated wipe, restore, validation checklist, written record), follow [**DISASTER_RECOVERY_DRILL.md**](DISASTER_RECOVERY_DRILL.md) ([ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **60**).
 
 ---
 
 ## Related documents
 
+- [`DISASTER_RECOVERY_DRILL.md`](DISASTER_RECOVERY_DRILL.md) — quarterly simulated Redis wipe + restore drill.
 - [`SQL_AND_REDIS_SAFETY.md`](SQL_AND_REDIS_SAFETY.md) — key layout and cluster caveats.
 - [`HORIZONTAL_SCALING.md`](HORIZONTAL_SCALING.md) — shared Redis across replicas.
 - [`POSTGRES_MIGRATION_SKETCH.md`](POSTGRES_MIGRATION_SKETCH.md) — future durable user store off Redis.
