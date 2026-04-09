@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–61** are **done** (through **feature flags** for news and price alerts). Tasks **62–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–62** are **done** (through **degraded mode UX**: readiness banner + HTML vs JSON rate limits). Tasks **63–100** are **open**. Update this sentence when you complete more tasks.
 
 ---
 
@@ -85,7 +85,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **59. Backup/restore runbook** — Redis RDB/AOF strategy; what user data is lost on total loss. **Done:** [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md).
 - [x] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup. **Done:** [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md); see also [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) §6.
 - [x] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag). **Done:** [`FEATURE_NEWS_ENABLED` / `FEATURE_PRICE_ALERTS_ENABLED`](internal/config/config.go); Redis `feature:news`, `feature:price_alerts` ([`internal/featureflags`](internal/featureflags/featureflags.go)); [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md); admin `feature_flags` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
-- [ ] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap.
+- [x] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap. **Done:** [`static/js/degraded-mode.js`](../static/js/degraded-mode.js) + [`docs/DEGRADED_MODE_UX.md`](docs/DEGRADED_MODE_UX.md); [`wantsHTMLRateLimitPage` / `rateLimitErrorResponse`](../internal/server/rate_limit_html.go) for browser 429 HTML vs API JSON.
 - [ ] **63. Queue depth alerts** — Prometheus alerts for email queue, background job backlog.
 
 ## Phase 16 — API & developer experience

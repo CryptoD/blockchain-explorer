@@ -63,12 +63,12 @@
 
 This roadmap is the **historical phase checklist** (Phases 1–9 delivered; Phase 10 is future work below). **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)** is the **continuation**: **100 concrete tasks** with explanations to push the project toward world-class maintainability, security, performance, and competitive parity.
 
-**Status:** In **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)**, tasks **1–61** are marked **complete** (including feature flags for news and price alerts). Tasks **62–100** remain **open**. That file is the live checklist—keep it updated as work lands.
+**Status:** In **[ROADMAP_TO_100.md](ROADMAP_TO_100.md)**, tasks **1–62** are marked **complete** (including degraded-mode UX and HTML rate-limit pages). Tasks **63–100** remain **open**. That file is the live checklist—keep it updated as work lands.
 
 **Context:** an internal code review rated the codebase at **~72/100**—strong and launchable; the main gaps called out were monolith size, test depth vs. code volume, and hardening for extreme scale. Use the new file as the backlog to **perfect** the project beyond the original roadmap’s “done” milestones.
 
 ## Phase 10 — Future
 - [ ] Replace placeholder RPC/pricing keys with real provider credentials for full data fidelity
-- [ ] Make HTML routes resilient to API rate limiting (avoid returning JSON rate-limit responses for pages)
+- [x] **HTML vs JSON rate limits** — Browser navigations to HTML shells receive a readable **429 HTML** page; `/api/*` stays JSON ([`internal/server/rate_limit_html.go`](internal/server/rate_limit_html.go), [docs/DEGRADED_MODE_UX.md](docs/DEGRADED_MODE_UX.md)).
 - [ ] Additional watchlist/portfolio enhancements
 - [ ] Further UX and performance improvements

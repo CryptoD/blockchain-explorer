@@ -23,6 +23,8 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **54**. I
 
 **Purpose:** Answer “should the load balancer send **traffic** to this instance?” If Redis is down or (when enabled) the blockchain RPC check fails, the instance should stop receiving traffic without being restarted.
 
+**UI:** HTML pages poll **`GET /ready`** from [`static/js/degraded-mode.js`](../static/js/degraded-mode.js) to show a **degraded** banner when not ready ([`docs/DEGRADED_MODE_UX.md`](DEGRADED_MODE_UX.md)).
+
 | Path | Handler |
 |------|---------|
 | **`GET /ready`** | [`readinessHandler`](../internal/server/getusdperfiat.go) |

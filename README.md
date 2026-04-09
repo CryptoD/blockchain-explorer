@@ -393,7 +393,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 ## Documentation
 
 - [Roadmap (phases 1–10)](ROADMAP.md) - shipped features and Phase 10 follow-ups
-- [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (tasks 1–60 done in checklist; 61–100 open)
+- [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (tasks 1–62 done in checklist; 63–100 open)
 - [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
@@ -413,6 +413,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [Redis backup and restore](docs/REDIS_BACKUP_AND_RESTORE.md) - RDB/AOF, managed vs self-hosted, restore outline, data lost on total loss
 - [Disaster recovery drill (quarterly)](docs/DISASTER_RECOVERY_DRILL.md) - simulated Redis wipe, restore from backup, validation checklist, record template
 - [Feature flags (news & price alerts)](docs/FEATURE_FLAGS.md) - env defaults plus Redis `feature:news` / `feature:price_alerts` overrides
+- [Degraded mode UX](docs/DEGRADED_MODE_UX.md) - readiness banner when Redis/down; HTML vs JSON for rate limits
 - [API Test Results](API_TEST_RESULTS.md) - API testing and validation results
 - [Security Policy](SECURITY.md) - how to report vulnerabilities and disclosure guidelines
 - [External penetration testing](docs/PENETRATION_TESTING.md) - cadence (annual / pre-launch), tracking findings in issues

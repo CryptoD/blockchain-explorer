@@ -4,7 +4,7 @@ Go’s `internal/` rule means code under `github.com/CryptoD/blockchain-explorer
 
 This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. Update it when you add a new `internal/` package or change a stability tier.
 
-**Inventory note:** The table below includes packages added through roadmap work through task **61** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/featureflags`](../internal/featureflags/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). Extend the table when new `internal/` boundaries appear.
+**Inventory note:** The table below includes packages added through roadmap work through task **62** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/featureflags`](../internal/featureflags/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). Extend the table when new `internal/` boundaries appear.
 
 ---
 

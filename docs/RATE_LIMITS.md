@@ -16,6 +16,10 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **32**. I
 
 The limiter uses **Redis** when available (`rate:ip:<clientIP>` and `rate:user:<username>`), with an **in-memory fallback** per IP if Redis is down.
 
+### HTML vs JSON on 429 (browser UX)
+
+For **GET** requests that look like **HTML page navigations** (app shells such as `/`, `/dashboard`, `/profile`, `/symbols`, `/admin`, `/bitcoin`, paths ending in `.html`, or `Accept: text/html`), a **429** returns a **short HTML page** with an explanation instead of the JSON error envelope. **API routes** under `/api/` and static assets under `/static/`, `/dist/`, `/images/` still receive **JSON** errors. See [DEGRADED_MODE_UX.md](DEGRADED_MODE_UX.md).
+
 ---
 
 ## Paths exempt from the global limit

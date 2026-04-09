@@ -296,7 +296,7 @@ func enforceMetricsUnauthenticatedRateLimit(c *gin.Context) bool {
 			}
 			if n > int64(limit) {
 				logging.WithComponent(logging.ComponentRateLimit).WithField(logging.FieldEvent, "metrics_rate_limit").WithField(logging.FieldIP, ip).Warn("metrics scrape rate limit exceeded (Redis)")
-				errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+				rateLimitErrorResponse(c)
 				c.Abort()
 				return true
 			}
@@ -319,7 +319,7 @@ func enforceMetricsUnauthenticatedRateLimit(c *gin.Context) bool {
 	metricsRLCount[ip]++
 	if metricsRLCount[ip] > limit {
 		logging.WithComponent(logging.ComponentRateLimit).WithField(logging.FieldEvent, "metrics_rate_limit").WithField(logging.FieldIP, ip).Warn("metrics scrape rate limit exceeded (memory)")
-		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+		rateLimitErrorResponse(c)
 		c.Abort()
 		return true
 	}
@@ -414,7 +414,7 @@ func rateLimitMiddleware(c *gin.Context) {
 				logging.FieldUsername:  username,
 				"backend":              "redis",
 			}).Warn("Rate limit exceeded (Redis)")
-			errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+			rateLimitErrorResponse(c)
 			c.Abort()
 			return
 		}
@@ -448,7 +448,7 @@ func rateLimitMiddleware(c *gin.Context) {
 			logging.FieldIP:        ip,
 			"backend":              "memory",
 		}).Warn("Rate limit exceeded (in-memory)")
-		errorResponse(c, http.StatusTooManyRequests, "rate_limited", "Too many requests")
+		rateLimitErrorResponse(c)
 		c.Abort()
 		return
 	}
