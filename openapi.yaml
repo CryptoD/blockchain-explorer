@@ -1,549 +1,920 @@
 openapi: 3.0.3
 info:
-  title: Bitcoin Explorer API
-  version: 1.0.0
+  title: Bitcoin Blockchain Explorer API
   description: >
-    HTTP+JSON API for the Bitcoin Explorer backend.
-    This specification captures the current, stable `/api/v1` contracts and is
-    intended as the source of truth for future SDK generation.
+    Versioned JSON API under `/api/v1`. Hand-maintained; mirrors route registration in
+    `internal/server/routes.go`. Session auth uses the `session_id` cookie; state-changing
+    requests with that cookie require `X-CSRF-Token` (see `csrfMiddleware` in the server).
+    Correlation IDs propagate via `X-Correlation-ID` / `X-Request-ID`.
+  version: 1.0.0
+  license:
+    name: MIT
+    url: https://opensource.org/licenses/MIT
 
 servers:
-  - url: http://localhost:8080
-    description: Local development
+  - url: "{baseUrl}"
+    variables:
+      baseUrl:
+        default: http://localhost:8080
+        description: Origin (no trailing slash)
+
+# Default: no API key or cookie required; override with `security` on protected operations.
+security: []
 
 tags:
-  - name: Public Search
-  - name: Market Data
-  - name: User
-  - name: Portfolio
-  - name: Admin
-  - name: System
+  - name: explorer
+    description: Search, chain data, exports, rates (mostly public)
+  - name: feedback
+    description: User feedback submission
+  - name: news
+    description: Symbol news and portfolio-scoped news feeds
+  - name: auth
+    description: Login, logout, register (no prior session required)
+  - name: user
+    description: Authenticated user profile, notifications, alerts, portfolios, watchlists
+  - name: admin
+    description: Admin role required (`admin` user)
 
 paths:
   /api/v1/search:
     get:
-      tags: [Public Search]
-      summary: Search for a block, transaction, or address
+      tags: [explorer]
+      summary: Search blocks, transactions, or addresses
+      operationId: search
       parameters:
-        - name: q
-          in: query
-          required: true
-          schema:
-            type: string
-            maxLength: 100
-          description: >
-            Search term. Can be a Bitcoin address, transaction ID, block height,
-            or block hash.
+        - $ref: "#/components/parameters/QueryQ"
       responses:
-        '200':
-          description: Search result
+        "200":
+          description: Search result envelope (JSON)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  type:
-                    type: string
-                    enum: [address, transaction, block]
-                  result:
-                    type: object
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '404':
-          $ref: '#/components/responses/NotFound'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/search/export:
+    get:
+      tags: [explorer]
+      summary: Export search results (JSON)
+      operationId: exportSearch
+      parameters:
+        - $ref: "#/components/parameters/QueryQ"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: JSON export (see Idempotent-Replayed header for idempotent replays)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/search/advanced:
     get:
-      tags: [Public Search]
-      summary: Advanced symbol search with filters and sorting
+      tags: [explorer]
+      summary: Advanced symbol search (filters, pagination, sort)
+      operationId: advancedSearch
       parameters:
-        - name: q
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: page
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          required: false
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+        - $ref: "#/components/parameters/QueryQ"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
         - name: types
           in: query
-          required: false
           schema:
             type: string
-          description: Comma-separated list of symbol types to include.
         - name: categories
           in: query
-          required: false
           schema:
             type: string
-          description: Comma-separated list of categories to include.
         - name: min_price
           in: query
           schema:
-            type: number
+            type: string
         - name: max_price
           in: query
           schema:
-            type: number
+            type: string
         - name: min_market_cap
           in: query
           schema:
-            type: number
+            type: string
         - name: max_market_cap
           in: query
           schema:
-            type: number
+            type: string
         - name: is_active
           in: query
           schema:
-            type: boolean
+            type: string
         - name: sort_by
           in: query
           schema:
             type: string
-            enum:
-              [symbol, name, type, category, market_cap, price, volume_24h, change_24h, rank, listed_since]
-            default: rank
+            description: Allowed fields include symbol, name, category, market_cap, price, rank, etc.
         - name: sort_dir
           in: query
           schema:
             type: string
             enum: [asc, desc]
-            default: asc
       responses:
-        '200':
-          description: Paginated symbol search results
+        "200":
+          description: Advanced search payload
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/SymbolSearchResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/search/advanced/export:
+    get:
+      tags: [explorer]
+      summary: Export advanced search (JSON)
+      operationId: exportAdvancedSearch
+      parameters:
+        - $ref: "#/components/parameters/QueryQ"
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: JSON export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/search/categories:
     get:
-      tags: [Public Search]
-      summary: List available symbol types and categories
+      tags: [explorer]
+      summary: Symbol category list
+      operationId: getSymbolCategories
       responses:
-        '200':
-          description: Available filters
+        "200":
+          description: Categories
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  types:
-                    type: array
-                    items:
-                      type: string
-                  categories:
-                    type: array
-                    items:
-                      type: string
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/blocks/export/csv:
+    get:
+      tags: [explorer]
+      summary: Export blocks as CSV
+      operationId: exportBlocksCSV
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: CSV stream
+          content:
+            text/csv:
+              schema:
+                type: string
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/transactions/export/csv:
+    get:
+      tags: [explorer]
+      summary: Export transactions as CSV
+      operationId: exportTransactionsCSV
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: CSV stream
+          content:
+            text/csv:
+              schema:
+                type: string
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/autocomplete:
     get:
-      tags: [Public Search]
-      summary: Autocomplete helper for search
+      tags: [explorer]
+      summary: Autocomplete suggestions
+      operationId: autocomplete
       parameters:
         - name: q
           in: query
           schema:
             type: string
       responses:
-        '200':
-          description: Autocomplete suggestions
+        "200":
+          description: Autocomplete hits
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  suggestions:
-                    type: array
-                    items:
-                      type: object
-                      properties:
-                        type:
-                          type: string
-                          description: address, tx, or block
-                        value:
-                          type: string
-                        label:
-                          type: string
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/metrics:
     get:
-      tags: [Market Data]
-      summary: Historical mempool, block time, and tx volume metrics
+      tags: [explorer]
+      summary: Aggregated explorer metrics (network-style stats)
+      operationId: getExplorerMetrics
       responses:
-        '200':
-          description: Time-series metrics
+        "200":
+          description: Metrics JSON (not Prometheus format)
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  mempool_size:
-                    $ref: '#/components/schemas/TimeSeries'
-                  block_times:
-                    $ref: '#/components/schemas/TimeSeries'
-                  tx_volume:
-                    $ref: '#/components/schemas/TimeSeries'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/network-status:
     get:
-      tags: [Market Data]
-      summary: Current Bitcoin network status
+      tags: [explorer]
+      summary: Network status snapshot
+      operationId: getNetworkStatus
       responses:
-        '200':
-          description: Network status snapshot
+        "200":
+          description: Network status JSON
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  block_height:
-                    type: number
-                  difficulty:
-                    type: number
-                  hash_rate:
-                    type: number
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/rates:
     get:
-      tags: [Market Data]
-      summary: Bitcoin spot price in user-selectable fiat currencies
-      description: |
-        Returns BTC (and other asset) prices in multiple fiat currencies. Rates are stored in Redis
-        under key `rates:btc` with configurable TTL (RATES_CACHE_TTL_SECONDS, default 60). Update
-        interval matches cache TTL when data is refreshed on cache miss.
-      parameters:
-        - name: currency
-          in: query
-          required: false
-          schema:
-            type: string
-          description: Comma-separated fiat codes (e.g. usd,eur,gbp). If omitted, returns default set (usd, eur, gbp, jpy, cad, aud, chf). Invalid codes are ignored.
+      tags: [explorer]
+      summary: Fiat/crypto reference rates
+      operationId: getRates
       responses:
-        '200':
-          description: Current price map keyed by asset and currency (e.g. bitcoin.usd, bitcoin.eur)
-          headers:
-            X-Rates-Cache-TTL-Seconds:
-              description: Cache TTL in seconds for this rate data
-              schema:
-                type: integer
-            X-Rates-Updated-At:
-              description: ISO 8601 timestamp of response generation
-              schema:
-                type: string
-                format: date-time
+        "200":
+          description: Rates envelope
           content:
             application/json:
               schema:
-                type: object
-                additionalProperties: {}
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/price-history:
     get:
-      tags: [Market Data]
-      summary: Historical BTC price in selected fiat for portfolio performance charts
-      description: Returns time-series of BTC price in a consistent fiat (stored by metrics job). Use for rendering portfolio charts in chosen currency over time.
+      tags: [explorer]
+      summary: Historical price series
+      operationId: getPriceHistory
       parameters:
         - name: currency
           in: query
           schema:
             type: string
             default: usd
-          description: Fiat code (usd, eur, gbp, etc.). Historical FX is stored per currency by the metrics job.
         - name: limit
           in: query
           schema:
             type: integer
-            default: 288
-            maximum: 8640
-          description: Max points to return (288 = 24h at 5-min, 8640 = 30d). Default 288.
       responses:
-        '200':
-          description: Array of historical price points (oldest-first order in response)
-          headers:
-            X-Price-History-Currency:
-              schema:
-                type: string
-              description: Fiat currency of the returned prices
+        "200":
+          description: Price history points
           content:
             application/json:
               schema:
-                type: array
-                items:
-                  $ref: '#/components/schemas/PricePoint'
-        '500':
-          $ref: '#/components/responses/InternalError'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/feedback:
     post:
-      tags: [Public Search]
+      tags: [feedback]
       summary: Submit user feedback
+      operationId: postFeedback
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/FeedbackRequest'
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '200':
-          description: Feedback accepted
+        "200":
+          description: Acknowledgement
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        '400':
-          $ref: '#/components/responses/BadRequest'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
-  /api/v1/register:
-    post:
-      tags: [User]
-      summary: Register a new user account
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/RegisterRequest'
+  /api/v1/news/{symbol}:
+    get:
+      tags: [news]
+      summary: News for a market symbol
+      operationId: newsBySymbol
+      parameters:
+        - name: symbol
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSizeNews"
       responses:
-        '201':
-          description: User created
+        "200":
+          description: News feed
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '409':
-          $ref: '#/components/responses/Conflict'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/news/portfolio/{id}:
+    get:
+      tags: [news]
+      summary: News scoped to a portfolio (authenticated)
+      operationId: newsByPortfolio
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSizeNews"
+      responses:
+        "200":
+          description: News feed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/login:
     post:
-      tags: [User]
-      summary: Login with username and password
+      tags: [auth]
+      summary: Login (sets session cookie)
+      operationId: login
       requestBody:
         required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/LoginRequest'
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
       responses:
-        '200':
-          description: Login successful
-          headers:
-            Set-Cookie:
-              description: >
-                HTTP-only session cookie (`session_id`); Secure in non-development environments.
-              schema:
-                type: string
+        "200":
+          description: Session established; `csrfToken` may be included in body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/LoginResponse'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/logout:
     post:
-      tags: [User]
-      summary: Logout the current session
+      tags: [auth]
+      summary: Logout (clears session)
+      operationId: logout
       responses:
-        '200':
-          description: Logout successful
+        "200":
+          description: Logged out
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/register:
+    post:
+      tags: [auth]
+      summary: Register a new user
+      operationId: register
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [username, password]
+              properties:
+                username:
+                  type: string
+                password:
+                  type: string
+                email:
+                  type: string
+      responses:
+        "200":
+          description: Registration result
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/user/profile:
     get:
-      tags: [User]
-      summary: Get the authenticated user's profile
-      description: Returns the user profile including preferred_currency (persisted in Redis).
+      tags: [user]
+      summary: Current user profile
+      operationId: getUserProfile
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
       responses:
-        '200':
-          description: User profile
+        "200":
+          description: Profile
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
     patch:
-      tags: [User]
-      summary: Update profile settings (e.g. preferred currency)
-      description: Update the authenticated user's profile. preferred_currency is validated against supported fiat codes (usd, eur, gbp, jpy, cad, aud, chf, krw, cny, inr, brl, mxn, try). Send empty string to clear.
+      tags: [user]
+      summary: Update profile
+      operationId: patchUserProfile
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "200":
+          description: Updated profile
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/password:
+    patch:
+      tags: [user]
+      summary: Change password (rotates CSRF)
+      operationId: changePassword
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
         content:
           application/json:
             schema:
               type: object
               properties:
-                preferred_currency:
+                current_password:
                   type: string
-                  description: Fiat code (e.g. usd, eur) or empty to clear
+                new_password:
+                  type: string
       responses:
-        '200':
-          description: Updated user profile
+        "200":
+          description: Success; new csrfToken in body
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/User'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/notifications:
+    get:
+      tags: [user]
+      summary: List notifications
+      operationId: listNotifications
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Notification list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/notifications/{id}:
+    put:
+      tags: [user]
+      summary: Update a notification
+      operationId: updateNotification
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    delete:
+      tags: [user]
+      summary: Dismiss notification
+      operationId: dismissNotification
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Dismissed
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/alerts:
+    get:
+      tags: [user]
+      summary: List price alerts
+      operationId: listPriceAlerts
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
+      responses:
+        "200":
+          description: Alert list
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    post:
+      tags: [user]
+      summary: Create price alert
+      operationId: createPriceAlert
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/alerts/{id}:
+    put:
+      tags: [user]
+      summary: Update price alert
+      operationId: updatePriceAlert
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    delete:
+      tags: [user]
+      summary: Delete price alert
+      operationId: deletePriceAlert
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/user/portfolios:
     get:
-      tags: [Portfolio]
-      summary: List portfolios for the authenticated user
+      tags: [user]
+      summary: List portfolios
+      operationId: listPortfolios
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
       parameters:
-        - name: page
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            default: 1
-        - name: page_size
-          in: query
-          schema:
-            type: integer
-            minimum: 1
-            maximum: 100
-            default: 20
+        - $ref: "#/components/parameters/Page"
+        - $ref: "#/components/parameters/PageSize"
         - name: sort_by
           in: query
           schema:
             type: string
-            enum: [created, updated]
-            default: created
         - name: sort_dir
           in: query
           schema:
             type: string
             enum: [asc, desc]
-            default: desc
       responses:
-        '200':
-          description: Paginated portfolios
+        "200":
+          description: Portfolio list
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  data:
-                    type: array
-                    items:
-                      $ref: '#/components/schemas/Portfolio'
-                  pagination:
-                    $ref: '#/components/schemas/PaginationMeta'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
     post:
-      tags: [Portfolio]
-      summary: Create a new portfolio
+      tags: [user]
+      summary: Create portfolio
+      operationId: createPortfolio
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Portfolio'
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '201':
-          description: Portfolio created
+        "200":
+          description: Created
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Portfolio'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/portfolios/export:
+    get:
+      tags: [user]
+      summary: Export portfolios (JSON aggregate)
+      operationId: exportPortfolios
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: JSON export
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/portfolios/{id}/export/csv:
+    get:
+      tags: [user]
+      summary: Export portfolio holdings CSV
+      operationId: exportPortfolioCSV
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/IdempotencyKey"
+      responses:
+        "200":
+          description: CSV
+          content:
+            text/csv:
+              schema:
+                type: string
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/portfolios/{id}/export/pdf:
+    get:
+      tags: [user]
+      summary: Export portfolio PDF
+      operationId: exportPortfolioPDF
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: PDF stream
+          content:
+            application/pdf:
+              schema:
+                type: string
+                format: binary
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
   /api/v1/user/portfolios/{id}:
     put:
-      tags: [Portfolio]
-      summary: Update an existing portfolio
+      tags: [user]
+      summary: Update portfolio
+      operationId: updatePortfolio
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
       parameters:
         - name: id
           in: path
           required: true
           schema:
             type: string
+        - $ref: "#/components/parameters/CsrfHeader"
       requestBody:
-        required: true
         content:
           application/json:
             schema:
-              $ref: '#/components/schemas/Portfolio'
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '200':
-          description: Updated portfolio
+        "200":
+          description: Updated
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Portfolio'
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '404':
-          $ref: '#/components/responses/NotFound'
-
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
     delete:
-      tags: [Portfolio]
-      summary: Delete a portfolio
+      tags: [user]
+      summary: Delete portfolio
+      operationId: deletePortfolio
       security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/watchlists:
+    get:
+      tags: [user]
+      summary: List watchlists
+      operationId: listWatchlists
+      security:
+        - sessionCookie: []
+      responses:
+        "200":
+          description: Watchlists
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    post:
+      tags: [user]
+      summary: Create watchlist
+      operationId: createWatchlist
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/watchlists/{id}:
+    get:
+      tags: [user]
+      summary: Get watchlist by id
+      operationId: getWatchlist
+      security:
+        - sessionCookie: []
       parameters:
         - name: id
           in: path
@@ -551,357 +922,290 @@ paths:
           schema:
             type: string
       responses:
-        '200':
-          description: Portfolio deleted
+        "200":
+          description: Watchlist detail
           content:
             application/json:
               schema:
-                type: object
-                properties:
-                  message:
-                    type: string
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-
-  /api/v1/admin/status:
-    get:
-      tags: [Admin]
-      summary: View system status (admin only)
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    put:
+      tags: [user]
+      summary: Update watchlist
+      operationId: updateWatchlist
       security:
-        - SessionCookieAuth: []
-      responses:
-        '200':
-          description: System status snapshot
-          content:
-            application/json:
-              schema:
-                type: object
-                properties:
-                  status:
-                    type: string
-                  user:
-                    type: string
-                  role:
-                    type: string
-                  redis_memory:
-                    type: string
-                  active_rate_limits:
-                    type: integer
-                  timestamp:
-                    type: integer
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /api/v1/admin/cache:
-    get:
-      tags: [Admin]
-      summary: Manage cache (admin only)
-      security:
-        - SessionCookieAuth: []
+        - sessionCookie: []
       parameters:
-        - name: action
-          in: query
+        - name: id
+          in: path
           required: true
           schema:
             type: string
-            enum: [clear, stats]
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '200':
-          description: Cache operation result
+        "200":
+          description: Updated
           content:
             application/json:
               schema:
-                type: object
-        '400':
-          $ref: '#/components/responses/BadRequest'
-        '401':
-          $ref: '#/components/responses/Unauthorized'
-        '403':
-          $ref: '#/components/responses/Forbidden'
-
-  /health:
-    get:
-      tags: [System]
-      summary: Liveness probe
-      description: Process is alive. Does not check Redis or RPC (use /ready for dependencies).
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    delete:
+      tags: [user]
+      summary: Delete watchlist
+      operationId: deleteWatchlist
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
       responses:
-        '200':
-          description: OK
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
-  /healthz:
-    get:
-      tags: [System]
-      summary: Liveness probe (alias of /health)
+  /api/v1/user/watchlists/{id}/entries:
+    post:
+      tags: [user]
+      summary: Add watchlist entry
+      operationId: addWatchlistEntry
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '200':
-          description: OK
+        "200":
+          description: Created
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
-  /ready:
-    get:
-      tags: [System]
-      summary: Readiness probe
-      description: Checks Redis and optionally GetBlock when READY_CHECK_EXTERNAL=true.
+  /api/v1/user/watchlists/{id}/entries/{index}:
+    put:
+      tags: [user]
+      summary: Update watchlist entry by index
+      operationId: updateWatchlistEntry
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
       responses:
-        '200':
-          description: Instance is ready to receive traffic
-        '503':
-          description: Instance is not ready
+        "200":
+          description: Updated
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    delete:
+      tags: [user]
+      summary: Delete watchlist entry
+      operationId: deleteWatchlistEntry
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: index
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Deleted
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
-  /readyz:
+  /api/v1/admin/status:
     get:
-      tags: [System]
-      summary: Readiness probe (alias of /ready)
+      tags: [admin]
+      summary: Operational status (feature flags, email queue snapshot, etc.)
+      operationId: adminStatus
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
       responses:
-        '200':
-          description: Instance is ready to receive traffic
-        '503':
-          description: Instance is not ready
+        "200":
+          description: Admin status JSON
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        "403":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/admin/cache:
+    get:
+      tags: [admin]
+      summary: Cache introspection / admin cache view
+      operationId: adminCache
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Cache info
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        "403":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
 
 components:
   securitySchemes:
-    SessionCookieAuth:
+    sessionCookie:
       type: apiKey
       in: cookie
       name: session_id
+      description: Session established via POST /api/v1/login
 
-  responses:
-    BadRequest:
-      description: Bad request
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Unauthorized:
-      description: Unauthorized
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Forbidden:
-      description: Forbidden
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    NotFound:
-      description: Resource not found
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    Conflict:
-      description: Resource conflict
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
-    InternalError:
-      description: Internal server error
-      content:
-        application/json:
-          schema:
-            $ref: '#/components/schemas/ErrorResponse'
+  parameters:
+    QueryQ:
+      name: q
+      in: query
+      description: Search query string
+      schema:
+        type: string
+    Page:
+      name: page
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+    PageSize:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 100
+    PageSizeNews:
+      name: page_size
+      in: query
+      schema:
+        type: integer
+        minimum: 1
+        maximum: 50
+      description: News lists cap at 50 per page
+    IdempotencyKey:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional; export endpoints may de-duplicate identical replays (see docs/IDEMPOTENCY_KEYS.md)
+      schema:
+        type: string
+    CsrfHeader:
+      name: X-CSRF-Token
+      in: header
+      required: false
+      description: >
+        Required when `session_id` is sent and the request is state-changing (POST/PUT/PATCH/DELETE)
+        or targets `/api/v1/admin/*`. Browser clients receive the token from login/profile responses.
+
+      schema:
+        type: string
 
   schemas:
-    Error:
-      type: object
-      properties:
-        code:
-          type: string
-          description: Stable, machine-readable error code.
-        message:
-          type: string
-          description: Human-readable description of the error.
-
-    ErrorResponse:
+    ApiErrorBody:
       type: object
       properties:
         error:
-          $ref: '#/components/schemas/Error'
-
-    PaginationMeta:
-      type: object
-      properties:
-        page:
-          type: integer
-        page_size:
-          type: integer
-        total:
-          type: integer
-        total_pages:
-          type: integer
-
-    TimePoint:
-      type: object
-      properties:
-        time:
-          type: integer
-        value:
-          type: string
-
-    TimeSeries:
-      type: array
-      items:
-        $ref: '#/components/schemas/TimePoint'
-
-    PricePoint:
-      type: object
-      properties:
-        timestamp:
-          type: integer
-        price:
-          type: number
-
-    FeedbackRequest:
-      type: object
-      properties:
-        name:
-          type: string
-          maxLength: 100
-        email:
-          type: string
-          format: email
-        message:
-          type: string
-          minLength: 5
-          maxLength: 1000
-      required: [message]
-
-    LoginRequest:
-      type: object
-      properties:
-        username:
-          type: string
-          minLength: 3
-          maxLength: 64
-        password:
-          type: string
-          minLength: 6
-          maxLength: 128
-      required: [username, password]
-
-    LoginResponse:
-      type: object
-      properties:
-        message:
-          type: string
-        username:
-          type: string
-        role:
-          type: string
-          enum: [admin, user]
-        csrfToken:
-          type: string
-
-    RegisterRequest:
-      type: object
-      properties:
-        username:
-          type: string
-        password:
-          type: string
-        email:
-          type: string
-          format: email
-      required: [username, password]
-
-    User:
-      type: object
-      properties:
-        username:
-          type: string
-        role:
-          type: string
-          enum: [admin, user]
-        preferred_currency:
-          type: string
-          description: User-preferred fiat currency code (e.g. usd, eur). Stored in profile in Redis; validated against supported codes on update.
-        created:
-          type: string
-          format: date-time
-
-    PortfolioItem:
-      type: object
-      properties:
-        type:
-          type: string
-          description: Asset class - crypto, commodity, bond, or stock. Used with symbol for unified pricing.
-        address:
-          type: string
-          description: Optional (e.g. wallet address for crypto).
-        label:
-          type: string
-          description: Display name.
-        amount:
-          type: number
-          description: Quantity (units depend on asset; e.g. coins, oz, face value).
-        symbol:
-          type: string
-          description: Pricing identifier - e.g. bitcoin, ethereum (crypto), XAU/XAG (commodity), US10Y (bond). Crypto defaults to bitcoin when empty.
-
-    Portfolio:
-      type: object
-      properties:
-        id:
-          type: string
-        username:
-          type: string
-        name:
-          type: string
-        description:
-          type: string
-        items:
-          type: array
-          items:
-            $ref: '#/components/schemas/PortfolioItem'
-        created:
-          type: string
-          format: date-time
-        updated:
-          type: string
-          format: date-time
-
-    SymbolInfo:
-      type: object
-      properties:
-        symbol:
-          type: string
-        name:
-          type: string
-        type:
-          type: string
-        category:
-          type: string
-        market_cap:
-          type: number
-        price:
-          type: number
-        volume_24h:
-          type: number
-        change_24h:
-          type: number
-        rank:
-          type: integer
-        is_active:
-          type: boolean
-        listed_since:
-          type: integer
-
-    SymbolSearchResponse:
-      type: object
-      properties:
-        data:
-          type: array
-          items:
-            $ref: '#/components/schemas/SymbolInfo'
-        pagination:
-          $ref: '#/components/schemas/PaginationMeta'
-        filters_applied:
           type: object
-        sort_applied:
-          type: object
-        available_filters:
-          type: object
+          properties:
+            code:
+              type: string
+            message:
+              type: string
+        correlation_id:
+          type: string
+          description: Present when correlation middleware generated or propagated an ID
 
+    GenericJSON:
+      type: object
+      additionalProperties: true
+      description: Application-specific JSON (success envelopes vary by route)
+
+  responses:
+    ApiError:
+      description: Structured error (may include correlation_id)
+      content:
+        application/json:
+          schema:
+            $ref: "#/components/schemas/ApiErrorBody"

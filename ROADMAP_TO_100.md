@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–62** are **done** (through **degraded mode UX**: readiness banner + HTML vs JSON rate limits). Tasks **63–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–64** are **done** (through **OpenAPI 3**: `openapi.yaml` for `/api/v1` + Redocly validation in CI). Tasks **65–100** are **open**. Update this sentence when you complete more tasks.
 
 ---
 
@@ -86,11 +86,11 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **60. Disaster recovery drill** — Quarterly simulated Redis wipe + restore from backup. **Done:** [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md); see also [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) §6.
 - [x] **61. Feature flags** — Toggle risky features (news, alerts) without redeploy (env or Redis flag). **Done:** [`FEATURE_NEWS_ENABLED` / `FEATURE_PRICE_ALERTS_ENABLED`](internal/config/config.go); Redis `feature:news`, `feature:price_alerts` ([`internal/featureflags`](internal/featureflags/featureflags.go)); [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md); admin `feature_flags` on [`GET /api/v1/admin/status`](internal/server/feedbackhandler.go).
 - [x] **62. Degraded mode UX** — When Redis down: explicit UI messages; ROADMAP already notes HTML vs JSON rate limit—**fix** that gap. **Done:** [`static/js/degraded-mode.js`](../static/js/degraded-mode.js) + [`docs/DEGRADED_MODE_UX.md`](docs/DEGRADED_MODE_UX.md); [`wantsHTMLRateLimitPage` / `rateLimitErrorResponse`](../internal/server/rate_limit_html.go) for browser 429 HTML vs API JSON.
-- [ ] **63. Queue depth alerts** — Prometheus alerts for email queue, background job backlog.
+- [x] **63. Queue depth alerts** — Prometheus alerts for email queue, background job backlog. **Done:** [`monitoring/prometheus/prometheus-alerts.yml`](monitoring/prometheus/prometheus-alerts.yml) (`EmailQueueDepthHigh`, `EmailEnqueueDropped`, `EmailDeadLetterBacklogHigh`, `PriceAlertEvalStalled`, `MetricsChartsJobStalled`); `explorer_background_job_runs_total{job="price_alerts"}` increments once per tick via [`RecordPriceAlertTick`](internal/metrics/metrics.go) so stalled alerts work when price alerts are feature-disabled.
 
 ## Phase 16 — API & developer experience
 
-- [ ] **64. OpenAPI 3 spec** — Generate or hand-maintain `openapi.yaml` for `/api/v1`; validate in CI.
+- [x] **64. OpenAPI 3 spec** — Generate or hand-maintain `openapi.yaml` for `/api/v1`; validate in CI. **Done:** [`openapi.yaml`](openapi.yaml) (`/api/v1/*` mapped to handlers in [`internal/server/routes.go`](internal/server/routes.go)); [`.redocly.yaml`](.redocly.yaml) tuning; CI [`scripts/check-openapi.sh`](scripts/check-openapi.sh) (`lint` job).
 - [ ] **65. API versioning policy** — Document deprecation: minimum notice, sunset headers.
 - [ ] **66. Consistent error envelope** — Every error JSON includes `code`, `message`, `correlation_id`, `timestamp`.
 - [ ] **67. Pagination metadata standard** — Same shape for all list endpoints (`total`, `page`, `page_size`, `has_more`).

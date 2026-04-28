@@ -55,6 +55,9 @@ jobs:
       with:
         version: v2.11.4
 
+    - name: Validate OpenAPI 3 (/api/v1)
+      run: ./scripts/check-openapi.sh
+
   security:
     runs-on: ubuntu-latest
     permissions:

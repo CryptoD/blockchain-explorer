@@ -151,7 +151,9 @@ The application will start on `http://localhost:8080`
 
 ## API Documentation
 
-For detailed API documentation, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md)
+Machine-readable **OpenAPI 3** description of [`/api/v1`](internal/server/routes.go): [`openapi.yaml`](openapi.yaml). Redocly lint runs in CI (`scripts/check-openapi.sh`).
+
+For additional notes, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md).
 
 ### Quick API Reference
 
@@ -187,25 +189,15 @@ Success Response:
 }
 ```
 
-Error Response:
+Error Response (many routes also include optional `correlation_id` beside `error`):
 ```json
 {
-bitcoin-explorer/
-├── cmd/server/             # Program entry (`main`); thin wiring
-├── internal/server/        # HTTP server, routes, handlers (application logic)
-├── go.mod                  # Go module definition
-├── go.sum                  # Go dependencies
-├── bitcoin.html            # Main frontend file
-├── index.html              # Alternative frontend
-├── src/                    # Frontend source files
-│   └── styles/             # Stylesheets
-├── dist/                   # Built assets
-├── docker-compose.yml      # Docker Compose configuration
-├── Dockerfile              # Docker build configuration
-├── package.json            # Frontend dependencies
-├── API_TEST_RESULTS.md     # API testing documentation
-├── README.md               # This file
-└── LICENSE                 # License file
+  "error": {
+    "code": "not_found",
+    "message": "Not found"
+  },
+  "correlation_id": "…"
+}
 ```
 
 ## Development

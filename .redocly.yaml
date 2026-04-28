@@ -1,0 +1,7 @@
+# Relaxed rules for hand-maintained spec (see openapi.yaml).
+extends:
+  - recommended
+
+rules:
+  # Many routes document errors via `default` + ApiError schema.
+  operation-4xx-response: off
