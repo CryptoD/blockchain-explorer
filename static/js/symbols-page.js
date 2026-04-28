@@ -284,7 +284,12 @@
                         const res = await fetch('/api/search/advanced/export?' + queryString);
                         if (!res.ok) {
                             const data = await res.json().catch(function() { return {}; });
-                            throw new Error(data.error || data.code || 'Export failed');
+                            throw new Error(
+                                (data && typeof data.message === 'string' && data.message) ||
+                                    data.error ||
+                                    data.code ||
+                                    'Export failed'
+                            );
                         }
                         const blob = await res.blob();
                         const a = document.createElement('a');

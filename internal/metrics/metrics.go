@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/gin-gonic/gin"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promauto"
@@ -178,7 +179,7 @@ func TokenAuthMiddleware(token string) gin.HandlerFunc {
 			c.Next()
 			return
 		}
-		c.AbortWithStatus(http.StatusUnauthorized)
+		c.AbortWithStatusJSON(http.StatusUnauthorized, apiutil.ErrorEnvelopeJSON(c, "unauthorized", "Invalid or missing metrics token"))
 	}
 }
 
@@ -293,9 +294,15 @@ func RecordBlockchainRPC(method string, elapsed time.Duration, err error) {
 	blockchainRPCDuration.WithLabelValues(method).Observe(elapsed.Seconds())
 }
 
-// RecordAlertEval records one alert evaluation cycle.
-func RecordAlertEval(elapsed time.Duration, triggered int) {
+// RecordPriceAlertTick records one scheduler invocation of the price-alert job (before feature gates).
+// This keeps explorer_background_job_runs_total{job="price_alerts"} aligned with the ticker so
+// stalled-loop alerts do not fire when price alerts are disabled via feature flag.
+func RecordPriceAlertTick() {
 	backgroundJobRuns.WithLabelValues("price_alerts").Inc()
+}
+
+// RecordAlertEval records duration and trigger count for a completed alert evaluation batch.
+func RecordAlertEval(elapsed time.Duration, triggered int) {
 	alertEvalDuration.Observe(elapsed.Seconds())
 	if triggered > 0 {
 		alertEvalTriggered.Add(float64(triggered))

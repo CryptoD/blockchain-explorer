@@ -191,14 +191,13 @@ Success Response:
 }
 ```
 
-Error Response (many routes also include optional `correlation_id` beside `error`):
+Error response (standard envelope for failed API JSON):
 ```json
 {
-  "error": {
-    "code": "not_found",
-    "message": "Not found"
-  },
-  "correlation_id": "…"
+  "code": "not_found",
+  "message": "Not found",
+  "correlation_id": "…",
+  "timestamp": "2026-04-06T12:00:00.000000000Z"
 }
 ```
 

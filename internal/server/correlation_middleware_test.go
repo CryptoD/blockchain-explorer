@@ -30,7 +30,7 @@ func TestCorrelationIDMiddleware_PropagatesInboundID(t *testing.T) {
 	}
 }
 
-func TestMergeCorrelationID_InErrorJSON(t *testing.T) {
+func TestErrorEnvelopeIncludesCorrelationTimestamp(t *testing.T) {
 	gin.SetMode(gin.TestMode)
 	r := gin.New()
 	r.Use(correlationIDMiddleware())
@@ -44,7 +44,9 @@ func TestMergeCorrelationID_InErrorJSON(t *testing.T) {
 	if err := json.Unmarshal(w.Body.Bytes(), &body); err != nil {
 		t.Fatal(err)
 	}
-	if _, ok := body["correlation_id"]; !ok {
-		t.Fatalf("expected correlation_id in body: %v", body)
+	for _, key := range []string{"code", "message", "correlation_id", "timestamp"} {
+		if _, ok := body[key]; !ok {
+			t.Fatalf("expected %s in body: %v", key, body)
+		}
 	}
 }

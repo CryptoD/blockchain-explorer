@@ -11,6 +11,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/CryptoD/blockchain-explorer/internal/apperrors"
 	"github.com/CryptoD/blockchain-explorer/internal/blockchain"
 	"github.com/CryptoD/blockchain-explorer/internal/config"
@@ -114,13 +115,13 @@ func livenessHandler(c *gin.Context) {
 // **503** so load balancers stop sending traffic without restarting the process.
 func readinessHandler(c *gin.Context) {
 	if rdb == nil {
-		c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": "redis client not initialized"}))
+		notReadyEnvelope(c, "redis client not initialized")
 		return
 	}
 
 	// Redis must be reachable
 	if err := rdb.Ping(ctx).Err(); err != nil {
-		c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": fmt.Sprintf("redis ping failed: %v", err)}))
+		notReadyEnvelope(c, fmt.Sprintf("redis ping failed: %v", err))
 		return
 	}
 
@@ -128,7 +129,7 @@ func readinessHandler(c *gin.Context) {
 	checkExternal := appConfig != nil && appConfig.ReadyCheckExternal
 	if checkExternal {
 		if baseURL == "" || apiKey == "" {
-			c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": "missing GETBLOCK_* env for external readiness check"}))
+			notReadyEnvelope(c, "missing GETBLOCK_* env for external readiness check")
 			return
 		}
 		// Perform a lightweight external call with a short timeout
@@ -150,12 +151,19 @@ func readinessHandler(c *gin.Context) {
 			} else {
 				msg = fmt.Sprintf("%s: %s", msg, resp.Status())
 			}
-			c.JSON(http.StatusServiceUnavailable, mergeCorrelationID(c, gin.H{"status": "not_ready", "error": msg}))
+			notReadyEnvelope(c, msg)
 			return
 		}
 	}
 
 	c.JSON(http.StatusOK, mergeCorrelationID(c, gin.H{"status": "ready", "timestamp": time.Now().Unix()}))
+}
+
+// notReadyEnvelope returns 503 JSON with the standard error fields plus status for probes (HEALTH_AND_READINESS.md).
+func notReadyEnvelope(c *gin.Context, message string) {
+	env := apiutil.ErrorEnvelopeJSON(c, "not_ready", message)
+	env["status"] = "not_ready"
+	c.JSON(http.StatusServiceUnavailable, env)
 }
 
 var (
@@ -179,12 +187,6 @@ var (
 	// appConfig holds the parsed application configuration.
 	appConfig *config.Config
 )
-
-// APIError represents a standardized error payload returned by the API.
-type APIError struct {
-	Code    string `json:"code"`
-	Message string `json:"message"`
-}
 
 // SetHTTPClient allows tests or other packages to replace the internal HTTP client used for API calls.
 func SetHTTPClient(c *resty.Client) {
@@ -394,12 +396,9 @@ func mergeCorrelationID(c *gin.Context, body gin.H) gin.H {
 	return body
 }
 
-// errorResponse writes a structured error response.
+// errorResponse writes a structured error response (code, message, correlation_id, timestamp).
 func errorResponse(c *gin.Context, status int, code, message string) {
-	c.JSON(status, mergeCorrelationID(c, gin.H{"error": APIError{
-		Code:    code,
-		Message: message,
-	}}))
+	c.JSON(status, apiutil.ErrorEnvelopeJSON(c, code, message))
 }
 
 // errorResponseFrom maps domain errors to stable API codes without leaking raw errors to clients.
@@ -421,10 +420,7 @@ func errorResponseFrom(c *gin.Context, err error) {
 
 // abortErrorResponse aborts the request with a structured error response.
 func abortErrorResponse(c *gin.Context, status int, code, message string) {
-	c.AbortWithStatusJSON(status, mergeCorrelationID(c, gin.H{"error": APIError{
-		Code:    code,
-		Message: message,
-	}}))
+	c.AbortWithStatusJSON(status, apiutil.ErrorEnvelopeJSON(c, code, message))
 }
 
 // handleError captures an error with Sentry and returns a standardized payload.

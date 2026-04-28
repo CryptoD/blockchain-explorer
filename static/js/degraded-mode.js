@@ -14,6 +14,13 @@
         return d.innerHTML;
     }
 
+    function readinessErrMsg(data) {
+        if (!data) return '';
+        if (typeof data.message === 'string' && data.message) return data.message;
+        if (typeof data.error === 'string') return data.error;
+        return '';
+    }
+
     function removeBanner() {
         var el = document.getElementById(bannerId);
         if (el && el.parentNode) {
@@ -62,7 +69,7 @@
                 removeBanner();
                 return;
             }
-            var err = typeof data.error === 'string' ? data.error : 'Service dependencies are not ready.';
+            var err = readinessErrMsg(data) || 'Service dependencies are not ready.';
             showBanner(err);
         } catch (e) {
             showBanner('Could not verify readiness. The app may be degraded.');

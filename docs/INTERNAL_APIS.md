@@ -4,7 +4,7 @@ Go’s `internal/` rule means code under `github.com/CryptoD/blockchain-explorer
 
 This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. Update it when you add a new `internal/` package or change a stability tier.
 
-**Inventory note:** The table below includes packages added through roadmap work through task **65** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/featureflags`](../internal/featureflags/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). **HTTP contract:** hand-maintained [`openapi.yaml`](../openapi.yaml) describes `/api/v1` (see [`internal/server/routes.go`](../internal/server/routes.go)); versioning and deprecation (**notice, Sunset / Deprecation headers**) are policy in [`API_VERSIONING.md`](API_VERSIONING.md); CI validates the spec via [`scripts/check-openapi.sh`](../scripts/check-openapi.sh). Extend the table when new `internal/` boundaries appear.
+**Inventory note:** The table below includes packages added through roadmap work through task **66** (e.g. [`internal/idempotency`](../internal/idempotency/), [`internal/featureflags`](../internal/featureflags/), [`internal/outboundbreaker`](../internal/outboundbreaker/), [`internal/retrybudget`](../internal/retrybudget/), email queue + dead-letter behavior in [`internal/email`](../internal/email/email.go)). **HTTP contract:** hand-maintained [`openapi.yaml`](../openapi.yaml) describes `/api/v1` (see [`internal/server/routes.go`](../internal/server/routes.go)); versioning and deprecation (**notice, Sunset / Deprecation headers**) are policy in [`API_VERSIONING.md`](API_VERSIONING.md); JSON errors use [`apiutil.ErrorEnvelopeJSON`](../internal/apiutil/error_envelope.go) (**`code`, `message`, `correlation_id`, `timestamp`**); CI validates the spec via [`scripts/check-openapi.sh`](../scripts/check-openapi.sh). Extend the table when new `internal/` boundaries appear.
 
 ---
 
@@ -37,7 +37,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. U
 | [`internal/metrics`](../internal/metrics/) | Evolving | Histogram/counter names and [`Middleware`](../internal/metrics/metrics.go) labels—treat as operational contract, not semver |
 | [`internal/correlation`](../internal/correlation/) | Evolving | Request ID helpers and header names |
 | [`internal/sentryutil`](../internal/sentryutil/) | Evolving | `Init` and options (see package) |
-| [`internal/apiutil`](../internal/apiutil/) | Evolving | Pagination/sort helpers tied to query params |
+| [`internal/apiutil`](../internal/apiutil/) | Evolving | Pagination/sort (`ParsePagination`, …), JSON error envelope ([`ErrorEnvelopeJSON`](../internal/apiutil/error_envelope.go)) |
 | [`internal/logging`](../internal/logging/) | Evolving | Component names and field keys |
 | [`internal/redisstore`](../internal/redisstore/) | Evolving | Thin alias over `redis.Cmdable` |
 | [`internal/redistest`](../internal/redistest/) | Shell | Test-only Redis integration helpers |

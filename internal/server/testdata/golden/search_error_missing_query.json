@@ -1,6 +1,4 @@
 {
-  "error": {
-    "code": "missing_query",
-    "message": "Missing query parameter"
-  }
+  "code": "missing_query",
+  "message": "Missing query parameter"
 }

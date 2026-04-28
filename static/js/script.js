@@ -1,5 +1,16 @@
         const API_BASE = '/api/v1';
 
+        /** Parses API JSON error envelopes: flat {message} or legacy {error} string/object. */
+        function pickApiErrorMsg(d) {
+            if (!d) return '';
+            if (typeof d.message === 'string' && d.message) return d.message;
+            if (d.error != null) {
+                if (typeof d.error === 'string') return d.error;
+                if (typeof d.error === 'object' && typeof d.error.message === 'string') return d.error.message;
+            }
+            return '';
+        }
+
         // CSRF helpers
         const CSRF_HEADER_NAME = 'X-CSRF-Token';
         let csrfToken = null;
@@ -695,7 +706,8 @@
                             let msg = `API request failed (${response.status})`;
                             try {
                                 const j = JSON.parse(txt);
-                                if (j && j.error) msg = j.error;
+                                const extracted = pickApiErrorMsg(j);
+                                if (extracted) msg = extracted;
                             } catch (e) {
                                 if (txt) msg = txt;
                             }
@@ -1321,7 +1333,7 @@
                 errorDiv.classList.add('hidden');
                 loadSystemStatus();
             } else {
-                errorDiv.textContent = data.error || 'Login failed';
+                errorDiv.textContent = pickApiErrorMsg(data) || 'Login failed';
                 errorDiv.classList.remove('hidden');
             }
         } catch (error) {
@@ -1426,7 +1438,7 @@
                 // Refresh cache stats
                 loadCacheStats();
             } else {
-                resultDiv.innerHTML = `<p class="text-red-600">Failed to clear cache: ${data.error}</p>`;
+                resultDiv.innerHTML = `<p class="text-red-600">Failed to clear cache: ${pickApiErrorMsg(data) || ''}</p>`;
                 resultDiv.classList.remove('hidden');
             }
         } catch (error) {
@@ -1510,7 +1522,7 @@
                     window.location.href = '/admin';
                 }
             } else {
-                errorDiv.textContent = data.error || 'Login failed';
+                errorDiv.textContent = pickApiErrorMsg(data) || 'Login failed';
                 errorDiv.classList.remove('hidden');
             }
         } catch (error) {
@@ -1544,7 +1556,7 @@
                 document.getElementById('login-username').value = username;
                 alert('Registration successful! Please login.');
             } else {
-                errorDiv.textContent = data.error || 'Registration failed';
+                errorDiv.textContent = pickApiErrorMsg(data) || 'Registration failed';
                 errorDiv.classList.remove('hidden');
             }
         } catch (error) {

@@ -69,14 +69,12 @@ func registerV1(t *testing.T, r http.Handler, username, password string) {
 func apiErrCode(t *testing.T, body []byte) string {
 	t.Helper()
 	var wrap struct {
-		Error struct {
-			Code string `json:"code"`
-		} `json:"error"`
+		Code string `json:"code"`
 	}
 	if err := json.Unmarshal(body, &wrap); err != nil {
 		return ""
 	}
-	return wrap.Error.Code
+	return wrap.Code
 }
 
 func validPortfolioJSON(name string) string {

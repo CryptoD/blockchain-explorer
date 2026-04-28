@@ -1,4 +1,13 @@
     const API_BASE = '/api/v1';
+    function pickApiErrorMsg(d) {
+        if (!d) return '';
+        if (typeof d.message === 'string' && d.message) return d.message;
+        if (d.error != null) {
+            if (typeof d.error === 'string') return d.error;
+            if (typeof d.error === 'object' && typeof d.error.message === 'string') return d.error.message;
+        }
+        return '';
+    }
     function getCSRFToken() {
         try { return localStorage.getItem('csrfToken'); } catch (e) { return null; }
     }
@@ -127,7 +136,7 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                err.textContent = data.error || data.code || 'Failed to save';
+                err.textContent = pickApiErrorMsg(data) || data.code || 'Failed to save';
                 err.classList.remove('hidden');
                 return;
             }
@@ -275,7 +284,7 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = data.error || data.code || 'Failed to create alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to create alert';
                 errEl.classList.remove('hidden');
                 return;
             }
@@ -298,7 +307,7 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = data.error || data.code || 'Failed to update alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to update alert';
                 errEl.classList.remove('hidden');
                 await loadAlerts();
             }
@@ -316,7 +325,7 @@
             const res = await authFetch(API_BASE + '/user/alerts/' + encodeURIComponent(id), { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = data.error || data.code || 'Failed to delete alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to delete alert';
                 errEl.classList.remove('hidden');
                 return;
             }

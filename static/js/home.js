@@ -366,7 +366,10 @@
                     feedbackForm.reset();
                 } else {
                     feedbackResult.className = 'mt-4 text-red-600 font-semibold';
-                    feedbackResult.textContent = result.error || 'Failed to submit feedback';
+                    feedbackResult.textContent =
+                        (result && typeof result.message === 'string' && result.message) ||
+                        result.error ||
+                        'Failed to submit feedback';
                 }
             } catch (error) {
                 feedbackResult.className = 'mt-4 text-red-600 font-semibold';
@@ -583,7 +586,12 @@
                             const res = await fetch(url, { credentials: 'include' });
                             if (!res.ok) {
                                 const errBody = await res.json().catch(() => ({}));
-                                throw new Error(errBody.error || errBody.code || 'Export failed');
+                                throw new Error(
+                                    (errBody && typeof errBody.message === 'string' && errBody.message) ||
+                                        errBody.error ||
+                                        errBody.code ||
+                                        'Export failed'
+                                );
                             }
                             const blob = await res.blob();
                             const a = document.createElement('a');

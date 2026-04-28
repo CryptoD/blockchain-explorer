@@ -32,8 +32,8 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **54**. I
 
 **Behavior:**
 
-1. **Redis** — `PING` must succeed; otherwise **503** with `status: not_ready`.
-2. **Optional external check** — If `READY_CHECK_EXTERNAL=true` in config, a lightweight `getblockcount` JSON-RPC POST to GetBlock must succeed (short timeout, no retries). If `GETBLOCK_*` is missing when this flag is on, **503**.
+1. **Redis** — `PING` must succeed; otherwise **503** JSON with `status: not_ready` and the same **`code` / `message` / `correlation_id` / `timestamp`** envelope as other API errors (`code` is `not_ready`).
+2. **Optional external check** — If `READY_CHECK_EXTERNAL=true` in config, a lightweight `getblockcount` JSON-RPC POST to GetBlock must succeed (short timeout, no retries). If `GETBLOCK_*` is missing when this flag is on, **503** with that envelope.
 
 Configure the external check only when you accept the extra latency and RPC load per probe; see [HORIZONTAL_SCALING.md](HORIZONTAL_SCALING.md).
 
