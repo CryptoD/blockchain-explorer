@@ -817,6 +817,12 @@ paths:
     put:
       tags: [user]
       summary: Update portfolio
+      description: |
+        Full replacement of `name`, `description`, and `items` for this portfolio. Path `{id}` selects the resource (body `id` is not authoritative).
+
+        Idempotent in the sense that retries with the same payload re-apply the same holdings; each success returns a new `updated` timestamp.
+
+        Concurrent updates are last-write-wins; there is no `If-Match` / ETag precondition today. See docs/REST_WRITE_SEMANTICS.md.
       operationId: updatePortfolio
       security:
         - sessionCookie: []
@@ -938,6 +944,10 @@ paths:
     put:
       tags: [user]
       summary: Update watchlist
+      description: |
+        Full replacement of `name` and `entries` after loading the watchlist by path `{id}`.
+
+        Each success updates `updated`; concurrent PUTs are last-write-wins without `If-Match`. See docs/REST_WRITE_SEMANTICS.md.
       operationId: updateWatchlist
       security:
         - sessionCookie: []

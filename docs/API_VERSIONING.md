@@ -4,6 +4,8 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **65**. I
 
 **Implementation mapping:** route registration in [`internal/server/routes.go`](../internal/server/routes.go); machine-readable contract in [`openapi.yaml`](../openapi.yaml).
 
+**Write semantics (PUT/PATCH idempotency, `updated`, ETags, concurrency):** [REST_WRITE_SEMANTICS.md](REST_WRITE_SEMANTICS.md) — portfolios and watchlists use full `PUT` replacement; last-write-wins unless a future revision adds conditional requests.
+
 ---
 
 ## Versioning model
