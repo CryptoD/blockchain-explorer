@@ -4,7 +4,8 @@ info:
   description: >
     Versioned JSON API under `/api/v1`. Hand-maintained; mirrors route registration in
     `internal/server/routes.go`. Errors use a flat envelope (code, message, correlation_id,
-    timestamp RFC3339). Deprecation: docs/API_VERSIONING.md. Session auth uses the `session_id`
+    timestamp RFC3339). List `pagination` objects use `total`, `page`, `page_size`, `has_more`.
+    Deprecation: docs/API_VERSIONING.md. Session auth uses the `session_id`
     cookie; state-changing
     requests with that cookie require `X-CSRF-Token` (see `csrfMiddleware` in the server).
     Correlation IDs propagate via `X-Correlation-ID` / `X-Request-ID`.
@@ -1205,6 +1206,25 @@ components:
       type: object
       additionalProperties: true
       description: Application-specific JSON (success envelopes vary by route)
+
+    ListPagination:
+      type: object
+      required: [total, page, page_size, has_more]
+      description: >
+        Standard metadata for paginated list endpoints. For provider-backed news lists, `total`
+        reflects items returned in this response; `has_more` is a full-page heuristic.
+      properties:
+        total:
+          type: integer
+          minimum: 0
+        page:
+          type: integer
+          minimum: 1
+        page_size:
+          type: integer
+          minimum: 1
+        has_more:
+          type: boolean
 
   responses:
     ApiError:

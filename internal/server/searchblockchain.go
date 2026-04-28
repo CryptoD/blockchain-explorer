@@ -471,13 +471,8 @@ func advancedSearchHandler(c *gin.Context) {
 	}).Info("advanced search completed")
 
 	resp := gin.H{
-		"data": paginatedResults,
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"data":       paginatedResults,
+		"pagination": apiutil.NewListPagination(pagination, total, len(paginatedResults)),
 		"filters_applied": gin.H{
 			"types":          filters.Types,
 			"categories":     filters.Categories,
@@ -567,13 +562,8 @@ func exportAdvancedSearchHandler(c *gin.Context) {
 				"direction": sortOpts.Direction,
 			},
 		},
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
-		"data": paginatedResults,
+		"pagination": apiutil.NewListPagination(pagination, total, len(paginatedResults)),
+		"data":       paginatedResults,
 	}
 	body, mErr := json.Marshal(payload)
 	if mErr != nil {

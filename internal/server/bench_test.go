@@ -5,6 +5,7 @@ import (
 	"strconv"
 	"testing"
 
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
 	"github.com/gin-gonic/gin"
 )
 
@@ -75,8 +76,8 @@ func BenchmarkJSONMarshalAdvancedSearchEnvelopeLarge(b *testing.B) {
 	}
 	payload := gin.H{
 		"data": items,
-		"pagination": gin.H{
-			"page": 1, "page_size": 100, "total": n, "total_pages": (n + 99) / 100,
+		"pagination": apiutil.ListPagination{
+			Page: 1, PageSize: 100, Total: n, HasMore: false,
 		},
 		"filters_applied": gin.H{},
 		"sort_applied":    gin.H{"field": "rank", "direction": "asc"},

@@ -223,6 +223,7 @@ func resetAlertEvalScanState() {
 // and marks triggered alerts in Redis. The next tick continues from the saved SCAN cursor until
 // the cursor returns to 0 (full pass over the keyspace for this iteration).
 func evaluatePriceAlerts() {
+	metrics.RecordPriceAlertTick()
 	if !priceAlertsFeatureAllowed(context.Background()) {
 		return
 	}
@@ -462,13 +463,8 @@ func listNotificationsHandler(c *gin.Context) {
 	pageItems := items[start:end]
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": pageItems,
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"data":       pageItems,
+		"pagination": apiutil.NewListPagination(pagination, total, len(pageItems)),
 	})
 }
 

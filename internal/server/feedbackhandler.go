@@ -261,13 +261,8 @@ func listPortfoliosHandler(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": dataWithValuation,
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"data":       dataWithValuation,
+		"pagination": apiutil.NewListPagination(pagination, total, len(dataWithValuation)),
 	})
 }
 
@@ -507,13 +502,8 @@ func listWatchlistsHandler(c *gin.Context) {
 	}
 	pageSlice := watchlists[start:end]
 	c.JSON(http.StatusOK, gin.H{
-		"data": pageSlice,
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"data":       pageSlice,
+		"pagination": apiutil.NewListPagination(pagination, total, len(pageSlice)),
 	})
 }
 

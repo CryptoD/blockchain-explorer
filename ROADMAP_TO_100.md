@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–66** are **done** (through **consistent JSON error envelope**: `code`, `message`, `correlation_id`, `timestamp`). Tasks **67–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–67** are **done** (through **pagination metadata standard**: `total`, `page`, `page_size`, `has_more` on lists). Tasks **68–100** are **open**. Update this sentence when you complete more tasks.
 
 ---
 
@@ -93,7 +93,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **64. OpenAPI 3 spec** — Generate or hand-maintain `openapi.yaml` for `/api/v1`; validate in CI. **Done:** [`openapi.yaml`](openapi.yaml) (`/api/v1/*` mapped to handlers in [`internal/server/routes.go`](internal/server/routes.go)); [`.redocly.yaml`](.redocly.yaml) tuning; CI [`scripts/check-openapi.sh`](scripts/check-openapi.sh) (`lint` job).
 - [x] **65. API versioning policy** — Document deprecation: minimum notice, sunset headers. **Done:** [docs/API_VERSIONING.md](docs/API_VERSIONING.md) (RFC 9745 `Deprecation`, RFC 8594 `Sunset`, `Link` successor; 90-day notice; `/api/v1` vs legacy `/api`); pointers from [`openapi.yaml`](openapi.yaml) info description and [README](README.md).
 - [x] **66. Consistent error envelope** — Every error JSON includes `code`, `message`, `correlation_id`, `timestamp`. **Done:** [`apiutil.ErrorEnvelopeJSON`](internal/apiutil/error_envelope.go); [`errorResponse`](internal/server/getusdperfiat.go); readiness **503** + [`notReadyEnvelope`](internal/server/getusdperfiat.go); metrics token **401**; [`openapi.yaml`](openapi.yaml) schema; frontend error parsing (`pickApiErrorMsg` et al. in [`static/js`](static/js/)).
-- [ ] **67. Pagination metadata standard** — Same shape for all list endpoints (`total`, `page`, `page_size`, `has_more`).
+- [x] **67. Pagination metadata standard** — Same shape for all list endpoints (`total`, `page`, `page_size`, `has_more`). **Done:** [`apiutil.ListPagination`](internal/apiutil/pagination.go), [`news.ListResponse`](/internal/news/types.go); handlers in explorer + user APIs; symbols UI derives page count from `total`/`page_size`; [`openapi.yaml`](openapi.yaml) `ListPagination` schema.
 - [ ] **68. Public Postman/collection** — Importable collection for partners and testers.
 - [ ] **69. Idempotent PUT/PATCH semantics** — Document ETags or version fields for portfolios where relevant.
 - [ ] **70. Webhooks (optional)** — Outbound events for enterprise: block confirmation, alert triggered.

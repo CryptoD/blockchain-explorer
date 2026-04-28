@@ -1,6 +1,10 @@
 package news
 
-import "time"
+import (
+	"time"
+
+	"github.com/CryptoD/blockchain-explorer/internal/apiutil"
+)
 
 // Article is the normalized shape returned by the news service.
 // Keep this stable for frontend consumption.
@@ -17,8 +21,9 @@ type Article struct {
 
 // ListResponse is returned by the API handlers.
 type ListResponse struct {
-	Data []Article `json:"data"`
-	Meta Meta      `json:"meta"`
+	Data       []Article              `json:"data"`
+	Pagination apiutil.ListPagination `json:"pagination"`
+	Meta       Meta                   `json:"meta"`
 }
 
 type Meta struct {

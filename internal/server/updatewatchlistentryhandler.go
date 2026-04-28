@@ -566,12 +566,7 @@ func exportPortfoliosHandler(c *gin.Context) {
 			"valuation_currency":  valuationCurrency,
 			"rate_data_available": assetPricer != nil,
 		},
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"pagination": apiutil.NewListPagination(pagination, total, len(dataWithValuation)),
 		"data": dataWithValuation,
 	}
 	body, mErr := json.Marshal(payload)

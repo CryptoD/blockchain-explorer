@@ -185,8 +185,9 @@
                 resultsContainer.classList.remove('hidden');
                 noResults.classList.add('hidden');
 
-                // Update pagination
-                totalPages = pag.total_pages;
+                // Update pagination (total/page_size/has_more from API — no total_pages)
+                var ps = pag.page_size || 1;
+                var totalPages = ps > 0 ? Math.ceil((pag.total || 0) / ps) : 0;
                 currentPage = pag.page;
                 
                 if (totalPages > 1) {

@@ -12,5 +12,11 @@
     "provider": "golden",
     "query": "(BTC | \"BTC\")",
     "stale": false
+  },
+  "pagination": {
+    "total": 1,
+    "page": 1,
+    "page_size": 20,
+    "has_more": false
   }
 }

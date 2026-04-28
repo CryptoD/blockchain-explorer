@@ -516,7 +516,8 @@ func newsBySymbolHandler(c *gin.Context) {
 	articles = applyUserNewsPrefs(articles, user, favoritesOnly)
 
 	resp := news.ListResponse{
-		Data: articles,
+		Data:       articles,
+		Pagination: apiutil.NewFeedPagination(limit, len(articles)),
 		Meta: news.Meta{
 			Provider: newsService.ProviderName(),
 			Cached:   cached,
@@ -597,7 +598,8 @@ func newsByPortfolioHandler(c *gin.Context) {
 	articles = applyUserNewsPrefs(articles, u, favoritesOnly)
 
 	resp := news.ListResponse{
-		Data: articles,
+		Data:       articles,
+		Pagination: apiutil.NewFeedPagination(limit, len(articles)),
 		Meta: news.Meta{
 			Provider: newsService.ProviderName(),
 			Cached:   cached,
@@ -887,13 +889,8 @@ func listPriceAlertsHandler(c *gin.Context) {
 	pageSlice := alerts[start:end]
 
 	c.JSON(http.StatusOK, gin.H{
-		"data": pageSlice,
-		"pagination": gin.H{
-			"page":        pagination.Page,
-			"page_size":   pagination.PageSize,
-			"total":       total,
-			"total_pages": (total + pagination.PageSize - 1) / pagination.PageSize,
-		},
+		"data":       pageSlice,
+		"pagination": apiutil.NewListPagination(pagination, total, len(pageSlice)),
 	})
 }
 

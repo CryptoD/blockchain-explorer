@@ -167,6 +167,7 @@ Many list-style endpoints accept standardized pagination and sorting parameters:
 
 - **`page`**: 1-based page index (default: `1`, minimum: `1`).
 - **`page_size`**: number of items per page (default: `20`, maximum: `100`).
+- **List JSON** includes a **`pagination`** object with **`total`**, **`page`**, **`page_size`**, and **`has_more`** (boolean: more items exist after this page). Provider-backed news feeds use the same shape; `total`/`has_more` reflect the current fetch (see API docs).
 - **`sort_by`** / **`sort_dir`**:
   - For advanced search: `sort_by` in `{symbol,name,type,category,market_cap,price,volume_24h,change_24h,rank,listed_since}`, `sort_dir` in `{asc,desc}`.
   - For portfolio listing: `sort_by` in `{created,updated}`, `sort_dir` in `{asc,desc}`.

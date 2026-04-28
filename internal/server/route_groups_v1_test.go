@@ -162,10 +162,10 @@ func TestV1_User_Notifications_Smoke(t *testing.T) {
 	var out struct {
 		Data       []interface{} `json:"data"`
 		Pagination struct {
-			Page       int `json:"page"`
-			PageSize   int `json:"page_size"`
-			Total      int `json:"total"`
-			TotalPages int `json:"total_pages"`
+			Page      int  `json:"page"`
+			PageSize  int  `json:"page_size"`
+			Total     int  `json:"total"`
+			HasMore   bool `json:"has_more"`
 		} `json:"pagination"`
 	}
 	if err := json.Unmarshal(w.Body.Bytes(), &out); err != nil {
