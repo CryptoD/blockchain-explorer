@@ -3,7 +3,8 @@ info:
   title: Bitcoin Blockchain Explorer API
   description: >
     Versioned JSON API under `/api/v1`. Hand-maintained; mirrors route registration in
-    `internal/server/routes.go`. Session auth uses the `session_id` cookie; state-changing
+    `internal/server/routes.go`. Deprecation schedule and sunset headers:
+    docs/API_VERSIONING.md. Session auth uses the `session_id` cookie; state-changing
     requests with that cookie require `X-CSRF-Token` (see `csrfMiddleware` in the server).
     Correlation IDs propagate via `X-Correlation-ID` / `X-Request-ID`.
   version: 1.0.0

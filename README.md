@@ -153,6 +153,8 @@ The application will start on `http://localhost:8080`
 
 Machine-readable **OpenAPI 3** description of [`/api/v1`](internal/server/routes.go): [`openapi.yaml`](openapi.yaml). Redocly lint runs in CI (`scripts/check-openapi.sh`).
 
+**Versioning and deprecations** (minimum notice, `Deprecation` / `Sunset` headers): [docs/API_VERSIONING.md](docs/API_VERSIONING.md).
+
 For additional notes, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md).
 
 ### Quick API Reference
@@ -387,6 +389,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 - [Roadmap (phases 1–10)](ROADMAP.md) - shipped features and Phase 10 follow-ups
 - [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (tasks 1–62 done in checklist; 63–100 open)
 - [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
+- [API versioning & deprecation](docs/API_VERSIONING.md) - `/api/v1` vs legacy `/api`, minimum notice, RFC 9745 Deprecation / RFC 8594 Sunset / Link successor
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
 - [Threat model (STRIDE-lite)](docs/THREAT_MODEL.md) - assets, actors, mitigations
