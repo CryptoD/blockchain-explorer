@@ -58,6 +58,9 @@ jobs:
     - name: Validate OpenAPI 3 (/api/v1)
       run: ./scripts/check-openapi.sh
 
+    - name: Validate Postman collection JSON
+      run: python3 -m json.tool postman/blockchain-explorer.postman_collection.json >/dev/null
+
   security:
     runs-on: ubuntu-latest
     permissions:

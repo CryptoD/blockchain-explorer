@@ -1,0 +1,727 @@
+{
+  "info": {
+    "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
+    "name": "Bitcoin Explorer \u2014 /api/v1",
+    "description": "Versioned REST API (`/api/v1`). Source of truth: repository `openapi.yaml`. Import this file into Postman or Bruno.\n\n**Auth:** Cookie sessions. Run **Login**; Postman persists `Set-Cookie` for `session_id`. The login **Tests** script stores `csrfToken` for mutating routes.\n\n**CSRF:** Send `X-CSRF-Token` on POST/PUT/PATCH/DELETE and on **all** `/api/v1/admin/*` requests when logged in (`csrfMiddleware`). Register/login skip CSRF by design.\n\n**Probe:** Prometheus scrape is `GET /metrics` with optional `METRICS_TOKEN` \u2014 omitted here.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    {
+      "key": "baseUrl",
+      "value": "http://localhost:8080"
+    },
+    {
+      "key": "csrfToken",
+      "value": ""
+    },
+    {
+      "key": "searchQuery",
+      "value": "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa"
+    },
+    {
+      "key": "newsSymbol",
+      "value": "BTC"
+    },
+    {
+      "key": "username",
+      "value": ""
+    },
+    {
+      "key": "password",
+      "value": ""
+    },
+    {
+      "key": "registerUsername",
+      "value": ""
+    },
+    {
+      "key": "registerPassword",
+      "value": ""
+    },
+    {
+      "key": "newPassword",
+      "value": ""
+    },
+    {
+      "key": "portfolioId",
+      "value": ""
+    },
+    {
+      "key": "alertId",
+      "value": ""
+    },
+    {
+      "key": "notificationId",
+      "value": ""
+    },
+    {
+      "key": "watchlistId",
+      "value": ""
+    },
+    {
+      "key": "watchlistEntryIndex",
+      "value": "0"
+    }
+  ],
+  "item": [
+    {
+      "name": "Health",
+      "item": [
+        {
+          "name": "Liveness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Readiness",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/ready"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Explorer (public)",
+      "item": [
+        {
+          "name": "Search (block/tx/address)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/search?q={{searchQuery}}"
+          }
+        },
+        {
+          "name": "Export search JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/search/export?q={{searchQuery}}"
+          }
+        },
+        {
+          "name": "Advanced symbol search",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/search/advanced?sort_by=rank&sort_dir=asc"
+          }
+        },
+        {
+          "name": "Export advanced search JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/search/advanced/export?sort_by=rank"
+          }
+        },
+        {
+          "name": "Symbol categories",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/search/categories"
+          }
+        },
+        {
+          "name": "Blocks export CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/blocks/export/csv"
+          }
+        },
+        {
+          "name": "Transactions export CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/transactions/export/csv"
+          }
+        },
+        {
+          "name": "Autocomplete",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/autocomplete?q=bitcoin"
+          }
+        },
+        {
+          "name": "Explorer metrics (JSON)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/metrics"
+          }
+        },
+        {
+          "name": "Network status",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/network-status"
+          }
+        },
+        {
+          "name": "Rates",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/rates"
+          }
+        },
+        {
+          "name": "Price history",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/price-history?currency=usd&limit=30"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Feedback",
+      "item": [
+        {
+          "name": "Submit feedback",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/feedback",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Partner\", \"email\": \"\", \"message\": \"Hello from Postman collection\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "News",
+      "item": [
+        {
+          "name": "News by symbol",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/news/{{newsSymbol}}?page_size=10"
+          }
+        },
+        {
+          "name": "News for portfolio (auth)",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/news/portfolio/{{portfolioId}}?page_size=10"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Auth",
+      "item": [
+        {
+          "name": "Login (Tests save csrfToken)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "try {",
+                  "  var j = pm.response.json();",
+                  "  if (j.csrfToken) { pm.collectionVariables.set(\"csrfToken\", j.csrfToken); }",
+                  "} catch (e) {}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"{{username}}\", \"password\": \"{{password}}\"}"
+            },
+            "url": "{{baseUrl}}/api/v1/login"
+          }
+        },
+        {
+          "name": "Logout",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/logout"
+          }
+        },
+        {
+          "name": "Register",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/register",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"username\": \"{{registerUsername}}\", \"password\": \"{{registerPassword}}\", \"email\": \"\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User \u2014 profile",
+      "item": [
+        {
+          "name": "Get profile",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/profile"
+          }
+        },
+        {
+          "name": "Update profile",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/profile",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"preferred_currency\": \"usd\"}"
+            }
+          }
+        },
+        {
+          "name": "Change password",
+          "request": {
+            "method": "PATCH",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/password",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"current_password\": \"{{password}}\", \"new_password\": \"{{newPassword}}\"}"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "name": "User \u2014 notifications",
+      "item": [
+        {
+          "name": "List notifications",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/notifications?page=1&page_size=20"
+          }
+        },
+        {
+          "name": "Update notification",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/notifications/{{notificationId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"read\": true}"
+            }
+          }
+        },
+        {
+          "name": "Dismiss notification",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/notifications/{{notificationId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User \u2014 price alerts",
+      "item": [
+        {
+          "name": "List price alerts",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/alerts"
+          }
+        },
+        {
+          "name": "Create price alert",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/alerts",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"symbol\": \"BTC\", \"currency\": \"usd\", \"threshold\": 100000, \"direction\": \"above\", \"delivery_method\": \"email\"}"
+            }
+          }
+        },
+        {
+          "name": "Update price alert",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/alerts/{{alertId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"is_active\": true}"
+            }
+          }
+        },
+        {
+          "name": "Delete price alert",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/alerts/{{alertId}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User \u2014 portfolios",
+      "item": [
+        {
+          "name": "List portfolios",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/portfolios"
+          }
+        },
+        {
+          "name": "Export portfolios JSON",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/portfolios/export"
+          }
+        },
+        {
+          "name": "Create portfolio",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/portfolios",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Demo\", \"description\": \"\", \"items\": []}"
+            }
+          }
+        },
+        {
+          "name": "Update portfolio",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/portfolios/{{portfolioId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Demo\", \"description\": \"\", \"items\": []}"
+            }
+          }
+        },
+        {
+          "name": "Delete portfolio",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/portfolios/{{portfolioId}}"
+          }
+        },
+        {
+          "name": "Export portfolio CSV",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/portfolios/{{portfolioId}}/export/csv"
+          }
+        },
+        {
+          "name": "Export portfolio PDF",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/portfolios/{{portfolioId}}/export/pdf"
+          }
+        }
+      ]
+    },
+    {
+      "name": "User \u2014 watchlists",
+      "item": [
+        {
+          "name": "List watchlists",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/watchlists"
+          }
+        },
+        {
+          "name": "Create watchlist",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Main\"}"
+            }
+          }
+        },
+        {
+          "name": "Get watchlist",
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}"
+          }
+        },
+        {
+          "name": "Update watchlist",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"Main\"}"
+            }
+          }
+        },
+        {
+          "name": "Delete watchlist",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}"
+          }
+        },
+        {
+          "name": "Add watchlist entry",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}/entries",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"type\": \"symbol\", \"symbol\": \"bitcoin\"}"
+            }
+          }
+        },
+        {
+          "name": "Update watchlist entry",
+          "request": {
+            "method": "PUT",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}/entries/{{watchlistEntryIndex}}",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"type\": \"symbol\", \"symbol\": \"bitcoin\"}"
+            }
+          }
+        },
+        {
+          "name": "Delete watchlist entry",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/watchlists/{{watchlistId}}/entries/{{watchlistEntryIndex}}"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Admin (admin role)",
+      "item": [
+        {
+          "name": "Admin status",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/status"
+          }
+        },
+        {
+          "name": "Admin cache stats",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/cache?action=stats"
+          }
+        }
+      ]
+    }
+  ]
+}

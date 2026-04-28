@@ -153,6 +153,8 @@ The application will start on `http://localhost:8080`
 
 Machine-readable **OpenAPI 3** description of [`/api/v1`](internal/server/routes.go): [`openapi.yaml`](openapi.yaml). Redocly lint runs in CI (`scripts/check-openapi.sh`).
 
+**Postman:** importable **[`postman/blockchain-explorer.postman_collection.json`](postman/blockchain-explorer.postman_collection.json)** ([`postman/README.md`](postman/README.md)—set variables, run **Login** first for cookie + CSRF).
+
 **Versioning and deprecations** (minimum notice, `Deprecation` / `Sunset` headers): [docs/API_VERSIONING.md](docs/API_VERSIONING.md).
 
 For additional notes, see [API_TEST_RESULTS.md](API_TEST_RESULTS.md).
