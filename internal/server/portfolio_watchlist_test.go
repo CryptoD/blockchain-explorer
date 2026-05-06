@@ -22,7 +22,10 @@ func portfolioWatchlistTestRouter() *gin.Engine {
 	apiV1.POST("/register", registerHandler)
 	userV1 := apiV1.Group("/user")
 	userV1.Use(authMiddleware)
+	userV1.Use(forbidServiceAPIKeyMiddleware())
+	userV1.Use(enforceUserAPIScopes())
 	{
+		userV1.GET("/profile", userProfileHandler)
 		userV1.GET("/portfolios", listPortfoliosHandler)
 		userV1.POST("/portfolios", createPortfolioHandler)
 		userV1.PUT("/portfolios/:id", updatePortfolioHandler)
@@ -36,6 +39,8 @@ func portfolioWatchlistTestRouter() *gin.Engine {
 		userV1.POST("/watchlists/:id/entries", addWatchlistEntryHandler)
 		userV1.PUT("/watchlists/:id/entries/:index", updateWatchlistEntryHandler)
 		userV1.DELETE("/watchlists/:id/entries/:index", deleteWatchlistEntryHandler)
+
+		registerUserApiKeyRoutes(userV1)
 	}
 	return r
 }

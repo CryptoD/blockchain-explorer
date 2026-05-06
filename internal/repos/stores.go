@@ -13,6 +13,7 @@ type Stores struct {
 	User      *UserRepo
 	Feedback  *FeedbackRepo
 	Admin     *AdminRepo
+	APIKeys   *APIKeyRepo
 }
 
 // NewStores wires repositories for the given Redis client (may be nil in tests).
@@ -25,5 +26,6 @@ func NewStores(rdb redisstore.Client) *Stores {
 		User:      &UserRepo{RDB: rdb},
 		Feedback:  &FeedbackRepo{RDB: rdb},
 		Admin:     &AdminRepo{RDB: rdb},
+		APIKeys:   &APIKeyRepo{RDB: rdb},
 	}
 }

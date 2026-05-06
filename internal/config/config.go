@@ -154,6 +154,10 @@ type Config struct {
 	SentryRelease          string  // SENTRY_RELEASE (build/version)
 	SentryTracesSampleRate float64 // SENTRY_TRACES_SAMPLE_RATE; default 1.0 dev, 0.15 prod
 	SentryErrorSampleRate  float64 // SENTRY_SAMPLE_RATE for error events; default 1.0
+
+	// Machine API keys (Bearer bkx_*); see docs/API_KEYS.md
+	APIKeysEnabled    bool // API_KEYS_ENABLED; default true when unset
+	APIKeysMaxPerUser int  // API_KEYS_MAX_PER_USER soft cap for user-owned keys
 }
 
 // Load parses environment variables into a Config struct and validates
@@ -248,6 +252,8 @@ func Load() (*Config, error) {
 		SentryRelease:                                      strings.TrimSpace(os.Getenv("SENTRY_RELEASE")),
 		SentryTracesSampleRate:                             sentryTracesSampleRateForEnv(appEnv),
 		SentryErrorSampleRate:                              sentryErrorSampleRateFromEnv(),
+		APIKeysEnabled:                                     apiKeysEnabledFromEnv(),
+		APIKeysMaxPerUser:                                  GetEnvIntWithDefault("API_KEYS_MAX_PER_USER", 10),
 	}
 
 	if err := cfg.Validate(); err != nil {
@@ -267,6 +273,7 @@ func (c *Config) Validate() error {
 	c.ensureShutdownDefaults()
 	c.ensureOutboundBreakerDefaults()
 	c.ensureIdempotencyDefaults()
+	c.ensureAPIKeyDefaults()
 
 	if strings.TrimSpace(c.GetBlockBaseURL) == "" || strings.TrimSpace(c.GetBlockAccessToken) == "" {
 		return fmt.Errorf("GETBLOCK_BASE_URL and GETBLOCK_ACCESS_TOKEN are required")
@@ -362,6 +369,9 @@ func (c *Config) Validate() error {
 	}
 	if c.RedisCloseTimeoutSeconds < 1 || c.RedisCloseTimeoutSeconds > 120 {
 		return fmt.Errorf("REDIS_CLOSE_TIMEOUT_SECONDS must be between 1 and 120")
+	}
+	if c.APIKeysMaxPerUser < 1 || c.APIKeysMaxPerUser > 500 {
+		return fmt.Errorf("API_KEYS_MAX_PER_USER must be between 1 and 500")
 	}
 
 	return nil
@@ -497,6 +507,12 @@ func (c *Config) ensureIdempotencyDefaults() {
 	}
 }
 
+func (c *Config) ensureAPIKeyDefaults() {
+	if c.APIKeysMaxPerUser <= 0 {
+		c.APIKeysMaxPerUser = 10
+	}
+}
+
 func (c *Config) validateIdempotency() error {
 	if c.IdempotencyTTLSeconds < 60 || c.IdempotencyTTLSeconds > 6048000 {
 		return fmt.Errorf("IDEMPOTENCY_TTL_SECONDS must be between 60 and 6048000")
@@ -628,6 +644,16 @@ func metricsEnabledFromEnv() bool {
 	switch v {
 	case "", "1", "true", "yes":
 		return true
+	case "0", "false", "no":
+		return false
+	default:
+		return true
+	}
+}
+
+func apiKeysEnabledFromEnv() bool {
+	v := strings.ToLower(strings.TrimSpace(os.Getenv("API_KEYS_ENABLED")))
+	switch v {
 	case "0", "false", "no":
 		return false
 	default:

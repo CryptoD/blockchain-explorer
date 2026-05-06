@@ -151,9 +151,11 @@ The application will start on `http://localhost:8080`
 
 ## API Documentation
 
-Machine-readable **OpenAPI 3** description of [`/api/v1`](internal/server/routes.go): [`openapi.yaml`](openapi.yaml). Redocly lint runs in CI (`scripts/check-openapi.sh`).
+Machine-readable **OpenAPI 3** description of [`/api/v1`](internal/server/routes.go): [`openapi.yaml`](openapi.yaml). Redocly lint runs in CI (`scripts/check-openapi.sh`). Published contract version is `info.version` (aligned with [CHANGELOG.md](CHANGELOG.md) for releases).
 
-**Postman:** importable **[`postman/blockchain-explorer.postman_collection.json`](postman/blockchain-explorer.postman_collection.json)** ([`postman/README.md`](postman/README.md)—set variables, run **Login** first for cookie + CSRF).
+**Postman:** importable **[`postman/blockchain-explorer.postman_collection.json`](postman/blockchain-explorer.postman_collection.json)** ([`postman/README.md`](postman/README.md)—set variables, run **Login** first for cookie + CSRF, or use **`apiKeyBearer`** for automation).
+
+**Machine API keys:** scoped `Authorization: Bearer bkx_*` tokens — [docs/API_KEYS.md](docs/API_KEYS.md).
 
 **Versioning and deprecations** (minimum notice, `Deprecation` / `Sunset` headers): [docs/API_VERSIONING.md](docs/API_VERSIONING.md).
 
@@ -388,11 +390,12 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 ## Documentation
 
+- [Changelog (semver)](CHANGELOG.md) - single app + API release notes
 - [Roadmap (phases 1–10)](ROADMAP.md) - shipped features and Phase 10 follow-ups
 - [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (see checklist in that file)
 - [Bounded contexts](docs/BOUNDED_CONTEXTS.md) - domains (auth, explorer, portfolio, watchlist, news, alerts, admin), dependencies, and anti-patterns
 - [API versioning & deprecation](docs/API_VERSIONING.md) - `/api/v1` vs legacy `/api`, minimum notice, RFC 9745 Deprecation / RFC 8594 Sunset / Link successor
-- [REST write semantics (PUT/PATCH)](docs/REST_WRITE_SEMANTICS.md) - portfolio/watchlist full `PUT`, idempotency vs `updated`, no `If-Match` today, last-write-wins
+- [Machine API keys (`Bearer bkx_*`)](docs/API_KEYS.md) - automation auth, scopes, CSRF interaction
 - [Internal APIs & stability](docs/INTERNAL_APIS.md) - `internal/` package tiers (Stable / Evolving / Shell) and contracts for future extraction
 - [Chaos testing (Toxiproxy)](docs/CHAOS_TESTING.md) - optional Redis flakiness drills in staging
 - [Threat model (STRIDE-lite)](docs/THREAT_MODEL.md) - assets, actors, mitigations

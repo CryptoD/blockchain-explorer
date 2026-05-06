@@ -733,6 +733,13 @@ func csrfMiddleware(c *gin.Context) {
 		return
 	}
 
+	// API keys use Authorization: Bearer bkx_*; skip CSRF (session cookies may still be attached by browsers).
+	authz := strings.TrimSpace(c.GetHeader("Authorization"))
+	if strings.HasPrefix(authz, "Bearer ") && strings.HasPrefix(strings.TrimSpace(strings.TrimPrefix(authz, "Bearer ")), apiKeyPlainPrefix) {
+		c.Next()
+		return
+	}
+
 	// Only apply CSRF protection when cookie-based auth is in use
 	sessionID, err := c.Cookie("session_id")
 	if err != nil || sessionID == "" {

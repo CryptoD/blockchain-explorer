@@ -216,6 +216,10 @@ func changePasswordHandler(c *gin.Context) {
 
 // authMiddleware checks for valid authentication
 func authMiddleware(c *gin.Context) {
+	if tryAPIKeyAuth(c) {
+		return
+	}
+
 	sessionID, err := c.Cookie("session_id")
 	if err != nil {
 		errorResponse(c, http.StatusUnauthorized, "authentication_required", "Authentication required")
@@ -237,6 +241,7 @@ func authMiddleware(c *gin.Context) {
 		return
 	}
 
+	c.Set(ginKeyAuthKind, "session")
 	c.Set("username", username)
 	c.Set("role", user.Role)
 	c.Next()

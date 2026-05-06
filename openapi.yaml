@@ -8,8 +8,10 @@ info:
     Deprecation: docs/API_VERSIONING.md. Session auth uses the `session_id`
     cookie; state-changing
     requests with that cookie require `X-CSRF-Token` (see `csrfMiddleware` in the server).
+    Machine access: `Authorization: Bearer bkx_<16hex>_<secret>` (hashed server-side); see docs/API_KEYS.md —
+    Bearer requests do not use CSRF (avoid sending `session_id` from a browser alongside an API key on mutating routes).
     Correlation IDs propagate via `X-Correlation-ID` / `X-Request-ID`.
-  version: 1.0.0
+  version: 1.1.0
   license:
     name: MIT
     url: https://opensource.org/licenses/MIT
@@ -1095,6 +1097,152 @@ paths:
         default:
           $ref: "#/components/responses/ApiError"
 
+  /api/v1/user/api-keys:
+    get:
+      tags: [user]
+      summary: List API keys (metadata only)
+      operationId: listUserApiKeys
+      security:
+        - sessionCookie: []
+        - apiKeyBearer: []
+      responses:
+        "200":
+          description: Known keys for the authenticated user (no secrets)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    post:
+      tags: [user]
+      summary: Create user API key
+      operationId: createUserApiKey
+      security:
+        - sessionCookie: []
+        - apiKeyBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "201":
+          description: Returns plaintext_key once; store immediately
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/user/api-keys/{id}:
+    delete:
+      tags: [user]
+      summary: Revoke user API key
+      operationId: revokeUserApiKey
+      security:
+        - sessionCookie: []
+        - apiKeyBearer: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/admin/api-keys:
+    get:
+      tags: [admin]
+      summary: List service API keys (admin session or service Bearer with admin:read)
+      operationId: listAdminApiKeys
+      security:
+        - sessionCookie: []
+        - apiKeyBearer: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Known service keys (no secrets)
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        "403":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+    post:
+      tags: [admin]
+      summary: Create service API key (browser session required; API keys alone cannot mutate this resource)
+      operationId: createServiceApiKey
+      security:
+        - sessionCookie: []
+      parameters:
+        - $ref: "#/components/parameters/CsrfHeader"
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: "#/components/schemas/GenericJSON"
+      responses:
+        "201":
+          description: Returns plaintext_key once
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        "401":
+          $ref: "#/components/responses/ApiError"
+        default:
+          $ref: "#/components/responses/ApiError"
+
+  /api/v1/admin/api-keys/{id}:
+    delete:
+      tags: [admin]
+      summary: Revoke service API key (browser session required)
+      operationId: revokeServiceApiKey
+      security:
+        - sessionCookie: []
+      parameters:
+        - name: id
+          in: path
+          required: true
+          schema:
+            type: string
+        - $ref: "#/components/parameters/CsrfHeader"
+      responses:
+        "200":
+          description: Revoked
+          content:
+            application/json:
+              schema:
+                $ref: "#/components/schemas/GenericJSON"
+        default:
+          $ref: "#/components/responses/ApiError"
+
   /api/v1/admin/status:
     get:
       tags: [admin]
@@ -1102,6 +1250,7 @@ paths:
       operationId: adminStatus
       security:
         - sessionCookie: []
+        - apiKeyBearer: []
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
@@ -1125,6 +1274,7 @@ paths:
       operationId: adminCache
       security:
         - sessionCookie: []
+        - apiKeyBearer: []
       parameters:
         - $ref: "#/components/parameters/CsrfHeader"
       responses:
@@ -1149,6 +1299,14 @@ components:
       name: session_id
       description: Session established via POST /api/v1/login
 
+    apiKeyBearer:
+      type: http
+      scheme: bearer
+      bearerFormat: APIKey
+      description: >
+        Prefix `bkx_` machine token (docs/API_KEYS.md). Send as `Authorization: Bearer <token>`.
+        Effective scopes (`user:*`, `admin:*`) restrict access. Creation/revocation of **service**
+        keys still requires an admin browser session.
   parameters:
     QueryQ:
       name: q

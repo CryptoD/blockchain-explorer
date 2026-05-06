@@ -25,18 +25,22 @@ func adminTestRouter() *gin.Engine {
 
 	adminV1 := apiV1.Group("/admin")
 	adminV1.Use(authMiddleware)
+	adminV1.Use(enforceAdminAPIScopes())
 	adminV1.Use(requireRoleMiddleware("admin"))
 	{
 		adminV1.GET("/status", adminStatusHandler)
 		adminV1.GET("/cache", adminCacheHandler)
+		registerAdminAPIKeyRoutes(adminV1)
 	}
 
 	legacy := r.Group("/api/admin")
 	legacy.Use(authMiddleware)
+	legacy.Use(enforceAdminAPIScopes())
 	legacy.Use(requireRoleMiddleware("admin"))
 	{
 		legacy.GET("/status", adminStatusHandler)
 		legacy.GET("/cache", adminCacheHandler)
+		registerAdminAPIKeyRoutes(legacy)
 	}
 	return r
 }

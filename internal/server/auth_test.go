@@ -40,14 +40,18 @@ func authTestRouter() *gin.Engine {
 
 		userV1 := apiV1.Group("/user")
 		userV1.Use(authMiddleware)
+		userV1.Use(forbidServiceAPIKeyMiddleware())
+		userV1.Use(enforceUserAPIScopes())
 		{
 			userV1.GET("/profile", userProfileHandler)
 			userV1.PATCH("/profile", updateProfileHandler)
 			userV1.PATCH("/password", changePasswordHandler)
+			registerUserApiKeyRoutes(userV1)
 		}
 
 		adminV1 := apiV1.Group("/admin")
 		adminV1.Use(authMiddleware)
+		adminV1.Use(enforceAdminAPIScopes())
 		adminV1.Use(requireRoleMiddleware("admin"))
 		{
 			adminV1.GET("/status", adminStatusHandler)

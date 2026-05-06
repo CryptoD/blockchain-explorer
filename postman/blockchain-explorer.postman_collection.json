@@ -2,7 +2,7 @@
   "info": {
     "_postman_id": "a1b2c3d4-e5f6-7890-abcd-ef1234567890",
     "name": "Bitcoin Explorer \u2014 /api/v1",
-    "description": "Versioned REST API (`/api/v1`). Source of truth: repository `openapi.yaml`. Import this file into Postman or Bruno.\n\n**Auth:** Cookie sessions. Run **Login**; Postman persists `Set-Cookie` for `session_id`. The login **Tests** script stores `csrfToken` for mutating routes.\n\n**CSRF:** Send `X-CSRF-Token` on POST/PUT/PATCH/DELETE and on **all** `/api/v1/admin/*` requests when logged in (`csrfMiddleware`). Register/login skip CSRF by design.\n\n**Probe:** Prometheus scrape is `GET /metrics` with optional `METRICS_TOKEN` \u2014 omitted here.",
+    "description": "Versioned REST API (`/api/v1`). Source of truth: repository `openapi.yaml`. Import this file into Postman or Bruno.\n\n**Auth:** Cookie sessions. Run **Login**; Postman persists `Set-Cookie` for `session_id`. The login **Tests** script stores `csrfToken` for mutating routes.\n\n**Machine tokens:** optional `Authorization: Bearer {{apiKeyBearer}}` (prefix `bkx_`) for scoped automation (`user:*` / `admin:*`). No CSRF when you do **not** send `session_id`. See docs/API_KEYS.md.\n\n**CSRF:** Send `X-CSRF-Token` on POST/PUT/PATCH/DELETE and on **all** `/api/v1/admin/*` requests when logged in (`csrfMiddleware`). Register/login skip CSRF by design.\n\n**Probe:** Prometheus scrape is `GET /metrics` with optional `METRICS_TOKEN` \u2014 omitted here.",
     "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
   },
   "variable": [
@@ -61,6 +61,14 @@
     {
       "key": "watchlistEntryIndex",
       "value": "0"
+    },
+    {
+      "key": "apiKeyBearer",
+      "value": ""
+    },
+    {
+      "key": "apiKeyPublicId",
+      "value": ""
     }
   ],
   "item": [
@@ -693,6 +701,58 @@
       ]
     },
     {
+      "name": "User \u2014 API keys (Bearer)",
+      "item": [
+        {
+          "name": "List user API keys",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/api-keys"
+          }
+        },
+        {
+          "name": "Create user API key",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              },
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/api-keys",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"automation\", \"scopes\": [\"user:read\", \"user:write\"]}"
+            }
+          }
+        },
+        {
+          "name": "Revoke user API key",
+          "request": {
+            "method": "DELETE",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/user/api-keys/{{apiKeyPublicId}}"
+          }
+        }
+      ]
+    },
+    {
       "name": "Admin (admin role)",
       "item": [
         {
@@ -719,6 +779,66 @@
               }
             ],
             "url": "{{baseUrl}}/api/v1/admin/cache?action=stats"
+          }
+        },
+        {
+          "name": "Admin status (Bearer service key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/status"
+          }
+        },
+        {
+          "name": "Admin cache stats (Bearer service key)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/cache?action=stats"
+          }
+        },
+        {
+          "name": "List service API keys (Bearer)",
+          "request": {
+            "method": "GET",
+            "header": [
+              {
+                "key": "Authorization",
+                "value": "Bearer {{apiKeyBearer}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/api-keys"
+          }
+        },
+        {
+          "name": "Create service API key (session + CSRF only)",
+          "request": {
+            "method": "POST",
+            "header": [
+              {
+                "key": "Content-Type",
+                "value": "application/json"
+              },
+              {
+                "key": "X-CSRF-Token",
+                "value": "{{csrfToken}}"
+              }
+            ],
+            "url": "{{baseUrl}}/api/v1/admin/api-keys",
+            "body": {
+              "mode": "raw",
+              "raw": "{\"name\": \"partner\", \"label\": \"\", \"scopes\": [\"admin:read\"]}"
+            }
           }
         }
       ]

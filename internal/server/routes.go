@@ -110,6 +110,8 @@ func registerNewsRoutesV1(apiV1 *gin.RouterGroup) {
 
 	newsAuth := apiV1.Group("/news")
 	newsAuth.Use(authMiddleware)
+	newsAuth.Use(forbidServiceAPIKeyMiddleware())
+	newsAuth.Use(enforceNewsAPIScopes())
 	{
 		newsAuth.GET("/portfolio/:id", newsByPortfolioHandler)
 	}
@@ -126,11 +128,14 @@ func registerAuthRoutesV1(apiV1 *gin.RouterGroup) {
 func registerUserRoutesV1(apiV1 *gin.RouterGroup) {
 	user := apiV1.Group("/user")
 	user.Use(authMiddleware)
+	user.Use(forbidServiceAPIKeyMiddleware())
+	user.Use(enforceUserAPIScopes())
 	registerUserProfileRoutes(user)
 	registerUserNotificationRoutes(user)
 	registerUserPriceAlertRoutes(user)
 	registerUserPortfolioRoutes(user)
 	registerUserWatchlistRoutes(user)
+	registerUserApiKeyRoutes(user)
 }
 
 func registerUserProfileRoutes(user *gin.RouterGroup) {
@@ -177,10 +182,12 @@ func registerUserWatchlistRoutes(user *gin.RouterGroup) {
 func registerAdminRoutesV1(apiV1 *gin.RouterGroup) {
 	admin := apiV1.Group("/admin")
 	admin.Use(authMiddleware)
+	admin.Use(enforceAdminAPIScopes())
 	admin.Use(requireRoleMiddleware("admin"))
 	{
 		admin.GET("/status", adminStatusHandler)
 		admin.GET("/cache", adminCacheHandler)
+		registerAdminAPIKeyRoutes(admin)
 	}
 }
 
@@ -210,23 +217,30 @@ func registerLegacyAPIRoutes(r *gin.Engine) {
 
 	user := r.Group("/api/user")
 	user.Use(authMiddleware)
+	user.Use(forbidServiceAPIKeyMiddleware())
+	user.Use(enforceUserAPIScopes())
 	registerUserProfileRoutes(user)
 	registerUserNotificationRoutes(user)
 	registerUserPriceAlertRoutes(user)
 	registerUserPortfolioRoutes(user)
 	registerUserWatchlistRoutes(user)
+	registerUserApiKeyRoutes(user)
 
 	newsLegacy := r.Group("/api/news")
 	newsLegacy.Use(authMiddleware)
+	newsLegacy.Use(forbidServiceAPIKeyMiddleware())
+	newsLegacy.Use(enforceNewsAPIScopes())
 	{
 		newsLegacy.GET("/portfolio/:id", newsByPortfolioHandler)
 	}
 
 	admin := r.Group("/api/admin")
 	admin.Use(authMiddleware)
+	admin.Use(enforceAdminAPIScopes())
 	admin.Use(requireRoleMiddleware("admin"))
 	{
 		admin.GET("/status", adminStatusHandler)
 		admin.GET("/cache", adminCacheHandler)
+		registerAdminAPIKeyRoutes(admin)
 	}
 }

@@ -24,7 +24,7 @@ Breaking changes (removing fields, renaming parameters, changing semantics witho
 Unless a **critical security** or **compliance** exception is documented in the release notes:
 
 1. **Publication:** At least **90 calendar days** must pass between **public announcement** and the **effective removal** or incompatible change.
-2. **Announcement** must be visible to API consumers: GitHub **release notes** (or project advisory), and a **`CHANGELOG.md`** entry once that file exists ([ROADMAP](../ROADMAP_TO_100.md) task **72**).
+2. **Announcement** must be visible to API consumers: GitHub **release notes** (or project advisory) and a **[CHANGELOG.md](../CHANGELOG.md)** entry (SemVer + date). For tagged releases, align **`openapi.yaml` `info.version`** with the API contract version described in that changelog entry.
 3. **`openapi.yaml`:** Deprecated operations are marked with OpenAPI **`deprecated: true`** and a description that names the **replacement** route (if any).
 
 Extensions or optional fields may be added without a new API version when they are **backward compatible** (additive only).

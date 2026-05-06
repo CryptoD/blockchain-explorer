@@ -13,6 +13,24 @@ def url(path: str, query: str = "") -> str:
 
 CTYPE = [{"key": "Content-Type", "value": "application/json"}]
 CSRF = [{"key": "X-CSRF-Token", "value": "{{csrfToken}}"}]
+BEARER_API = [{"key": "Authorization", "value": "Bearer {{apiKeyBearer}}"}]
+
+
+def bearer_req(
+    name: str,
+    method: str,
+    raw_url: str,
+    body=None,
+    *,
+    json_body: bool = False,
+) -> dict:
+    hdr = list(BEARER_API)
+    if json_body and method in ("POST", "PUT", "PATCH"):
+        hdr.extend(CTYPE)
+    r = {"method": method, "header": hdr, "url": raw_url}
+    if body is not None:
+        r["body"] = {"mode": "raw", "raw": json.dumps(body)}
+    return {"name": name, "request": r}
 
 
 def get_item(name: str, raw_url: str) -> dict:
@@ -247,10 +265,37 @@ def main() -> None:
         ),
     ]
 
-    # All /api/v1/admin/* routes require CSRF (including GET)
+    # Bearer examples (scoped API keys — no CSRF)
+    user_api_keys = [
+        bearer_req("List user API keys", "GET", url("/api/v1/user/api-keys")),
+        bearer_req(
+            "Create user API key",
+            "POST",
+            url("/api/v1/user/api-keys"),
+            {"name": "automation", "scopes": ["user:read", "user:write"]},
+            json_body=True,
+        ),
+        bearer_req("Revoke user API key", "DELETE", url("/api/v1/user/api-keys/{{apiKeyPublicId}}")),
+    ]
+
+    # All /api/v1/admin/* routes require CSRF (including GET) when using cookie session.
     admin = [
         merge_headers(get_item("Admin status", url("/api/v1/admin/status")), CSRF),
         merge_headers(get_item("Admin cache stats", url("/api/v1/admin/cache", "action=stats")), CSRF),
+        merge_headers(get_item("Admin status (Bearer service key)", url("/api/v1/admin/status")), BEARER_API),
+        merge_headers(
+            get_item("Admin cache stats (Bearer service key)", url("/api/v1/admin/cache", "action=stats")),
+            BEARER_API,
+        ),
+        merge_headers(get_item("List service API keys (Bearer)", url("/api/v1/admin/api-keys")), BEARER_API),
+        req(
+            "Create service API key (session + CSRF only)",
+            "POST",
+            url("/api/v1/admin/api-keys"),
+            {"name": "partner", "label": "", "scopes": ["admin:read"]},
+            csrf=True,
+            json_body=True,
+        ),
     ]
 
     collection = {
@@ -262,6 +307,9 @@ def main() -> None:
                 "Import this file into Postman or Bruno.\n\n"
                 "**Auth:** Cookie sessions. Run **Login**; Postman persists `Set-Cookie` for `session_id`. "
                 "The login **Tests** script stores `csrfToken` for mutating routes.\n\n"
+                "**Machine tokens:** optional `Authorization: Bearer {{apiKeyBearer}}` (prefix `bkx_`) "
+                "for scoped automation (`user:*` / `admin:*`). No CSRF when you do **not** send `session_id`. "
+                "See docs/API_KEYS.md.\n\n"
                 "**CSRF:** Send `X-CSRF-Token` on POST/PUT/PATCH/DELETE and on **all** `/api/v1/admin/*` requests "
                 "when logged in (`csrfMiddleware`). Register/login skip CSRF by design.\n\n"
                 "**Probe:** Prometheus scrape is `GET /metrics` with optional `METRICS_TOKEN` — omitted here."
@@ -283,6 +331,8 @@ def main() -> None:
             {"key": "notificationId", "value": ""},
             {"key": "watchlistId", "value": ""},
             {"key": "watchlistEntryIndex", "value": "0"},
+            {"key": "apiKeyBearer", "value": ""},
+            {"key": "apiKeyPublicId", "value": ""},
         ],
         "item": [
             {"name": "Health", "item": health},
@@ -295,6 +345,7 @@ def main() -> None:
             {"name": "User — price alerts", "item": alerts},
             {"name": "User — portfolios", "item": portfolios},
             {"name": "User — watchlists", "item": watchlists},
+            {"name": "User — API keys (Bearer)", "item": user_api_keys},
             {"name": "Admin (admin role)", "item": admin},
         ],
     }
