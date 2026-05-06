@@ -28,7 +28,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **15**. U
 | [`internal/news`](../internal/news/) | Stable | [`Service`](../internal/news/service.go), [`Provider`](../internal/news/provider.go), [`NewServiceFromConfig`](../internal/news/wire.go), [`Cache`](../internal/news/cache.go) |
 | [`internal/export`](../internal/export/) | Stable | [`Version`](../internal/export/meta.go), export limits, [`WritePortfolioPDF`](../internal/export/portfolio_pdf.go), portfolio/blocks/tx CSV helpers |
 | [`internal/apperrors`](../internal/apperrors/) | Stable | [`ErrNotFound`](../internal/apperrors/apperrors.go), [`Error`](../internal/apperrors/apperrors.go), [`Code*`](../internal/apperrors/apperrors.go) constants |
-| [`internal/repos`](../internal/repos/) | Stable | [`Stores`](../internal/repos/stores.go), typed repos, [`keys`](../internal/repos/keys.go) |
+| [`internal/repos`](../internal/repos/) | Stable | [`Stores`](../internal/repos/stores.go), typed repos ([`APIKeyRepo`](../internal/repos/apikey.go) for machine keys), [`keys`](../internal/repos/keys.go) |
 | [`internal/config`](../internal/config/) | Stable | [`Config`](../internal/config/config.go), [`Load`](../internal/config/config.go), [`Validate`](../internal/config/config.go) |
 | [`internal/outboundbreaker`](../internal/outboundbreaker/) | Evolving | [`WrapRoundTripper`](../internal/outboundbreaker/transport.go) per-host [`gobreaker`](https://github.com/sony/gobreaker) on shared outbound HTTP |
 | [`internal/retrybudget`](../internal/retrybudget/) | Evolving | [`WithAttemptBudget`](../internal/retrybudget/budget.go), [`WrapRoundTripper`](../internal/retrybudget/transport.go) for optional per-inbound caps |

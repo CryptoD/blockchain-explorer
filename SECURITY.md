@@ -2,7 +2,7 @@
 
 ## Supported Versions
 
-This project is under active development. Security fixes are applied to the default branch (`develop`) and will be included in the next tagged release. Older tags may not receive backported fixes unless explicitly noted.
+This project is under active development. Security fixes are applied to the default branch (**`main`**) and will be included in the next tagged release. Older tags may not receive backported fixes unless explicitly noted.
 
 ## Reporting a Vulnerability
 
@@ -41,6 +41,10 @@ Once a fix is released, we may acknowledge your contribution in release notes or
 ## External penetration tests
 
 Third-party penetration tests are planned on an **annual** basis and **before major launches**, with findings tracked as GitHub issues. See [`docs/PENETRATION_TESTING.md`](docs/PENETRATION_TESTING.md).
+
+## Machine API keys
+
+User- and service-scoped **`Authorization: Bearer bkx_*`** keys are optional integrations for automation. **Store and rotate them like passwords** (env/secret manager only; never commit or log plaintext). Scope, revocation, and CSRF behavior are documented in [`docs/API_KEYS.md`](docs/API_KEYS.md).
 
 ## Non‑Security Issues
 

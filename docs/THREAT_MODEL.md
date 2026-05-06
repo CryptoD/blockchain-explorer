@@ -13,6 +13,7 @@ This document satisfies [ROADMAP_TO_100.md](../ROADMAP_TO_100.md) task **29**. I
 | Asset | Why it matters |
 |-------|----------------|
 | **User accounts** | Password hashes, roles, profile data in Redis (`user:*`, sessions). |
+| **Machine API keys** | Hashed secrets and scopes in Redis (`apikey:v1:*`); a valid key grants the bearer the same coarse roles as scoped HTTP access—treat plaintext keys like passwords. See [`API_KEYS.md`](API_KEYS.md). |
 | **Sessions & cookies** | `session_id` cookie binds browser to server-side session; compromise = account takeover. |
 | **CSRF tokens** | Bound to session; protect state-changing HTTP from cross-site requests. |
 | **Admin surface** | Cache clear, status, rate-limit views; powerful in production. |
@@ -46,7 +47,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 
 | Category | Example threat | Primary assets | Mitigations (indicative) |
 |----------|----------------|----------------|---------------------------|
-| **S** | Attacker forges session or impersonates another user | Sessions, accounts | Server-side sessions in Redis; cookie-based `session_id`; password verification on login; **CSRF** on state-changing and admin routes when session present ([`csrfMiddleware`](../internal/server/updatepricealerthandler.go)); optional **Secure** cookie flag via config ([`SecureCookies`](../internal/config/config.go)). |
+| **S** | Attacker forges session or impersonates another user | Sessions, accounts | Server-side sessions in Redis; cookie-based `session_id`; password verification on login; **CSRF** on state-changing and admin routes when session present ([`csrfMiddleware`](../internal/server/updatepricealerthandler.go)); **Bearer `bkx_*`** keys hashed at rest with **scope checks** ([`API_KEYS.md`](API_KEYS.md), [`tryAPIKeyAuth`](../internal/server/apikeys.go)); optional **Secure** cookie flag via config ([`SecureCookies`](../internal/config/config.go)). |
 | **S** | Caller pretends to be admin | Admin APIs | **Role** checks and admin routes behind auth; CSRF for admin as applicable; production requires strong `ADMIN_*` ([`Validate`](../internal/config/config.go)). |
 | **T** | Modify another user’s portfolio or profile | Redis user data | Keys scoped by **username** / id (`portfolio:{user}:{id}`); handlers use authenticated **username** from session ([`authMiddleware`](../internal/server/updateprofilehandler.go)). |
 | **T** | Tamper with cached blockchain JSON | Cache integrity | Redis over trusted network; app does not trust client for canonical chain data—**server** fetches RPC/cached values. |
@@ -60,7 +61,7 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 | **D** | Flood `/api/search`, login, or exports | Availability | **Rate limiting** per IP and per user ([`rateLimitMiddleware`](../internal/server/updateprofilehandler.go)); stricter **export** limits; optional Redis failure → in-memory limiter fallback (degraded but bounded). **Probe** and **metrics** paths are documented in [`RATE_LIMITS.md`](RATE_LIMITS.md) (task **32**). |
 | **D** | Exhaust Redis or upstream RPC | Backend | Timeouts on blockchain/pricing HTTP clients; cache TTLs; pagination caps ([`internal/apiutil`](../internal/apiutil/pagination.go)); request body and JSON depth limits ([`INPUT_LIMITS.md`](INPUT_LIMITS.md), task **33**). |
 | **E** | User becomes admin | Roles | Separate **admin** user and role checks; default dev admin only in development ([`initializeDefaultAdmin`](../internal/server/init.go)); production **refuses start** without admin password ([`Validate`](../internal/config/config.go)). |
-| **E** | CSRF bypass on POST/PUT/DELETE | Sessions | CSRF token stored server-side; **X-CSRF-Token** required for state-changing routes with session cookie. |
+| **E** | CSRF bypass on POST/PUT/DELETE | Sessions | CSRF token stored server-side; **X-CSRF-Token** required for state-changing routes with session cookie **unless** the request authenticates with a **machine API key** Bearer token (that path skips CSRF by design—protect keys accordingly). |
 | **E** | Session fixation (bind login to attacker-known session id) | Sessions | Successful login **destroys** any existing `session_id` cookie server-side, then issues a **new** id ([`loginHandler`](../internal/server/updatepricealerthandler.go)); see [`CSRF_AND_SESSIONS.md`](CSRF_AND_SESSIONS.md) (tasks **31**, **38**). |
 
 ---
@@ -79,4 +80,4 @@ Each row: risk to an asset, relevant mitigations **as implemented or configured*
 
 ## 5. Maintaining this document
 
-Update this file when you add a **new externally reachable surface** (OAuth, webhooks, new admin powers) or change **trust boundaries** (e.g. Redis split, multi-region). Link major mitigations to code or config paths as above.
+Update this file when you add a **new externally reachable surface** (OAuth, webhooks, machine API keys, new admin powers) or change **trust boundaries** (e.g. Redis split, multi-region). Link major mitigations to code or config paths as above.

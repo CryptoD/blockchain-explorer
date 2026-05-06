@@ -12,7 +12,7 @@ For **which `internal/*` packages are treated as stable contracts** (vs. applica
 
 | Context | Responsibility | Primary data / integration |
 |--------|----------------|----------------------------|
-| **Auth** | Sessions, CSRF, users, roles (`user` / `admin`), password policy | Redis (`session:*`, user hashes), in-memory fallbacks |
+| **Auth** | Sessions, CSRF, machine API keys (`Authorization: Bearer bkx_*`), users, roles (`user` / `admin`), password policy | Redis (`session:*`, `apikey:v1:*`, user hashes), in-memory fallbacks |
 | **Explorer** | Block/tx/address search, cached RPC reads, HTML/API search | Bitcoin RPC (GetBlock etc.), Redis cache keys (`block:*`, `tx:*`, …) |
 | **Portfolio** | CRUD, valuation, exports (CSV/PDF/JSON) | Redis `portfolio:{user}:{id}`, pricing (`internal/pricing`) |
 | **Watchlist** | CRUD, entries, quotas | Redis `watchlist:{user}:{id}`, pricing for display links |

@@ -24,6 +24,7 @@ Session ids are generated with **`base64.RawURLEncoding`** (no `=` padding) to a
 |-------|--------|
 | **Storage** | CSRF token is keyed by **session id** in Redis ([`SessionRepo.SetCSRF`](../internal/repos/session.go), TTL **24 hours**) and in memory when Redis is unavailable. |
 | **When required** | [`csrfMiddleware`](../internal/server/updatepricealerthandler.go) requires header **`X-CSRF-Token`** on **state-changing** methods (POST, PUT, PATCH, DELETE) and on **admin** routes when a **`session_id`** cookie is present. Login/register are exempt. |
+| **Machine API keys** | Requests authenticated with **`Authorization: Bearer bkx_*`** ([`API_KEYS.md`](API_KEYS.md)) **skip the CSRF check** so scripts and tooling do not need a browser session token—even if a browser also sends **`session_id`**, the middleware checks the Bearer scheme first and exits before CSRF validation. Prefer **Bearer-only** automation clients to avoid ambiguity about which principal is in effect. |
 | **Rotation on password change** | **`PATCH /api/v1/user/password`** ([`changePasswordHandler`](../internal/server/updateprofilehandler.go)) verifies **`current_password`**, updates the password hash, then calls **`CreateOrUpdateCSRFToken`** for the **current** session. The JSON response includes a new **`csrfToken`**. Any previously issued CSRF value for that session **stops working** immediately. Clients must send the **new** token on subsequent mutating requests. |
 
 ---

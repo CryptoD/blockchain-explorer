@@ -4,6 +4,10 @@ All notable changes to this project are documented in this file. The project use
 
 ## [Unreleased]
 
+### Documentation
+
+- Aligned CSRF/session, threat model, bounded contexts, Redis key safety, internal package inventory, `SECURITY.md`, and `readme.md` with **machine API keys** (`Bearer bkx_*`).
+
 ## [1.1.0] - 2026-05-06
 
 ### Added
