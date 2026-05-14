@@ -122,7 +122,7 @@ The Bitcoin Explorer follows a microservices-inspired architecture with clear se
    docker-compose up -d
    ```
 
-The application will start on `http://localhost:3000`, with Adminer available at `http://localhost:8080` for database administration.
+The application UI is at **`http://localhost:3000`** (Compose publishes host **3000** to the app’s default listen port **8080** inside the container). Adminer is at **`http://localhost:8080`** for database administration.
 
 ### Alternative: Manual Setup
 
