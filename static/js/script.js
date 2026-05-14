@@ -1170,106 +1170,119 @@
 
         renderHistory();
 
-    function loadCharts() {
-        fetch(`${API_BASE}/metrics`)
-            .then(response => response.json())
-            .then(data => {
-                renderMempoolChart(data.mempool_size);
-                renderBlockTimeChart(data.block_times);
-                renderTxVolumeChart(data.tx_volume);
-                const chartsSection = document.getElementById('charts-section');
-                if (chartsSection) chartsSection.style.display = 'block';
-            })
-            .catch(err => {
-                console.error('Failed to load charts:', err);
+        if (document.getElementById('mempoolChart')) {
+            loadCharts().catch(function(err) { console.error(err); });
+        }
+
+    async function loadCharts() {
+        let Chart;
+        try {
+            const mod = await import('/dist/js/chart-metrics.js');
+            Chart = mod.Chart;
+        } catch (e) {
+            console.error('Failed to load chart library:', e);
+            return;
+        }
+        try {
+            const response = await fetch(API_BASE + '/metrics');
+            const data = await response.json();
+            renderMempoolChart(Chart, data.mempool_size);
+            renderBlockTimeChart(Chart, data.block_times);
+            renderTxVolumeChart(Chart, data.tx_volume);
+            const chartsSection = document.getElementById('charts-section');
+            if (chartsSection) {
+                chartsSection.classList.remove('hidden');
+            }
+        } catch (err) {
+            console.error('Failed to load charts:', err);
+        }
+
+        function renderMempoolChart(ChartCtor, data) {
+            if (!data || !document.getElementById('mempoolChart')) return;
+            const ctx = document.getElementById('mempoolChart').getContext('2d');
+            const labels = data.map(function(d) { return new Date(d.time * 1000).toLocaleTimeString(); });
+            const values = data.map(function(d) { return parseFloat(d.value); });
+            new ChartCtor(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Mempool Size',
+                        data: values,
+                        borderColor: 'rgb(75, 192, 192)',
+                        backgroundColor: 'rgba(75, 192, 192, 0.1)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
+                    }
+                }
             });
-        function renderMempoolChart(data) {
-        if (!data || !document.getElementById('mempoolChart')) return;
-        const ctx = document.getElementById('mempoolChart').getContext('2d');
-        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
-        const values = data.map(d => parseFloat(d.value));
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Mempool Size',
-                    data: values,
-                    borderColor: 'rgb(75, 192, 192)',
-                    backgroundColor: 'rgba(75, 192, 192, 0.1)',
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
+        }
+
+        function renderBlockTimeChart(ChartCtor, data) {
+            if (!data || !document.getElementById('blockTimeChart')) return;
+            const ctx = document.getElementById('blockTimeChart').getContext('2d');
+            const labels = data.map(function(d) { return new Date(d.time * 1000).toLocaleTimeString(); });
+            const values = data.map(function(d) { return parseFloat(d.value); });
+            new ChartCtor(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Block Time (s)',
+                        data: values,
+                        borderColor: 'rgb(255, 99, 132)',
+                        backgroundColor: 'rgba(255, 99, 132, 0.08)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
                     }
                 }
-            }
-        });
-    }
+            });
+        }
 
-        function renderBlockTimeChart(data) {
-        if (!data || !document.getElementById('blockTimeChart')) return;
-        const ctx = document.getElementById('blockTimeChart').getContext('2d');
-        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
-        const values = data.map(d => parseFloat(d.value));
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Block Time (s)',
-                    data: values,
-                    borderColor: 'rgb(255, 99, 132)',
-                    backgroundColor: 'rgba(255, 99, 132, 0.08)',
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
+        function renderTxVolumeChart(ChartCtor, data) {
+            if (!data || !document.getElementById('txVolumeChart')) return;
+            const ctx = document.getElementById('txVolumeChart').getContext('2d');
+            const labels = data.map(function(d) { return new Date(d.time * 1000).toLocaleTimeString(); });
+            const values = data.map(function(d) { return parseFloat(d.value); });
+            new ChartCtor(ctx, {
+                type: 'line',
+                data: {
+                    labels: labels,
+                    datasets: [{
+                        label: 'Transaction Volume',
+                        data: values,
+                        borderColor: 'rgb(54, 162, 235)',
+                        backgroundColor: 'rgba(54, 162, 235, 0.08)',
+                        fill: true,
+                        tension: 0.1
+                    }]
+                },
+                options: {
+                    responsive: true,
+                    scales: {
+                        y: {
+                            beginAtZero: true
+                        }
                     }
                 }
-            }
-        });
-    }
-
-        function renderTxVolumeChart(data) {
-        if (!data || !document.getElementById('txVolumeChart')) return;
-        const ctx = document.getElementById('txVolumeChart').getContext('2d');
-        const labels = data.map(d => new Date(d.time * 1000).toLocaleTimeString());
-        const values = data.map(d => parseFloat(d.value));
-        new Chart(ctx, {
-            type: 'line',
-            data: {
-                labels: labels,
-                datasets: [{
-                    label: 'Transaction Volume',
-                    data: values,
-                    borderColor: 'rgb(54, 162, 235)',
-                    backgroundColor: 'rgba(54, 162, 235, 0.08)',
-                    fill: true,
-                    tension: 0.1
-                }]
-            },
-            options: {
-                responsive: true,
-                scales: {
-                    y: {
-                        beginAtZero: true
-                    }
-                }
-            }
-        });
-    }
-
+            });
+        }
     }
 
     // Admin Dashboard Functionality

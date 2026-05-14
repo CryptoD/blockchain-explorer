@@ -49,7 +49,7 @@
         await syncCurrencyFromProfile();
         await loadPortfolios();
         await fetchBTCPrice();
-        initCharts();
+        await initCharts();
         updateDashboard();
         loadWatchlistPanel();
         loadDashboardNews();
@@ -361,8 +361,15 @@
         }
     }
 
-    // Initialize charts
-    function initCharts() {
+    // Initialize charts (lazy-load tree-shaken Chart.js from /dist/js/)
+    async function initCharts() {
+        let Chart;
+        try {
+            ({ Chart } = await import('/dist/js/chart-dashboard.js'));
+        } catch (e) {
+            console.error('Failed to load chart library:', e);
+            return;
+        }
         const ctxPerf = document.getElementById('performanceChart').getContext('2d');
         const ctxAlloc = document.getElementById('allocationChart').getContext('2d');
         const ctxTx = document.getElementById('txVolumeChart').getContext('2d');

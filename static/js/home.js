@@ -300,19 +300,6 @@
 
         const isValidFormat = Object.values(validPatterns).some(p => p.test(cleanQuery));
 
-        // Insert Chart.js CDN before home.js if not already present
-        (function insertChartJsBeforeApp() {
-            // If Chart.js is already present, do nothing
-            if (document.querySelector('script[src="https://cdn.jsdelivr.net/npm/chart.js"]')) return;
-            // Find the existing app script (home.js) to insert before it
-            const appScript = Array.from(document.getElementsByTagName('script'))
-                .find(s => s.src && (s.src.includes('/static/js/home.js') || s.src.endsWith('home.js')));
-            if (!appScript) return;
-            const chartScript = document.createElement('script');
-            chartScript.src = 'https://cdn.jsdelivr.net/npm/chart.js';
-            chartScript.async = false; // preserve execution order before home.js
-            appScript.parentNode.insertBefore(chartScript, appScript);
-        })();
         return { isValid: isValidFormat, error: isValidFormat ? null : 'INVALID_SEARCH' };
     }
 
