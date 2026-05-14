@@ -176,7 +176,7 @@
             if (!list) return;
             list.innerHTML = '';
             if (history.length === 0) {
-                list.innerHTML = '<li class="text-gray-500">No recent views</li>';
+                list.innerHTML = '<li class="text-gray-500">' + window.I18n.t('script_history_empty') + '</li>';
                 const section = document.getElementById('history-section');
                 if (section) section.style.display = 'none';
                 return;
@@ -230,7 +230,7 @@
             list.id = listId;
             list.className = 'autocomplete-dropdown';
             list.setAttribute('role', 'listbox');
-            list.setAttribute('aria-label', 'Search suggestions');
+            list.setAttribute('aria-label', window.I18n.t('autocomplete_list'));
             list.hidden = true;
             anchor.appendChild(list);
             return list;
@@ -269,7 +269,7 @@
             const el = document.getElementById(statusId);
             if (!el) return;
             if (!n) el.textContent = '';
-            else el.textContent = n + ' suggestion' + (n === 1 ? '' : 's');
+            else el.textContent = n === 1 ? window.I18n.t('autocomplete_count_one') : window.I18n.t('autocomplete_count_many', { n: n });
         }
 
         document.addEventListener('DOMContentLoaded', function() {
@@ -517,7 +517,7 @@
 
             if (!query) {
                 // No query provided: show helpful message instead of failing silently
-                showError('No search query provided. Use the search in the header to look up a block, tx or address.');
+                showError(window.I18n.t('script_no_query'));
                 return;
             }
 
@@ -526,7 +526,8 @@
         });
 
         // UI helpers: loading and error states
-        function showLoading(message = 'Loading data...') {
+        function showLoading(message) {
+            if (message == null || message === '') message = window.I18n.t('script_loading');
             const loadingEl = document.getElementById('loading');
             if (!loadingEl) return;
             const loadingText = document.getElementById('loading-text');
@@ -758,7 +759,7 @@
                 if (currentAbortController) currentAbortController.abort();
             }, TIMEOUT_MS);
 
-            showLoading('Loading data...');
+            showLoading(window.I18n.t('script_loading'));
 
             fetch(`${API_BASE}/search?q=${encodeURIComponent(query)}`, { signal })
                 .then(response => {
@@ -800,13 +801,13 @@
                     } else if (data.resultType === 'block') {
                         displayBlockData(data.data);
                     } else {
-                        showError('Unknown result type returned by API.');
+                        showError(window.I18n.t('script_unknown_result'));
                     }
                 })
                 .catch(error => {
                     // differentiate abort/timeouts from other errors
                     if (error && error.name === 'AbortError') {
-                        showError('Request timed out. Please check your connection and try again.', true, () => fetchSearch(query));
+                        showError(window.I18n.t('script_timeout'), true, () => fetchSearch(query));
                     } else {
                         console.error('Error:', error);
                         const msg = (error && error.message) ? error.message : 'Failed to fetch data from the API';
@@ -848,7 +849,7 @@
             addToHistory('address', addressData.address, shortenHash(addressData.address));
 
             // Populate address details
-            document.getElementById('address').textContent = addressData.address || 'N/A';
+            document.getElementById('address').textContent = addressData.address || window.I18n.t('script_na');
             document.getElementById('balance').textContent = formatBTC(addressData.balance || 0);
             if (document.getElementById('received')) document.getElementById('received').textContent = formatBTC(addressData.total_received || 0);
             if (document.getElementById('sent')) document.getElementById('sent').textContent = formatBTC(addressData.total_sent || 0);
@@ -885,7 +886,7 @@
                     tdHash.appendChild(a);
                     const copyBtn = document.createElement('button');
                     copyBtn.className = 'copy-btn';
-                    copyBtn.textContent = 'Copy';
+                    copyBtn.textContent = window.I18n.t('script_copy');
                     copyBtn.onclick = () => copyToClipboard(tx.txid);
                     tdHash.appendChild(copyBtn);
 
@@ -908,7 +909,7 @@
                 const td = document.createElement('td');
                 td.setAttribute('colspan', '3');
                 td.className = 'p-2';
-                td.textContent = 'No transactions found';
+                td.textContent = window.I18n.t('script_no_tx_found');
                 row.appendChild(td);
                 transactionsContainer.appendChild(row);
             }
@@ -954,7 +955,7 @@
             addToHistory('transaction', txData.txid, shortenHash(txData.txid));
 
             // Populate transaction details
-            document.getElementById('tx-hash').textContent = txData.txid || 'N/A';
+            document.getElementById('tx-hash').textContent = txData.txid || window.I18n.t('script_na');
             document.getElementById('tx-block').textContent = txData.blockhash || 'Pending';
             document.getElementById('tx-time').textContent = txData.time ? new Date(txData.time * 1000).toLocaleString() : 'Pending';
             document.getElementById('tx-amount').textContent = formatBTC(txData.value || 0);
@@ -985,13 +986,13 @@
                     fromContainer.appendChild(a);
                     const copyBtn = document.createElement('button');
                     copyBtn.className = 'copy-btn';
-                    copyBtn.textContent = 'Copy';
+                    copyBtn.textContent = window.I18n.t('script_copy');
                     copyBtn.onclick = () => copyToClipboard(addr);
                     fromContainer.appendChild(copyBtn);
                     if (idx < fromAddresses.length - 1) fromContainer.appendChild(document.createElement('br'));
                 });
             } else {
-                fromContainer.textContent = 'Coinbase (New Coins)';
+                fromContainer.textContent = window.I18n.t('script_coinbase');
             }
 
             // Populate 'To' list with accessible links
@@ -1007,13 +1008,13 @@
                     toContainer.appendChild(a);
                     const copyBtn = document.createElement('button');
                     copyBtn.className = 'copy-btn';
-                    copyBtn.textContent = 'Copy';
+                    copyBtn.textContent = window.I18n.t('script_copy');
                     copyBtn.onclick = () => copyToClipboard(addr);
                     toContainer.appendChild(copyBtn);
                     if (idx < toAddresses.length - 1) toContainer.appendChild(document.createElement('br'));
                 });
             } else {
-                toContainer.textContent = 'N/A';
+                toContainer.textContent = window.I18n.t('script_na');
             }
             if (window.__showWatchlistAddWrap) window.__showWatchlistAddWrap({ type: "address", address: txData.txid || "" });
         }
@@ -1046,17 +1047,17 @@
             addToHistory('block', blockData.hash, `Block ${blockData.height}`);
 
             // Populate block details
-            document.getElementById('block-height').textContent = blockData.height || 'N/A';
-            document.getElementById('block-hash').textContent = blockData.hash || 'N/A';
-            document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : 'N/A';
+            document.getElementById('block-height').textContent = blockData.height || window.I18n.t('script_na');
+            document.getElementById('block-hash').textContent = blockData.hash || window.I18n.t('script_na');
+            document.getElementById('block-time').textContent = blockData.time ? new Date(blockData.time * 1000).toLocaleString() : window.I18n.t('script_na');
             document.getElementById('block-tx-count').textContent = blockData.tx ? blockData.tx.length : 0;
-            document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : 'N/A';
-            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+            document.getElementById('block-size').textContent = blockData.size ? `${blockData.size.toLocaleString()} bytes` : window.I18n.t('script_na');
+            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : window.I18n.t('script_na');
             // Added miner display
-            document.getElementById('block-miner').textContent = blockData.miner || 'N/A';
-            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : 'N/A';
+            document.getElementById('block-miner').textContent = blockData.miner || window.I18n.t('script_na');
+            document.getElementById('block-weight').textContent = blockData.weight ? blockData.weight.toLocaleString() : window.I18n.t('script_na');
             // Added miner display
-            document.getElementById('block-miner').textContent = blockData.miner || 'N/A';
+            document.getElementById('block-miner').textContent = blockData.miner || window.I18n.t('script_na');
 
             // Populate transactions list
             const txContainer = document.getElementById('block-transactions');
@@ -1071,12 +1072,12 @@
                     txContainer.appendChild(a);
                     const copyBtn = document.createElement('button');
                     copyBtn.className = 'copy-btn';
-                    copyBtn.textContent = 'Copy';
+                    copyBtn.textContent = window.I18n.t('script_copy');
                     copyBtn.onclick = () => copyToClipboard(txid);
                     txContainer.appendChild(copyBtn);
                 });
             } else {
-                txContainer.textContent = 'No transactions';
+                txContainer.textContent = window.I18n.t('script_no_tx_block');
             }
             if (window.__showWatchlistAddWrap) window.__showWatchlistAddWrap({ type: "address", address: blockData.hash || "" });
         }
@@ -1085,9 +1086,9 @@
             fetch(`${API_BASE}/network-status`)
                 .then(response => response.json())
                 .then(data => {
-                    document.getElementById('network-block-height').textContent = data.block_height || 'N/A';
-                    document.getElementById('network-difficulty').textContent = data.difficulty ? data.difficulty.toFixed(2) : 'N/A';
-                    document.getElementById('network-hash-rate').textContent = data.hash_rate ? (data.hash_rate / 1e18).toFixed(2) : 'N/A'; // Convert to EH/s
+                    document.getElementById('network-block-height').textContent = data.block_height || window.I18n.t('script_na');
+                    document.getElementById('network-difficulty').textContent = data.difficulty ? data.difficulty.toFixed(2) : window.I18n.t('script_na');
+                    document.getElementById('network-hash-rate').textContent = data.hash_rate ? (data.hash_rate / 1e18).toFixed(2) : window.I18n.t('script_na'); // Convert to EH/s
                     const networkSection = document.getElementById('network-status-section');
                     if (networkSection) networkSection.style.display = 'block';
                 })
@@ -1101,7 +1102,7 @@
         }
 
         function shortenHash(hash) {
-            if (!hash) return 'N/A';
+            if (!hash) return window.I18n.t('script_na');
             return hash.substring(0, 10) + '...' + hash.substring(hash.length - 10);
         }
 
@@ -1117,7 +1118,7 @@
             const url = window.location.href;
             copyToClipboard(url);
             // Optionally, show a toast or alert
-            alert('URL copied to clipboard!');
+            alert(window.I18n.t('script_share_copied'));
         }
 
         // Pagination event listeners
@@ -1171,7 +1172,7 @@
                         .then(function(res) {
                             if (res.status === 401) {
                                 if (errEl) {
-                                    errEl.textContent = "Sign in to add to watchlist.";
+                                    errEl.textContent = window.I18n.t('script_watchlist_signin');
                                     errEl.classList.remove("hidden");
                                 }
                                 return [];
@@ -1185,7 +1186,7 @@
                             if (list.length === 0 && !errEl.classList.contains("hidden")) return;
                             if (list.length === 0) {
                                 if (errEl) {
-                                    errEl.textContent = "No watchlists. Create one in Profile.";
+                                    errEl.textContent = window.I18n.t('script_watchlist_none');
                                     errEl.classList.remove("hidden");
                                 }
                                 return;
@@ -1206,14 +1207,14 @@
                                     fetch(API_BASE + "/user/watchlists/" + w.id + "/entries", { method: "POST", headers: headers, body: body, credentials: "include" })
                                         .then(function(r) {
                                             if (r.ok) {
-                                                if (msgEl) { msgEl.textContent = "Added to watchlist."; msgEl.classList.remove("hidden"); }
+                                                if (msgEl) { msgEl.textContent = window.I18n.t('script_watchlist_added'); msgEl.classList.remove("hidden"); }
                                                 setTimeout(hideMessages, 2500);
                                             } else {
-                                                if (errEl) { errEl.textContent = "Failed to add."; errEl.classList.remove("hidden"); }
+                                                if (errEl) { errEl.textContent = window.I18n.t('script_watchlist_add_fail'); errEl.classList.remove("hidden"); }
                                             }
                                         })
                                         .catch(function() {
-                                            if (errEl) { errEl.textContent = "Request failed."; errEl.classList.remove("hidden"); }
+                                            if (errEl) { errEl.textContent = window.I18n.t('script_watchlist_request_fail'); errEl.classList.remove("hidden"); }
                                         });
                                 });
                                 dropdown.appendChild(b);
@@ -1222,7 +1223,7 @@
                             btn.setAttribute("aria-expanded", "true");
                         })
                         .catch(function() {
-                            if (errEl) { errEl.textContent = "Failed to load watchlists."; errEl.classList.remove("hidden"); }
+                            if (errEl) { errEl.textContent = window.I18n.t('script_watchlist_load_fail'); errEl.classList.remove("hidden"); }
                         });
                 } else {
                     closeDropdown();
@@ -1243,7 +1244,7 @@
             const mod = await import('/dist/js/chart-metrics.js');
             Chart = mod.Chart;
         } catch (e) {
-            console.error('Failed to load chart library:', e);
+            console.error(window.I18n.t('script_chart_metrics_fail'), e);
             return;
         }
         try {
@@ -1257,7 +1258,7 @@
                 chartsSection.classList.remove('hidden');
             }
         } catch (err) {
-            console.error('Failed to load charts:', err);
+            console.error(window.I18n.t('script_chart_data_fail'), err);
         }
 
         function renderMempoolChart(ChartCtor, data) {
@@ -1270,7 +1271,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Mempool Size',
+                        label: window.I18n.t('chart_mempool'),
                         data: values,
                         borderColor: 'rgb(75, 192, 192)',
                         backgroundColor: 'rgba(75, 192, 192, 0.1)',
@@ -1299,7 +1300,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Block Time (s)',
+                        label: window.I18n.t('chart_block_time'),
                         data: values,
                         borderColor: 'rgb(255, 99, 132)',
                         backgroundColor: 'rgba(255, 99, 132, 0.08)',
@@ -1328,7 +1329,7 @@
                 data: {
                     labels: labels,
                     datasets: [{
-                        label: 'Transaction Volume',
+                        label: window.I18n.t('chart_tx_volume'),
                         data: values,
                         borderColor: 'rgb(54, 162, 235)',
                         backgroundColor: 'rgba(54, 162, 235, 0.08)',
@@ -1462,7 +1463,7 @@
                 </div>
                 <div class="bg-blue-50 dark:bg-blue-900 p-4 rounded">
                     <h3 class="font-semibold text-blue-800 dark:text-blue-200">Redis Memory</h3>
-                    <p class="text-blue-600 dark:text-blue-400">${data.redis_memory || 'N/A'}</p>
+                    <p class="text-blue-600 dark:text-blue-400">${data.redis_memory || window.I18n.t('script_na')}</p>
                 </div>
                 <div class="bg-purple-50 dark:bg-purple-900 p-4 rounded">
                     <h3 class="font-semibold text-purple-800 dark:text-purple-200">Active Rate Limits</h3>
@@ -1491,15 +1492,15 @@
                     </div>
                 `;
             } else {
-                statsDiv.innerHTML = '<p class="text-gray-600 dark:text-gray-400">No cached data found</p>';
+                statsDiv.innerHTML = '<p class="text-gray-600 dark:text-gray-400">' + window.I18n.t('script_admin_cache_none') + '</p>';
             }
         } catch (error) {
-            document.getElementById('cache-stats').innerHTML = '<p class="text-red-600">Failed to load cache stats</p>';
+            document.getElementById('cache-stats').innerHTML = '<p class="text-red-600">' + window.I18n.t('script_admin_cache_stats_fail') + '</p>';
         }
     }
 
     async function clearCache() {
-        if (!confirm('Are you sure you want to clear all cache? This action cannot be undone.')) {
+        if (!confirm(window.I18n.t('script_clear_cache_confirm'))) {
             return;
         }
 
@@ -1509,16 +1510,16 @@
 
             const resultDiv = document.getElementById('cache-result');
             if (response.ok) {
-                resultDiv.innerHTML = `<p class="text-green-600">Cache cleared successfully! ${data.keys_removed} keys removed.</p>`;
+                resultDiv.innerHTML = '<p class="text-green-600">' + window.I18n.t('script_admin_cache_cleared', { count: data.keys_removed }) + '</p>';
                 resultDiv.classList.remove('hidden');
                 // Refresh cache stats
                 loadCacheStats();
             } else {
-                resultDiv.innerHTML = `<p class="text-red-600">Failed to clear cache: ${pickApiErrorMsg(data) || ''}</p>`;
+                resultDiv.innerHTML = '<p class="text-red-600">' + window.I18n.t('script_admin_cache_clear_fail', { detail: pickApiErrorMsg(data) || '' }) + '</p>';
                 resultDiv.classList.remove('hidden');
             }
         } catch (error) {
-            document.getElementById('cache-result').innerHTML = '<p class="text-red-600">Network error occurred</p>';
+            document.getElementById('cache-result').innerHTML = '<p class="text-red-600">' + window.I18n.t('script_admin_network') + '</p>';
             document.getElementById('cache-result').classList.remove('hidden');
         }
     }
@@ -1630,7 +1631,7 @@
                 // Registration successful, show login form
                 showLoginForm();
                 document.getElementById('login-username').value = username;
-                alert('Registration successful! Please login.');
+                alert(window.I18n.t('script_reg_ok'));
             } else {
                 errorDiv.textContent = pickApiErrorMsg(data) || 'Registration failed';
                 errorDiv.classList.remove('hidden');
@@ -1664,8 +1665,9 @@
         } else {
             document.documentElement.removeAttribute("data-color-scheme");
         }
-        if (user.language && (user.language === "en" || user.language === "es")) {
-            document.documentElement.lang = user.language;
+        if (user.language) {
+            if (window.I18n) window.I18n.setLang(user.language);
+            else document.documentElement.setAttribute("lang", String(user.language).toLowerCase().slice(0, 2));
         }
     }
 

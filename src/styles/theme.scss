@@ -370,3 +370,8 @@ $text: #0f172a;
   background-color: var(--color-hover);
   border: 1px solid var(--color-border);
 }
+
+/* RTL: logical spacing and common flex mirrors (lang e.g. Arabic sets html[dir="rtl"]) */
+html[dir="rtl"] .result-actions {
+  flex-direction: row-reverse;
+}

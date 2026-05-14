@@ -10,87 +10,90 @@
     <!-- Header with logo, navigation and search -->
     <header class="w-full bg-bg-secondary shadow">
         <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
+            <a href="/" class="flex items-center gap-3" data-i18n-aria-label="aria_homepage" aria-label="Homepage - Blockchain Explorer">
                 <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
-                <span class="font-semibold text-lg">Blockchain Explorer</span>
+                <span class="font-semibold text-lg" data-i18n="brand_subtitle">Blockchain Explorer</span>
             </a>
 
-            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" aria-label="Main navigation">
-                <a href="/" class="hover:text-primary" aria-current="page">Home</a>
-                <a href="/blocks" class="hover:text-primary">Blocks</a>
-                <a href="/transactions" class="hover:text-primary">Transactions</a>
-                <a href="/addresses" class="hover:text-primary">Addresses</a>
-                <a href="/portfolios" id="portfolios-nav" class="hover:text-primary hidden">Portfolios</a>
-                <a href="/dashboard" id="dashboard-nav" class="hover:text-primary hidden">Dashboard</a>
-                <a href="/profile" id="profile-nav" class="hover:text-primary hidden">Profile</a>
-                <a href="/admin" class="hover:text-primary">Admin</a>
+            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" data-i18n-aria-label="aria_main_nav" aria-label="Main navigation">
+                <a href="/" class="hover:text-primary" aria-current="page" data-i18n="nav_home">Home</a>
+                <a href="/blocks" class="hover:text-primary" data-i18n="nav_blocks">Blocks</a>
+                <a href="/transactions" class="hover:text-primary" data-i18n="nav_transactions">Transactions</a>
+                <a href="/addresses" class="hover:text-primary" data-i18n="nav_addresses">Addresses</a>
+                <a href="/portfolios" id="portfolios-nav" class="hover:text-primary hidden" data-i18n="nav_portfolios">Portfolios</a>
+                <a href="/dashboard" id="dashboard-nav" class="hover:text-primary hidden" data-i18n="nav_dashboard">Dashboard</a>
+                <a href="/profile" id="profile-nav" class="hover:text-primary hidden" data-i18n="nav_profile">Profile</a>
+                <a href="/admin" class="hover:text-primary" data-i18n="nav_admin">Admin</a>
             </nav>
 
             <div class="hidden md:block flex-1 max-w-lg relative">
                 <form id="search-form" class="flex shadow-sm rounded-lg overflow-hidden bg-bg-secondary" action="/bitcoin" method="get" role="search">
-                    <label for="search-input" class="sr-only">Search blockchain</label>
+                    <label for="search-input" class="sr-only" data-i18n="sr_search_blockchain">Search blockchain</label>
                     <input
                         id="search-input"
                         name="q"
                         type="search"
                         inputmode="search"
+                        data-i18n-aria-label="aria_search_main"
+                        data-i18n-placeholder="search_placeholder_desktop"
                         aria-label="Search by block height, transaction hash, or address"
                         placeholder="Search by block height, transaction hash, or address..."
                         class="flex-1 p-3 border-none text-base text-text focus:outline-none focus:ring-2 focus:ring-primary"
                         autocomplete="off"
                     />
-                    <button id="search-icon" class="bg-primary text-white px-4" type="submit" aria-label="Search">Search</button>
+                    <button id="search-icon" class="bg-primary text-white px-4" type="submit" data-i18n-aria-label="aria_search" aria-label="Search"><span data-i18n="btn_search">Search</span></button>
                 </form>
             </div>
 
             <!-- Theme selector -->
             <div class="flex items-center gap-2">
-                <label for="theme-select" class="sr-only">Select theme</label>
+                <label for="theme-select" class="sr-only" data-i18n="aria_select_theme">Select theme</label>
                 <select id="theme-select" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary">
-                    <option value="blue">Blue</option>
-                    <option value="green">Green</option>
-                    <option value="purple">Purple</option>
-                    <option value="orange">Orange</option>
+                    <option value="blue" data-i18n="theme_blue">Blue</option>
+                    <option value="green" data-i18n="theme_green">Green</option>
+                    <option value="purple" data-i18n="theme_purple">Purple</option>
+                    <option value="orange" data-i18n="theme_orange">Orange</option>
                 </select>
             </div>
 
             <!-- User authentication -->
             <div id="auth-section" class="flex items-center gap-4">
                 <div id="user-info" class="hidden text-sm text-text-secondary">
-                    Welcome, <span id="username-display"></span>!
-                    <button id="logout-btn" class="ml-2 text-red-600 hover:text-red-800">Logout</button>
+                    <span data-i18n="home_welcome_prefix">Welcome,</span>
+                    <span id="username-display"></span><span data-i18n="home_welcome_suffix">!</span>
+                    <button id="logout-btn" class="ms-2 text-red-600 hover:text-red-800" data-i18n="btn_logout">Logout</button>
                 </div>
                 <div id="auth-buttons" class="flex items-center gap-2">
-                    <button id="login-btn" class="text-sm text-primary hover:text-primary-dark">Login</button>
-                    <button id="register-btn" class="text-sm bg-primary text-white px-3 py-1 rounded hover:bg-primary-dark">Register</button>
+                    <button id="login-btn" class="text-sm text-primary hover:text-primary-dark" data-i18n="btn_login">Login</button>
+                    <button id="register-btn" class="text-sm bg-primary text-white px-3 py-1 rounded hover:bg-primary-dark" data-i18n="btn_register">Register</button>
                 </div>
             </div>
 
             <!-- Mobile nav toggle -->
             <div class="md:hidden">
-                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" data-i18n-aria-label="aria_open_main_menu" aria-label="Open main menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
             </div>
         </div>
 
         <!-- Mobile menu (hidden by default) -->
-        <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu" aria-label="Mobile main menu">
+        <div id="mobile-menu" class="mobile-menu md:hidden hidden" role="menu" data-i18n-aria-label="aria_mobile_menu" aria-label="Mobile main menu">
             <div class="px-4 pt-4 pb-6 space-y-4">
-                <nav class="flex flex-col gap-2" role="navigation" aria-label="Mobile navigation">
-                    <a href="/" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Home</a>
-                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Blocks</a>
-                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Transactions</a>
-                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Addresses</a>
-                    <a href="/portfolios" id="portfolios-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Portfolios</a>
-                    <a href="/dashboard" id="dashboard-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Dashboard</a>
-                    <a href="/profile" id="profile-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem">Profile</a>
-                    <a href="/admin" class="px-3 py-2 rounded hover:bg-hover" role="menuitem">Admin</a>
+                <nav class="flex flex-col gap-2" role="navigation" data-i18n-aria-label="aria_mobile_nav" aria-label="Mobile navigation">
+                    <a href="/" class="px-3 py-2 rounded hover:bg-hover" role="menuitem" data-i18n="nav_home">Home</a>
+                    <a href="/blocks" class="px-3 py-2 rounded hover:bg-hover" role="menuitem" data-i18n="nav_blocks">Blocks</a>
+                    <a href="/transactions" class="px-3 py-2 rounded hover:bg-hover" role="menuitem" data-i18n="nav_transactions">Transactions</a>
+                    <a href="/addresses" class="px-3 py-2 rounded hover:bg-hover" role="menuitem" data-i18n="nav_addresses">Addresses</a>
+                    <a href="/portfolios" id="portfolios-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem" data-i18n="nav_portfolios">Portfolios</a>
+                    <a href="/dashboard" id="dashboard-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem" data-i18n="nav_dashboard">Dashboard</a>
+                    <a href="/profile" id="profile-nav-mobile" class="px-3 py-2 rounded hover:bg-hover hidden" role="menuitem" data-i18n="nav_profile">Profile</a>
+                    <a href="/admin" class="px-3 py-2 rounded hover:bg-hover" role="menuitem" data-i18n="nav_admin">Admin</a>
                 </nav>
 
                 <div>
-                    <label for="search-input-mobile" class="sr-only">Search blockchain</label>
+                    <label for="search-input-mobile" class="sr-only" data-i18n="sr_search_blockchain">Search blockchain</label>
                     <form id="search-form-mobile" class="relative flex gap-2" action="/bitcoin" method="get" role="search">
-                        <input id="search-input-mobile" name="q" type="search" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded bg-bg-secondary text-text border-border focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
-                        <button id="search-icon-mobile" type="submit" class="bg-primary text-white px-3 rounded" aria-label="Search">Go</button>
+                        <input id="search-input-mobile" name="q" type="search" data-i18n-aria-label="aria_search_mobile" data-i18n-placeholder="search_placeholder_mobile" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded bg-bg-secondary text-text border-border focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
+                        <button id="search-icon-mobile" type="submit" class="bg-primary text-white px-3 rounded" data-i18n-aria-label="aria_search" data-i18n="btn_go">Go</button>
                     </form>
                 </div>
             </div>
@@ -101,8 +104,8 @@
     <main id="main-content" class="flex-1 flex items-center justify-center px-4 py-8">
         <div id="search-section" class="w-full max-w-3xl">
             <div class="text-center mb-6">
-                <h1 class="text-2xl font-bold">Explore the Bitcoin Blockchain</h1>
-                <p class="text-text-secondary mt-2">Search blocks, transactions, and addresses</p>
+                <h1 class="text-2xl font-bold" data-i18n="home_hero_title">Explore the Bitcoin Blockchain</h1>
+                <p class="text-text-secondary mt-2" data-i18n="home_hero_subtitle">Search blocks, transactions, and addresses</p>
             </div>
 
             <div id="result-container" class="mt-4"></div>
@@ -111,10 +114,10 @@
         <!-- Portfolio Management Section -->
         <div id="portfolio-section" class="hidden w-full max-w-4xl mx-auto">
             <div class="flex flex-wrap justify-between items-center mb-6 gap-4">
-                <h1 class="text-2xl font-bold">Your Portfolios</h1>
+                <h1 class="text-2xl font-bold" data-i18n="portfolio_page_heading">Your Portfolios</h1>
                 <div class="flex flex-wrap gap-3 items-center">
-                    <label for="portfolio-currency-selector" class="text-sm text-text-secondary">Value in</label>
-                    <select id="portfolio-currency-selector" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" aria-label="Valuation currency">
+                    <label for="portfolio-currency-selector" class="text-sm text-text-secondary" data-i18n="portfolio_value_in">Value in</label>
+                    <select id="portfolio-currency-selector" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary" data-i18n-aria-label="aria_portfolio_currency" aria-label="Valuation currency">
                         <option value="usd">USD</option>
                         <option value="eur">EUR</option>
                         <option value="gbp">GBP</option>
@@ -123,7 +126,7 @@
                         <option value="aud">AUD</option>
                         <option value="chf">CHF</option>
                     </select>
-                    <button id="create-portfolio-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark">Create New Portfolio</button>
+                    <button id="create-portfolio-btn" class="bg-primary text-white px-4 py-2 rounded hover:bg-primary-dark" data-i18n="portfolio_create_new">Create New Portfolio</button>
                 </div>
             </div>
             <div id="portfolio-list" class="grid grid-cols-1 md:grid-cols-2 gap-6">
@@ -138,23 +141,23 @@
                 <form id="portfolio-form" class="space-y-4">
                     <input type="hidden" id="portfolio-id">
                     <div>
-                        <label for="portfolio-name" class="block text-sm font-medium mb-1">Name</label>
+                        <label for="portfolio-name" class="block text-sm font-medium mb-1" data-i18n="portfolio_form_name">Name</label>
                         <input type="text" id="portfolio-name" required class="w-full p-2 border rounded bg-bg text-text border-border">
                     </div>
                     <div>
-                        <label for="portfolio-description" class="block text-sm font-medium mb-1">Description</label>
+                        <label for="portfolio-description" class="block text-sm font-medium mb-1" data-i18n="portfolio_form_description">Description</label>
                         <textarea id="portfolio-description" rows="2" class="w-full p-2 border rounded bg-bg text-text border-border"></textarea>
                     </div>
                     <div>
-                        <label class="block text-sm font-medium mb-1">Addresses</label>
+                        <label class="block text-sm font-medium mb-1" data-i18n="portfolio_form_addresses">Addresses</label>
                         <div id="portfolio-items-container" class="space-y-2">
                             <!-- Address items will be added here -->
                         </div>
-                        <button type="button" id="add-address-btn" class="mt-2 text-sm text-primary hover:underline">+ Add Address</button>
+                        <button type="button" id="add-address-btn" class="mt-2 text-sm text-primary hover:underline" data-i18n="portfolio_add_address">+ Add Address</button>
                     </div>
                     <div class="flex justify-end gap-3 mt-6">
-                        <button type="button" id="close-modal-btn" class="px-4 py-2 border rounded hover:bg-hover">Cancel</button>
-                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark">Save</button>
+                        <button type="button" id="close-modal-btn" class="px-4 py-2 border rounded hover:bg-hover" data-i18n="portfolio_cancel">Cancel</button>
+                        <button type="submit" class="px-4 py-2 bg-primary text-white rounded hover:bg-primary-dark" data-i18n="portfolio_save">Save</button>
                     </div>
                 </form>
             </div>
@@ -164,54 +167,54 @@
         <div id="auth-forms" class="hidden w-full max-w-md mx-auto">
             <!-- Login Form -->
             <div id="login-form-container" class="bg-bg-secondary rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold mb-4 text-center">Login</h2>
+                <h2 class="text-xl font-bold mb-4 text-center" data-i18n="auth_heading_login">Login</h2>
                 <form id="login-form">
                     <div class="mb-4">
-                        <label for="login-username" class="block text-sm font-medium mb-2">Username</label>
+                        <label for="login-username" class="block text-sm font-medium mb-2" data-i18n="auth_label_username">Username</label>
                         <input type="text" id="login-username" name="username" required
                                class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
                     <div class="mb-6">
-                        <label for="login-password" class="block text-sm font-medium mb-2">Password</label>
+                        <label for="login-password" class="block text-sm font-medium mb-2" data-i18n="auth_label_password">Password</label>
                         <input type="password" id="login-password" name="password" required
                                class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
-                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark">
+                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark" data-i18n="auth_btn_login">
                         Login
                     </button>
                 </form>
                 <div id="login-error" class="mt-4 text-red-600 text-center hidden"></div>
                 <div class="mt-4 text-center">
-                    <button id="switch-to-register" class="text-primary hover:text-primary-dark">Don't have an account? Register</button>
+                    <button id="switch-to-register" class="text-primary hover:text-primary-dark" data-i18n="auth_switch_to_register">Don't have an account? Register</button>
                 </div>
             </div>
 
             <!-- Registration Form -->
             <div id="register-form-container" class="hidden bg-bg-secondary rounded-lg shadow p-6">
-                <h2 class="text-xl font-bold mb-4 text-center">Register</h2>
+                <h2 class="text-xl font-bold mb-4 text-center" data-i18n="auth_heading_register">Register</h2>
                 <form id="register-form">
                     <div class="mb-4">
-                        <label for="register-username" class="block text-sm font-medium mb-2">Username</label>
+                        <label for="register-username" class="block text-sm font-medium mb-2" data-i18n="auth_label_username">Username</label>
                         <input type="text" id="register-username" name="username" required
                                class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
                     <div class="mb-4">
-                        <label for="register-email" class="block text-sm font-medium mb-2">Email (optional)</label>
+                        <label for="register-email" class="block text-sm font-medium mb-2" data-i18n="auth_label_email_optional">Email (optional)</label>
                         <input type="email" id="register-email" name="email"
                                class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
                     <div class="mb-6">
-                        <label for="register-password" class="block text-sm font-medium mb-2">Password</label>
+                        <label for="register-password" class="block text-sm font-medium mb-2" data-i18n="auth_label_password">Password</label>
                         <input type="password" id="register-password" name="password" required minlength="6"
                                class="w-full p-3 border rounded bg-bg text-text border-border focus:outline-none focus:ring-2 focus:ring-primary">
                     </div>
-                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark">
+                    <button type="submit" class="w-full bg-primary text-white py-3 rounded hover:bg-primary-dark" data-i18n="auth_btn_register">
                         Register
                     </button>
                 </form>
                 <div id="register-error" class="mt-4 text-red-600 text-center hidden"></div>
                 <div class="mt-4 text-center">
-                    <button id="switch-to-login" class="text-primary hover:text-primary-dark">Already have an account? Login</button>
+                    <button id="switch-to-login" class="text-primary hover:text-primary-dark" data-i18n="auth_switch_to_login">Already have an account? Login</button>
                 </div>
             </div>
         </div>
@@ -224,26 +227,26 @@
         <div class="max-w-7xl mx-auto">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-8">
                 <div>
-                    <h3 class="text-lg font-semibold mb-4">About Blockchain Explorer</h3>
-                    <p class="text-text-secondary">Explore the Bitcoin blockchain with real-time data on blocks, transactions, and addresses.</p>
+                    <h3 class="text-lg font-semibold mb-4" data-i18n="footer_about_heading">About Blockchain Explorer</h3>
+                    <p class="text-text-secondary" data-i18n="footer_about_body">Explore the Bitcoin blockchain with real-time data on blocks, transactions, and addresses.</p>
                 </div>
                 <div>
-                    <h3 class="text-lg font-semibold mb-4">Feedback</h3>
-                    <p class="text-text-secondary mb-4">Help us improve! Share your thoughts and suggestions.</p>
+                    <h3 class="text-lg font-semibold mb-4" data-i18n="footer_feedback_heading">Feedback</h3>
+                    <p class="text-text-secondary mb-4" data-i18n="footer_feedback_intro">Help us improve! Share your thoughts and suggestions.</p>
                     <form id="feedback-form" class="space-y-4">
                         <div>
-                            <label for="feedback-name" class="block text-sm font-medium text-text">Name (optional)</label>
-                            <input type="text" id="feedback-name" name="name" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Your name">
+                            <label for="feedback-name" class="block text-sm font-medium text-text" data-i18n="footer_label_name_opt">Name (optional)</label>
+                            <input type="text" id="feedback-name" name="name" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" data-i18n-placeholder="footer_placeholder_name" placeholder="Your name">
                         </div>
                         <div>
-                            <label for="feedback-email" class="block text-sm font-medium text-text">Email (optional)</label>
-                            <input type="email" id="feedback-email" name="email" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="your@email.com">
+                            <label for="feedback-email" class="block text-sm font-medium text-text" data-i18n="footer_label_email_opt">Email (optional)</label>
+                            <input type="email" id="feedback-email" name="email" class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" data-i18n-placeholder="footer_placeholder_email" placeholder="your@email.com">
                         </div>
                         <div>
-                            <label for="feedback-message" class="block text-sm font-medium text-text">Message</label>
-                            <textarea id="feedback-message" name="message" rows="3" required class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" placeholder="Your feedback..."></textarea>
+                            <label for="feedback-message" class="block text-sm font-medium text-text" data-i18n="footer_label_message">Message</label>
+                            <textarea id="feedback-message" name="message" rows="3" required class="w-full p-2 border border-border rounded bg-bg text-text focus:outline-none focus:ring-2 focus:ring-primary" data-i18n-placeholder="footer_placeholder_message" placeholder="Your feedback..."></textarea>
                         </div>
-                        <button type="submit" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary">Submit Feedback</button>
+                        <button type="submit" class="bg-primary text-white px-4 py-2 rounded hover:bg-blue-600 focus:outline-none focus:ring-2 focus:ring-primary" data-i18n="footer_submit">Submit Feedback</button>
                     </form>
                     <div id="feedback-result" class="mt-4 hidden"></div>
                 </div>
@@ -254,24 +257,25 @@
     <!-- Charts section -->
     <section id="charts-section" class="hidden px-4 py-8 bg-bg">
         <div class="max-w-7xl mx-auto">
-            <h2 class="text-2xl font-bold text-center mb-6">Blockchain Metrics</h2>
+            <h2 class="text-2xl font-bold text-center mb-6" data-i18n="chart_blockchain_metrics">Blockchain Metrics</h2>
             <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
                 <div class="bg-bg-secondary p-4 rounded-lg shadow">
-                    <h3 class="text-lg font-semibold mb-2">Mempool Size</h3>
+                    <h3 class="text-lg font-semibold mb-2" data-i18n="metrics_mempool_title">Mempool Size</h3>
                     <canvas id="mempoolChart" width="400" height="200"></canvas>
                 </div>
                 <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-                    <h3 class="text-lg font-semibold mb-2">Block Time</h3>
+                    <h3 class="text-lg font-semibold mb-2" data-i18n="metrics_block_time_title">Block Time</h3>
                     <canvas id="blockTimeChart" width="400" height="200"></canvas>
                 </div>
                 <div class="bg-white dark:bg-gray-800 p-4 rounded-lg shadow">
-                    <h3 class="text-lg font-semibold mb-2">Transaction Volume</h3>
+                    <h3 class="text-lg font-semibold mb-2" data-i18n="metrics_tx_volume_title">Transaction Volume</h3>
                     <canvas id="txVolumeChart" width="400" height="200"></canvas>
                 </div>
             </div>
         </div>
     </section>
 
+    <script src="/static/js/i18n.js" defer></script>
     <script src="/static/js/degraded-mode.js" defer></script>
     <script src="/static/js/home.js" defer></script>
 </body>

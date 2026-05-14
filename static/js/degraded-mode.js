@@ -36,12 +36,16 @@
         wrap.className =
             'w-full px-4 py-3 text-sm border-b border-amber-600/40 bg-amber-100 text-amber-950 dark:bg-amber-950/90 dark:text-amber-100 dark:border-amber-500/40';
         wrap.style.cssText = 'position:relative;z-index:9999';
+        var wI = typeof window !== 'undefined' && window.I18n;
+        var head = wI ? window.I18n.t('degraded_heading') : 'Reduced availability:';
+        var tail = wI ? window.I18n.t('degraded_suffix') : ' Log in, portfolios, and other features that need the database may not work until this is resolved.';
+        var dismiss = wI ? window.I18n.t('btn_dismiss') : 'Dismiss';
         wrap.innerHTML =
             '<div class="max-w-7xl mx-auto flex items-start justify-between gap-3">' +
-            '<p class="m-0 flex-1"><strong>Reduced availability:</strong> ' +
+            '<p class="m-0 flex-1"><strong>' + escapeHtml(head) + '</strong> ' +
             escapeHtml(message) +
-            ' Log in, portfolios, and other features that need the database may not work until this is resolved.</p>' +
-            '<button type="button" class="shrink-0 px-2 py-1 rounded border border-current text-xs hover:opacity-80" aria-label="Dismiss alert">Dismiss</button>' +
+            escapeHtml(tail) + '</p>' +
+            '<button type="button" class="shrink-0 px-2 py-1 rounded border border-current text-xs hover:opacity-80" aria-label="' + escapeHtml(dismiss) + '">' + dismiss + '</button>' +
             '</div>';
         var btn = wrap.querySelector('button');
         if (btn) {
@@ -69,10 +73,12 @@
                 removeBanner();
                 return;
             }
-            var err = readinessErrMsg(data) || 'Service dependencies are not ready.';
+            var def = (typeof window !== 'undefined' && window.I18n) ? window.I18n.t('degraded_default') : 'Service dependencies are not ready.';
+            var err = readinessErrMsg(data) || def;
             showBanner(err);
         } catch (e) {
-            showBanner('Could not verify readiness. The app may be degraded.');
+            var msg = (typeof window !== 'undefined' && window.I18n) ? window.I18n.t('degraded_verify') : 'Could not verify readiness. The app may be degraded.';
+            showBanner(msg);
         }
     }
 

@@ -122,7 +122,7 @@
                     const data = await response.json();
                     displayResults(data);
                 } catch (error) {
-                    showError('Failed to fetch symbols: ' + error.message);
+                    showError(window.I18n.t('symbols_fetch_fail', { detail: error.message }));
                 } finally {
                     hideLoading();
                 }
@@ -192,7 +192,7 @@
                 
                 if (totalPages > 1) {
                     pagination.classList.remove('hidden');
-                    pageInfo.textContent = `Page ${currentPage} of ${totalPages}`;
+                    pageInfo.textContent = window.I18n.t('symbols_page_info', { current: currentPage, total: totalPages });
                     prevBtn.disabled = currentPage <= 1;
                     nextBtn.disabled = currentPage >= totalPages;
                 } else {
@@ -279,7 +279,7 @@
                 exportJsonBtn.addEventListener('click', async function() {
                     exportJsonError.classList.add('hidden');
                     exportJsonSpinner.classList.remove('hidden');
-                    exportJsonLabel.textContent = 'Exporting…';
+                    exportJsonLabel.textContent = window.I18n.t('symbols_exporting');
                     try {
                         const queryString = buildExportQueryParams();
                         const res = await fetch('/api/search/advanced/export?' + queryString);
@@ -289,7 +289,7 @@
                                 (data && typeof data.message === 'string' && data.message) ||
                                     data.error ||
                                     data.code ||
-                                    'Export failed'
+                                    window.I18n.t('symbols_export_fail')
                             );
                         }
                         const blob = await res.blob();
@@ -299,11 +299,11 @@
                         a.click();
                         URL.revokeObjectURL(a.href);
                     } catch (err) {
-                        exportJsonError.textContent = err.message || 'Export failed.';
+                        exportJsonError.textContent = err.message || window.I18n.t('symbols_export_fail');
                         exportJsonError.classList.remove('hidden');
                     } finally {
                         exportJsonSpinner.classList.add('hidden');
-                        exportJsonLabel.textContent = 'Export results (JSON)';
+                        exportJsonLabel.textContent = window.I18n.t('symbols_export_json_label');
                     }
                 });
             }
@@ -324,6 +324,7 @@
             let lastFetchedMeta = null;
 
             const newsLoadingEl = document.getElementById('asset-news-loading');
+            const newsSkeletonEl = document.getElementById('asset-news-skeleton');
             const newsErrorEl = document.getElementById('asset-news-error');
             const newsEmptyEl = document.getElementById('asset-news-empty');
             const newsListEl = document.getElementById('asset-news-list');
@@ -339,10 +340,25 @@
                 fetchAssetNews();
             }
 
+            function assetResilientFetch(url, init) {
+                if (typeof window.fetchWithRetry === 'function') {
+                    return window.fetchWithRetry(url, init || {}, { retries: 3, baseDelayMs: 450 });
+                }
+                return fetch(url, init || {});
+            }
+
             function setNewsState({ loading, error, empty }) {
-                if (newsLoadingEl) newsLoadingEl.classList.toggle('hidden', !loading);
-                if (newsErrorEl) newsErrorEl.classList.toggle('hidden', !error);
+                if (newsSkeletonEl) {
+                    newsSkeletonEl.classList.toggle('hidden', !loading);
+                    newsSkeletonEl.setAttribute('aria-busy', loading ? 'true' : 'false');
+                }
+                if (newsLoadingEl) newsLoadingEl.classList.add('hidden');
+                if (newsErrorEl) {
+                    if (!error) newsErrorEl.innerHTML = '';
+                    newsErrorEl.classList.toggle('hidden', !error);
+                }
                 if (newsEmptyEl) newsEmptyEl.classList.toggle('hidden', !empty);
+                if (newsListEl) newsListEl.classList.toggle('hidden', !!(loading || error || empty));
             }
 
             function parsePublishedAt(a) {
@@ -417,12 +433,15 @@
 
             async function fetchAssetNews() {
                 if (!selectedAssetSymbol || !newsListEl) return;
+                if (newsErrorEl) {
+                    newsErrorEl.innerHTML = '';
+                    newsErrorEl.classList.add('hidden');
+                }
                 setNewsState({ loading: true, error: false, empty: false });
-                if (newsErrorEl) newsErrorEl.textContent = '';
                 try {
                     const favOnly = !!(favsOnlyEl && favsOnlyEl.checked);
                     const url = '/api/news/' + encodeURIComponent(selectedAssetSymbol) + (favOnly ? '?favorites_only=true' : '');
-                    const res = await fetch(url, { credentials: 'include' });
+                    const res = await assetResilientFetch(url, { credentials: 'include' });
                     if (!res.ok) throw new Error('HTTP ' + res.status);
                     const payload = await res.json();
                     lastFetchedArticles = Array.isArray(payload.data) ? payload.data : [];
@@ -432,7 +451,18 @@
                     lastFetchedArticles = [];
                     lastFetchedMeta = null;
                     if (newsErrorEl) {
-                        newsErrorEl.textContent = 'Failed to load news. Please try again.';
+                        newsErrorEl.innerHTML = '';
+                        const p = document.createElement('p');
+                        p.textContent = window.I18n.t('symbols_news_fail');
+                        const btn = document.createElement('button');
+                        btn.type = 'button';
+                        btn.className = 'mt-2 text-sm font-medium text-primary hover:underline';
+                        btn.textContent = window.I18n.t('ui_retry');
+                        btn.addEventListener('click', function () {
+                            fetchAssetNews();
+                        });
+                        newsErrorEl.appendChild(p);
+                        newsErrorEl.appendChild(btn);
                     }
                     setNewsState({ loading: false, error: true, empty: false });
                 }

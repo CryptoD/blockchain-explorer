@@ -86,7 +86,7 @@ func updateProfileHandler(c *gin.Context) {
 	if body.Language != nil {
 		v := strings.ToLower(strings.TrimSpace(*body.Language))
 		if v != "" && !supportedLangs[v] {
-			errorResponse(c, http.StatusBadRequest, "invalid_language", "Unsupported language code; use a supported code (e.g. en, es)")
+			errorResponse(c, http.StatusBadRequest, "invalid_language", "Unsupported language code; use a supported code (e.g. en, es, ar)")
 			return
 		}
 		user.Language = v

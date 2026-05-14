@@ -43,6 +43,30 @@
         try { return localStorage.getItem('csrfToken'); } catch (e) { return null; }
     }
 
+    /** Fetch with automatic retries on network failure and 429 / 5xx (see fetch-retry.js). */
+    function resilientFetch(url, init) {
+        if (typeof window.fetchWithRetry === 'function') {
+            return window.fetchWithRetry(url, init || {}, { retries: 3, baseDelayMs: 450 });
+        }
+        return fetch(url, init || {});
+    }
+
+    function watchlistEntriesSkeletonHtml() {
+        var i;
+        var sb = '<div class="space-y-2" role="status" aria-busy="true">';
+        for (i = 0; i < 4; i++) {
+            sb += '<div class="flex flex-wrap items-center gap-2 p-2 rounded border border-border">';
+            sb += '<div class="flex-1 min-w-0 space-y-2">';
+            sb += '<div class="h-4 w-48 max-w-[70%] bg-border rounded animate-pulse"></div>';
+            sb += '<div class="h-3 w-32 max-w-[45%] bg-border rounded animate-pulse"></div>';
+            sb += '</div>';
+            sb += '<div class="h-4 w-24 bg-border rounded animate-pulse shrink-0"></div>';
+            sb += '</div>';
+        }
+        sb += '</div>';
+        return sb;
+    }
+
     // Initialize dashboard
     async function initDashboard() {
         await checkAuth();
@@ -65,11 +89,11 @@
         const entriesEl = document.getElementById('watchlist-entries');
         if (!panel || !selector) return;
         try {
-            const res = await fetch('/api/user/watchlists', { credentials: 'include' });
+            const res = await resilientFetch('/api/user/watchlists', { credentials: 'include' });
             if (!res.ok) {
                 signinMsg.classList.remove('hidden');
                 emptyMsg.classList.add('hidden');
-                selector.innerHTML = '<option value="">Sign in to use watchlists</option>';
+                selector.innerHTML = '<option value="">' + window.I18n.t('dashboard_watchlist_signin') + '</option>';
                 entriesEl.innerHTML = '';
                 return;
             }
@@ -78,7 +102,7 @@
             signinMsg.classList.add('hidden');
             if (list.length === 0) {
                 emptyMsg.classList.remove('hidden');
-                selector.innerHTML = '<option value="">No watchlists</option>';
+                selector.innerHTML = '<option value="">' + window.I18n.t('dashboard_watchlist_empty_option') + '</option>';
                 entriesEl.innerHTML = '';
                 return;
             }
@@ -92,7 +116,7 @@
         } catch (e) {
             signinMsg.classList.remove('hidden');
             emptyMsg.classList.add('hidden');
-            selector.innerHTML = '<option value="">Error loading watchlists</option>';
+            selector.innerHTML = '<option value="">' + window.I18n.t('dashboard_watchlist_load_fail') + '</option>';
             entriesEl.innerHTML = '';
         }
     }
@@ -100,22 +124,23 @@
     async function loadWatchlistEntries(watchlistId) {
         const entriesEl = document.getElementById('watchlist-entries');
         if (!entriesEl || !watchlistId) return;
+        entriesEl.innerHTML = watchlistEntriesSkeletonHtml();
         try {
-            const res = await fetch('/api/user/watchlists/' + encodeURIComponent(watchlistId), { credentials: 'include' });
+            const res = await resilientFetch('/api/user/watchlists/' + encodeURIComponent(watchlistId), { credentials: 'include' });
             if (!res.ok) {
                 currentWatchlist = null;
-                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">Failed to load watchlist.</p>';
+                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">' + window.I18n.t('dashboard_watchlist_fail') + '</p>';
                 return;
             }
             const w = await res.json();
             currentWatchlist = w;
             const entries = w.entries || [];
             if (entries.length === 0) {
-                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">No entries. Add addresses or symbols from the explorer.</p>';
+                entriesEl.innerHTML = '<p class="text-text-secondary text-sm">' + window.I18n.t('dashboard_watchlist_no_entries') + '</p>';
                 return;
             }
             try {
-                const r = await fetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
+                const r = await resilientFetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
                 if (r.ok) watchlistRates = await r.json(); else watchlistRates = {};
             } catch (e) { watchlistRates = {}; }
             const groupByEl = document.getElementById('watchlist-group-by');
@@ -126,7 +151,7 @@
             renderWatchlistEntries();
         } catch (e) {
             currentWatchlist = null;
-            entriesEl.innerHTML = '<p class="text-text-secondary text-sm">Failed to load entries.</p>';
+            entriesEl.innerHTML = '<p class="text-text-secondary text-sm">' + window.I18n.t('dashboard_watchlist_entries_fail') + '</p>';
         }
     }
 
@@ -210,7 +235,7 @@
                     html += rowHtml(e, i, false);
                 });
             }
-            entriesEl.innerHTML = html || '<p class="text-text-secondary text-sm">No entries.</p>';
+            entriesEl.innerHTML = html || ('<p class="text-text-secondary text-sm">' + window.I18n.t('dashboard_watchlist_no_entries_short') + '</p>');
         } else if (groupBy === 'group') {
             const byGroup = {};
             entries.forEach(function(e, i) {
@@ -227,7 +252,7 @@
                 html += '<p class="text-text-secondary text-xs font-medium mt-3 mb-1">' + g.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;') + '</p>';
                 list.forEach(function(_) { html += rowHtml(_.e, _.i, false); });
             });
-            entriesEl.innerHTML = html || '<p class="text-text-secondary text-sm">No entries.</p>';
+            entriesEl.innerHTML = html || ('<p class="text-text-secondary text-sm">' + window.I18n.t('dashboard_watchlist_no_entries_short') + '</p>');
         } else {
             let html = entries.map(function(e, i) { return rowHtml(e, i, true); }).join('');
             entriesEl.innerHTML = html;
@@ -274,8 +299,9 @@
         } else {
             document.documentElement.removeAttribute('data-color-scheme');
         }
-        if (user.language && (user.language === 'en' || user.language === 'es')) {
-            document.documentElement.lang = user.language;
+        if (user.language) {
+            if (window.I18n) window.I18n.setLang(user.language);
+            else document.documentElement.setAttribute('lang', String(user.language).toLowerCase().slice(0, 2));
         }
     }
 
@@ -335,7 +361,7 @@
     // Fetch BTC price (fallback when no history)
     async function fetchBTCPrice() {
         try {
-            const res = await fetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
+            const res = await resilientFetch('/api/rates?currency=' + encodeURIComponent(currentCurrency), { credentials: 'include' });
             if (res.ok) {
                 const data = await res.json();
                 const btc = data.bitcoin;
@@ -352,7 +378,7 @@
     // Fetch historical FX for portfolio performance chart (consistent fiat over time)
     async function fetchPriceHistory(currency, limit) {
         try {
-            const res = await fetch('/api/price-history?currency=' + encodeURIComponent(currency) + '&limit=' + (limit || 288), { credentials: 'include' });
+            const res = await resilientFetch('/api/price-history?currency=' + encodeURIComponent(currency) + '&limit=' + (limit || 288), { credentials: 'include' });
             if (!res.ok) return [];
             const data = await res.json();
             return Array.isArray(data) ? data : [];
@@ -367,7 +393,7 @@
         try {
             ({ Chart } = await import('/dist/js/chart-dashboard.js'));
         } catch (e) {
-            console.error('Failed to load chart library:', e);
+            console.error(window.I18n.t('script_chart_dashboard_fail'), e);
             return;
         }
         const ctxPerf = document.getElementById('performanceChart').getContext('2d');
@@ -779,6 +805,7 @@
     let dashboardLastScope = { kind: 'market', label: 'Market (BTC)' };
 
     const dashNewsLoadingEl = document.getElementById('dashboard-news-loading');
+    const dashNewsSkeletonEl = document.getElementById('dashboard-news-skeleton');
     const dashNewsErrorEl = document.getElementById('dashboard-news-error');
     const dashNewsEmptyEl = document.getElementById('dashboard-news-empty');
     const dashNewsListEl = document.getElementById('dashboard-news-list');
@@ -790,9 +817,17 @@
     const dashRefreshBtn = document.getElementById('dashboard-news-refresh');
 
     function dashSetNewsState({ loading, error, empty }) {
-        if (dashNewsLoadingEl) dashNewsLoadingEl.classList.toggle('hidden', !loading);
-        if (dashNewsErrorEl) dashNewsErrorEl.classList.toggle('hidden', !error);
+        if (dashNewsSkeletonEl) {
+            dashNewsSkeletonEl.classList.toggle('hidden', !loading);
+            dashNewsSkeletonEl.setAttribute('aria-busy', loading ? 'true' : 'false');
+        }
+        if (dashNewsLoadingEl) dashNewsLoadingEl.classList.add('hidden');
+        if (dashNewsErrorEl) {
+            if (!error) dashNewsErrorEl.innerHTML = '';
+            dashNewsErrorEl.classList.toggle('hidden', !error);
+        }
         if (dashNewsEmptyEl) dashNewsEmptyEl.classList.toggle('hidden', !empty);
+        if (dashNewsListEl) dashNewsListEl.classList.toggle('hidden', !!(loading || error || empty));
     }
 
     function dashEscapeHtml(str) {
@@ -866,10 +901,12 @@
 
     async function loadDashboardNews() {
         if (!dashNewsListEl) return;
+        if (dashNewsErrorEl) {
+            dashNewsErrorEl.innerHTML = '';
+            dashNewsErrorEl.classList.add('hidden');
+        }
         dashSetNewsState({ loading: true, error: false, empty: false });
-        if (dashNewsErrorEl) dashNewsErrorEl.textContent = '';
 
-        // Prefer portfolio news when a specific portfolio is selected and user is authenticated.
         const selectedId = (document.getElementById('portfolio-selector') && document.getElementById('portfolio-selector').value) ? document.getElementById('portfolio-selector').value : '';
         const favOnly = !!(dashFavsOnlyEl && dashFavsOnlyEl.checked);
         let url = '/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : '');
@@ -880,10 +917,9 @@
         }
 
         try {
-            let res = await fetch(url, { credentials: 'include' });
-            // If portfolio endpoint requires auth and we're signed out, fall back to public market news.
+            let res = await resilientFetch(url, { credentials: 'include' });
             if (!res.ok && selectedId) {
-                res = await fetch('/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : ''), { credentials: 'include' });
+                res = await resilientFetch('/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : ''), { credentials: 'include' });
                 scope = { kind: 'market', label: 'Market (BTC)' };
             }
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -896,7 +932,18 @@
             dashboardLastArticles = [];
             dashboardLastMeta = null;
             if (dashNewsErrorEl) {
-                dashNewsErrorEl.textContent = 'Failed to load news. Please try again.';
+                dashNewsErrorEl.innerHTML = '';
+                const p = document.createElement('p');
+                p.textContent = window.I18n.t('dashboard_news_fail');
+                const btn = document.createElement('button');
+                btn.type = 'button';
+                btn.className = 'mt-2 text-sm font-medium text-primary hover:underline';
+                btn.textContent = window.I18n.t('ui_retry');
+                btn.addEventListener('click', function () {
+                    loadDashboardNews();
+                });
+                dashNewsErrorEl.appendChild(p);
+                dashNewsErrorEl.appendChild(btn);
             }
             dashSetNewsState({ loading: false, error: true, empty: false });
         }
@@ -1051,7 +1098,7 @@
             });
             await refreshUnreadBadge();
         } catch (e) {
-            errEl.textContent = 'Failed to load notifications.';
+            errEl.textContent = window.I18n.t('dashboard_notif_fail');
             errEl.classList.remove('hidden');
             setNotifState({ loading: false, error: true, empty: false });
         }

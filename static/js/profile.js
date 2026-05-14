@@ -47,9 +47,9 @@
     }
 
     function applyLanguage(lang) {
-        if (lang && (lang === 'en' || lang === 'es')) {
-            document.documentElement.lang = lang;
-        }
+        const code = (lang && String(lang).trim()) ? String(lang).trim().toLowerCase().slice(0, 2) : 'en';
+        if (window.I18n) window.I18n.setLang(code);
+        else document.documentElement.setAttribute('lang', code);
     }
 
     function populateForm(user) {
@@ -136,7 +136,7 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                err.textContent = pickApiErrorMsg(data) || data.code || 'Failed to save';
+                err.textContent = pickApiErrorMsg(data) || data.code || window.I18n.t('profile_save_fail');
                 err.classList.remove('hidden');
                 return;
             }
@@ -145,7 +145,7 @@
             msg.classList.remove('hidden');
             setTimeout(() => msg.classList.add('hidden'), 3000);
         } catch (e) {
-            err.textContent = 'Network error. Try again.';
+            err.textContent = window.I18n.t('profile_network');
             err.classList.remove('hidden');
         }
     });
@@ -232,7 +232,7 @@
         if (!listEl) return;
         errEl.classList.add('hidden');
         emptyEl.classList.add('hidden');
-        listEl.innerHTML = '<tr><td class="py-3 text-text-secondary" colspan="7">Loading…</td></tr>';
+        listEl.innerHTML = '<tr><td class="py-3 text-text-secondary" colspan="7">' + window.I18n.t('profile_alerts_loading') + '</td></tr>';
         try {
             const res = await authFetch(API_BASE + '/user/alerts?page_size=100');
             if (!res.ok) throw new Error('HTTP ' + res.status);
@@ -253,7 +253,7 @@
                     <td class="py-2 pr-3">
                         <label class="inline-flex items-center gap-2">
                             <input type="checkbox" class="alert-active-toggle rounded border-border" data-id="${escapeHtml(a.id)}" ${a.is_active ? 'checked' : ''} />
-                            <span class="text-xs text-text-secondary">${a.is_active ? 'On' : 'Off'}</span>
+                            <span class="text-xs text-text-secondary">${a.is_active ? window.I18n.t('profile_alert_on') : window.I18n.t('profile_alert_off')}</span>
                         </label>
                     </td>
                     <td class="py-2 pr-3 text-right">
@@ -278,7 +278,7 @@
             });
         } catch (e) {
             listEl.innerHTML = '';
-            errEl.textContent = 'Failed to load alerts.';
+            errEl.textContent = window.I18n.t('profile_alerts_load_fail');
             errEl.classList.remove('hidden');
         }
     }
@@ -299,14 +299,14 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to create alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || window.I18n.t('profile_alert_create_fail');
                 errEl.classList.remove('hidden');
                 return;
             }
             document.getElementById('alert-threshold').value = '';
             await loadAlerts();
         } catch (e) {
-            errEl.textContent = 'Network error creating alert.';
+            errEl.textContent = window.I18n.t('profile_alert_create_network');
             errEl.classList.remove('hidden');
         }
     }
@@ -322,12 +322,12 @@
             });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to update alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || window.I18n.t('profile_alert_update_fail');
                 errEl.classList.remove('hidden');
                 await loadAlerts();
             }
         } catch (e) {
-            errEl.textContent = 'Network error updating alert.';
+            errEl.textContent = window.I18n.t('profile_alert_update_network');
             errEl.classList.remove('hidden');
             await loadAlerts();
         }
@@ -340,13 +340,13 @@
             const res = await authFetch(API_BASE + '/user/alerts/' + encodeURIComponent(id), { method: 'DELETE' });
             if (!res.ok) {
                 const data = await res.json().catch(() => ({}));
-                errEl.textContent = pickApiErrorMsg(data) || data.code || 'Failed to delete alert';
+                errEl.textContent = pickApiErrorMsg(data) || data.code || window.I18n.t('profile_alert_delete_fail');
                 errEl.classList.remove('hidden');
                 return;
             }
             await loadAlerts();
         } catch (e) {
-            errEl.textContent = 'Network error deleting alert.';
+            errEl.textContent = window.I18n.t('profile_alert_delete_network');
             errEl.classList.remove('hidden');
         }
     }

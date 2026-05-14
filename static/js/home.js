@@ -216,10 +216,10 @@
                 authForms.classList.add('hidden');
                 searchSection.classList.remove('hidden');
             } else {
-                alert('Login failed');
+                alert(window.I18n.t('home_login_failed'));
             }
         } catch (err) {
-            alert('Login failed');
+            alert(window.I18n.t('home_login_failed'));
         }
     });
 
@@ -234,13 +234,13 @@
                 body: JSON.stringify(data)
             });
             if (res.ok) {
-                alert('Registration successful, please login');
+                alert(window.I18n.t('home_register_ok'));
                 switchToLogin.click();
             } else {
-                alert('Registration failed');
+                alert(window.I18n.t('home_register_fail'));
             }
         } catch (err) {
-            alert('Registration failed');
+            alert(window.I18n.t('home_register_fail'));
         }
     });
 
@@ -260,8 +260,9 @@
         } else {
             document.documentElement.removeAttribute('data-color-scheme');
         }
-        if (user.language && (user.language === 'en' || user.language === 'es')) {
-            document.documentElement.lang = user.language;
+        if (user.language) {
+            if (window.I18n) window.I18n.setLang(user.language);
+            else document.documentElement.setAttribute('lang', String(user.language).toLowerCase().slice(0, 2));
         }
     }
 
@@ -329,11 +330,11 @@
     function displayError(errorType) {
         const resultContainer = document.getElementById('result-container');
         const messages = {
-            API_FAILURE: 'Blockchain search got the hiccups. Try again later.',
-            UNKNOWN_RESULT: 'Unknown result type',
-            NETWORK_ERROR: 'Network connection issue. Please check your internet.',
-            INVALID_SEARCH: 'Invalid search format',
-            EMPTY_SEARCH: 'Please enter a search term'
+            API_FAILURE: window.I18n.t('err_api_failure'),
+            UNKNOWN_RESULT: window.I18n.t('err_unknown_result'),
+            NETWORK_ERROR: window.I18n.t('err_network'),
+            INVALID_SEARCH: window.I18n.t('err_invalid_search'),
+            EMPTY_SEARCH: window.I18n.t('err_empty_search')
         };
         resultContainer.innerHTML = `<div class="text-red-600 font-semibold">${messages[errorType]}</div>`;
     }
@@ -383,7 +384,7 @@
                 }
             } catch (error) {
                 feedbackResult.className = 'mt-4 text-red-600 font-semibold';
-                feedbackResult.textContent = 'Network error. Please try again later.';
+                feedbackResult.textContent = window.I18n.t('feedback_network_error');
             }
 
             feedbackResult.classList.remove('hidden');
@@ -495,13 +496,13 @@
             const url = '/api/v1/user/portfolios?currency=' + encodeURIComponent(portfolioCurrency);
             const res = await fetch(url, { credentials: 'include' });
             if (!res.ok) {
-                portfolioList.innerHTML = '<p class="text-text-secondary">Sign in to view and export your portfolios.</p>';
+                portfolioList.innerHTML = '<p class="text-text-secondary">' + window.I18n.t('portfolio_signin_prompt') + '</p>';
                 return;
             }
             const json = await res.json();
             const portfolios = json.data || json;
             if (!Array.isArray(portfolios)) {
-                portfolioList.innerHTML = '<p class="text-text-secondary">No portfolios found.</p>';
+                portfolioList.innerHTML = '<p class="text-text-secondary">' + window.I18n.t('portfolio_empty') + '</p>';
                 return;
             }
             const cur = (portfolios[0] && portfolios[0].valuation_currency) || portfolioCurrency;
@@ -538,7 +539,7 @@
             bindPortfolioExportHandlers();
         } catch (err) {
             console.error('Failed to load portfolios', err);
-            portfolioList.innerHTML = '<p class="text-red-600">Failed to load portfolios. Sign in and try again.</p>';
+            portfolioList.innerHTML = '<p class="text-red-600">' + window.I18n.t('portfolio_load_fail') + '</p>';
         }
     }
 
@@ -576,7 +577,7 @@
                     closeMenu();
                     if (errEl) errEl.classList.add('hidden');
                     spinner.classList.remove('hidden');
-                    label.textContent = 'Exporting…';
+                    label.textContent = window.I18n.t('portfolio_exporting');
                     try {
                         if (format === 'json') {
                             const res = await fetch('/api/v1/user/portfolios', { credentials: 'include' });
@@ -612,12 +613,12 @@
                         }
                     } catch (err) {
                         if (errEl) {
-                            errEl.textContent = err.message || 'Export failed. Sign in and try again.';
+                            errEl.textContent = err.message || window.I18n.t('portfolio_export_fail');
                             errEl.classList.remove('hidden');
                         }
                     } finally {
                         spinner.classList.add('hidden');
-                        label.textContent = 'Export';
+                        label.textContent = window.I18n.t('portfolio_export_label');
                     }
                 });
             });
@@ -639,8 +640,8 @@
                     <option value="bond">Bond</option>
                     <option value="commodity">Commodity</option>
                 </select>
-                <input type="text" placeholder="Label" class="flex-1 p-2 border rounded bg-bg text-text border-border portfolio-label">
-                <input type="text" placeholder="Address" class="flex-[2] p-2 border rounded bg-bg text-text border-border portfolio-address">
+                <input type="text" placeholder="${window.I18n.t('portfolio_placeholder_label')}" class="flex-1 p-2 border rounded bg-bg text-text border-border portfolio-label">
+                <input type="text" placeholder="${window.I18n.t('portfolio_placeholder_address')}" class="flex-[2] p-2 border rounded bg-bg text-text border-border portfolio-address">
                 <button type="button" class="portfolio-remove-item-btn text-red-600 px-2" aria-label="Remove row">×</button>
             `;
             itemsContainer.appendChild(itemDiv);
@@ -659,7 +660,7 @@
 
     if (createPortfolioBtn) {
         createPortfolioBtn.addEventListener('click', () => {
-            document.getElementById('modal-title').textContent = 'Create Portfolio';
+            document.getElementById('modal-title').textContent = window.I18n.t('portfolio_modal_create');
             document.getElementById('portfolio-id').value = '';
             portfolioForm.reset();
             itemsContainer.innerHTML = '';
@@ -698,7 +699,7 @@
                 portfolioModal.classList.add('hidden');
                 loadPortfolios();
             } catch (err) {
-                alert('Failed to save portfolio');
+                alert(window.I18n.t('portfolio_save_fail'));
             }
         });
     }
@@ -708,7 +709,7 @@
         const portfolios = await res.json();
         const p = portfolios.find(p => p.id === id);
 
-        document.getElementById('modal-title').textContent = 'Edit Portfolio';
+        document.getElementById('modal-title').textContent = window.I18n.t('portfolio_modal_edit');
         document.getElementById('portfolio-id').value = p.id;
         document.getElementById('portfolio-name').value = p.name;
         document.getElementById('portfolio-description').value = p.description;
@@ -736,11 +737,11 @@
     };
 
     window.deletePortfolio = async (id) => {
-        if (!confirm('Are you sure you want to delete this portfolio?')) return;
+        if (!confirm(window.I18n.t('portfolio_confirm_delete'))) return;
         try {
             await authFetch(`/api/v1/user/portfolios/${id}`, { method: 'DELETE' });
             loadPortfolios();
         } catch (err) {
-            alert('Failed to delete portfolio');
+            alert(window.I18n.t('portfolio_delete_fail'));
         }
     };

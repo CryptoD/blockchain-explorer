@@ -44,6 +44,14 @@ var translations = map[string]map[string]string{
 		"cache_stats":         "Estadísticas de caché recuperadas",
 		"admin_only":          "Acceso de administrador requerido",
 	},
+	"ar": {
+		"login_required":      "تسجيل الدخول مطلوب",
+		"invalid_credentials": "بيانات الدخول غير صالحة",
+		"logout_successful":   "تم تسجيل الخروج بنجاح",
+		"cache_cleared":       "تم مسح الذاكرة المؤقتة بنجاح",
+		"cache_stats":         "تم استرداد إحصاءات الذاكرة المؤقتة",
+		"admin_only":          "يتطلب صلاحيات المسؤول",
+	},
 }
 
 // Supported profile preference values (validated on PATCH /user/profile)

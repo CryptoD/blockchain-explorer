@@ -15,15 +15,15 @@
                 <span class="font-semibold text-lg">Blockchain Explorer</span>
             </a>
 
-            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" aria-label="Main navigation">
-                <a href="/" class="hover:text-primary">Home</a>
-                <a href="/blocks" class="hover:text-primary">Blocks</a>
-                <a href="/transactions" class="hover:text-primary">Transactions</a>
-                <a href="/addresses" class="hover:text-primary">Addresses</a>
-                <a href="/portfolios" class="hover:text-primary">Portfolios</a>
-                <a href="/dashboard" class="hover:text-primary" aria-current="page">Dashboard</a>
-                <a href="/profile" class="hover:text-primary">Profile</a>
-                <a href="/admin" class="hover:text-primary">Admin</a>
+            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" data-i18n-aria-label="aria_main_nav" aria-label="Main navigation">
+                <a href="/" class="hover:text-primary" data-i18n="nav_home">Home</a>
+                <a href="/blocks" class="hover:text-primary" data-i18n="nav_blocks">Blocks</a>
+                <a href="/transactions" class="hover:text-primary" data-i18n="nav_transactions">Transactions</a>
+                <a href="/addresses" class="hover:text-primary" data-i18n="nav_addresses">Addresses</a>
+                <a href="/portfolios" class="hover:text-primary" data-i18n="nav_portfolios">Portfolios</a>
+                <a href="/dashboard" class="hover:text-primary" aria-current="page" data-i18n="nav_dashboard">Dashboard</a>
+                <a href="/profile" class="hover:text-primary" data-i18n="nav_profile">Profile</a>
+                <a href="/admin" class="hover:text-primary" data-i18n="nav_admin">Admin</a>
             </nav>
 
             <div class="hidden md:block flex-1 max-w-lg relative">
@@ -58,11 +58,11 @@
             <div id="auth-section" class="flex items-center gap-4">
                 <div id="user-info" class="hidden text-sm text-text-secondary">
                     Welcome, <span id="username-display"></span>!
-                    <button id="notif-btn" class="ml-3 inline-flex items-center gap-2 px-2 py-1 rounded hover:bg-hover border border-border" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
+                    <button id="notif-btn" class="ms-3 inline-flex items-center gap-2 px-2 py-1 rounded hover:bg-hover border border-border" type="button" aria-haspopup="true" aria-expanded="false" aria-label="Notifications">
                         <span aria-hidden="true">🔔</span>
                         <span id="notif-badge" class="hidden text-xs bg-primary text-white rounded-full px-2 py-0.5">0</span>
                     </button>
-                    <button id="logout-btn" class="ml-2 text-red-600 hover:text-red-800">Logout</button>
+                    <button id="logout-btn" class="ms-2 text-red-600 hover:text-red-800">Logout</button>
                 </div>
                 <div id="auth-buttons" class="flex items-center gap-2">
                     <button id="login-btn" class="text-sm text-primary hover:text-primary-dark">Login</button>
@@ -165,7 +165,7 @@
                             <button type="button" class="dashboard-export-option w-full text-left px-4 py-2 text-sm hover:bg-hover" data-action="csv">Selected portfolio (CSV)</button>
                             <button type="button" class="dashboard-export-option w-full text-left px-4 py-2 text-sm hover:bg-hover" data-action="json">All portfolios (JSON)</button>
                         </div>
-                        <p id="dashboard-export-error" class="hidden absolute left-0 mt-2 text-red-600 text-sm whitespace-nowrap" role="alert"></p>
+                        <p id="dashboard-export-error" class="hidden absolute left-0 mt-2 text-red-600 text-sm max-w-[min(100%,24rem)] break-words z-10" role="alert"></p>
                     </div>
                 </div>
             </div>
@@ -297,10 +297,38 @@
                     </div>
                 </div>
 
-                <div id="dashboard-news-loading" class="hidden flex items-center gap-3 text-text-secondary text-sm">
+                <div id="dashboard-news-loading" class="hidden flex items-center gap-3 text-text-secondary text-sm" aria-hidden="true">
                     <span class="w-4 h-4 border-2 border-primary border-t-transparent rounded-full animate-spin"></span>
                     Loading news…
                 </div>
+                <ul id="dashboard-news-skeleton" class="hidden space-y-3 list-none m-0 p-0" aria-busy="true" aria-label="Loading">
+                    <li class="p-3 rounded-lg border border-border">
+                        <div class="min-w-0 space-y-2">
+                            <div class="h-4 w-[min(90%,22rem)] bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-full max-w-xl bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-[min(55%,16rem)] bg-border rounded animate-pulse"></div>
+                        </div>
+                    </li>
+                    <li class="p-3 rounded-lg border border-border">
+                        <div class="min-w-0 space-y-2">
+                            <div class="h-4 w-[min(75%,18rem)] bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-full max-w-lg bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-[min(40%,12rem)] bg-border rounded animate-pulse"></div>
+                        </div>
+                    </li>
+                    <li class="p-3 rounded-lg border border-border">
+                        <div class="min-w-0 space-y-2">
+                            <div class="h-4 w-[min(85%,20rem)] bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-[min(92%,26rem)] bg-border rounded animate-pulse"></div>
+                        </div>
+                    </li>
+                    <li class="p-3 rounded-lg border border-border">
+                        <div class="min-w-0 space-y-2">
+                            <div class="h-4 w-[min(70%,17rem)] bg-border rounded animate-pulse"></div>
+                            <div class="h-3 w-full max-w-md bg-border rounded animate-pulse"></div>
+                        </div>
+                    </li>
+                </ul>
                 <div id="dashboard-news-error" class="hidden bg-red-50 border border-red-200 rounded-lg p-3 text-sm text-red-700 mb-3" role="alert"></div>
                 <div id="dashboard-news-empty" class="hidden text-text-secondary text-sm">No recent articles found.</div>
                 <ul id="dashboard-news-list" class="space-y-3"></ul>
@@ -429,6 +457,8 @@
         </div>
     </footer>
 
+    <script src="/static/js/i18n.js" defer></script>
+    <script src="/static/js/fetch-retry.js" defer></script>
     <script src="/static/js/degraded-mode.js" defer></script>
     <script src="/static/js/dashboard.js" defer></script>
 </body>
