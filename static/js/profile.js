@@ -171,13 +171,28 @@
         mobileBtn.addEventListener('click', () => mobileMenu.classList.toggle('hidden'));
     }
 
-    document.getElementById('search-icon').addEventListener('click', function() {
-        const q = document.getElementById('search-input').value.trim();
+    const searchForm = document.getElementById('search-form');
+    function goBitcoinSearch() {
+        const input = document.getElementById('search-input');
+        if (!input) return;
+        const q = input.value.trim();
         if (q) window.location.href = '/bitcoin?q=' + encodeURIComponent(q);
-    });
-    document.getElementById('search-input').addEventListener('keydown', function(e) {
-        if (e.key === 'Enter') document.getElementById('search-icon').click();
-    });
+    }
+    if (searchForm) {
+        searchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            goBitcoinSearch();
+        });
+    } else {
+        const searchIcon = document.getElementById('search-icon');
+        const searchInput = document.getElementById('search-input');
+        if (searchIcon) searchIcon.addEventListener('click', goBitcoinSearch);
+        if (searchInput) {
+            searchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') goBitcoinSearch();
+            });
+        }
+    }
 
     async function init() {
         const accent = getSavedAccentTheme();

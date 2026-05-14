@@ -49,17 +49,20 @@
                 <!-- Search Input -->
                 <div class="mb-6">
                     <label for="symbol-search" class="block text-sm font-medium text-slate-700 dark:text-slate-300 mb-2">Search Symbols</label>
+                    <p id="symbol-search-hint" class="text-sm text-slate-600 dark:text-slate-400 mb-2">Enter a ticker or name, then press Search or Enter. Use filters below to narrow results.</p>
                     <div class="flex gap-2">
                         <input
                             type="search"
                             id="symbol-search"
                             placeholder="Search by symbol or name (e.g., BTC, Bitcoin)..."
                             class="flex-1 p-3 border border-gray-300 dark:border-gray-600 rounded-lg bg-white dark:bg-gray-700 text-slate-900 dark:text-slate-100 focus:outline-none focus:ring-2 focus:ring-primary"
+                            aria-describedby="symbol-search-hint"
+                            autocomplete="off"
                         />
-                        <button id="search-btn" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors">
+                        <button id="search-btn" type="button" class="bg-primary text-white px-6 py-3 rounded-lg hover:bg-primary-dark transition-colors" aria-label="Search symbols">
                             Search
                         </button>
-                        <button id="reset-btn" class="bg-gray-200 dark:bg-gray-600 text-slate-700 dark:text-slate-300 px-6 py-3 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors">
+                        <button id="reset-btn" type="button" class="bg-gray-200 dark:bg-gray-600 text-slate-700 dark:text-slate-300 px-6 py-3 rounded-lg hover:bg-gray-300 dark:hover:bg-gray-500 transition-colors" aria-label="Clear search and filters">
                             Reset
                         </button>
                     </div>

@@ -14,7 +14,7 @@
                 <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
                 <span class="font-semibold text-lg">Blockchain Explorer</span>
             </a>
-            <div class="flex items-center gap-4">
+            <div class="flex flex-1 flex-wrap items-center justify-end gap-3 min-w-0">
                 <nav class="hidden md:flex items-center gap-4 text-sm text-slate-700 dark:text-slate-300" role="navigation" aria-label="Main navigation">
                     <a href="/" class="hover:text-primary">Home</a>
                     <a href="/blocks" class="hover:text-primary">Blocks</a>
@@ -22,8 +22,24 @@
                     <a href="/addresses" class="hover:text-primary">Addresses</a>
                     <a href="/symbols" class="hover:text-primary font-semibold text-primary">Symbols</a>
                 </nav>
+                <div class="hidden sm:block flex-1 max-w-md min-w-[12rem] relative">
+                    <form id="search-form" class="flex rounded-lg overflow-hidden border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-800" role="search" action="/bitcoin" method="get">
+                        <label for="search-input" class="sr-only">Search by block height, transaction hash, or address</label>
+                        <input
+                            id="search-input"
+                            name="q"
+                            type="search"
+                            inputmode="search"
+                            autocomplete="off"
+                            aria-label="Search by block height, transaction hash, or address"
+                            placeholder="Search block, transaction, or address…"
+                            class="flex-1 min-w-0 px-3 py-2 text-sm bg-white dark:bg-gray-800 text-slate-900 dark:text-slate-100 border-none focus:outline-none focus:ring-2 focus:ring-inset focus:ring-primary"
+                        />
+                        <button type="submit" id="search-icon" class="shrink-0 px-3 py-2 text-sm font-medium bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-inset focus:ring-offset-0 focus:ring-primary" aria-label="Search">Search</button>
+                    </form>
+                </div>
                 <!-- Theme selector -->
-                <div class="flex items-center gap-2">
+                <div class="flex items-center gap-2 shrink-0">
                     <label for="theme-select" class="sr-only">Select theme</label>
                     <select id="theme-select" class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="blue">Blue</option>
@@ -73,7 +89,7 @@
                 <section id="address-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold">Address Details</h2>
-                        <button id="share-address" class="btn-primary">Share</button>
+                        <button id="share-address" type="button" class="btn-primary" aria-label="Share this address">Share</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
@@ -125,7 +141,7 @@
                 <section id="transaction-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold">Transaction Details</h2>
-                        <button id="share-tx" class="btn-primary">Share</button>
+                        <button id="share-tx" type="button" class="btn-primary" aria-label="Share this transaction">Share</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>
@@ -169,7 +185,7 @@
                 <section id="block-details" class="hidden bg-white dark:bg-gray-800 rounded-lg shadow p-6 mb-6">
                     <div class="flex justify-between items-center mb-4">
                         <h2 class="text-2xl font-bold">Block Details</h2>
-                        <button id="share-block" class="btn-primary">Share</button>
+                        <button id="share-block" type="button" class="btn-primary" aria-label="Share this block">Share</button>
                     </div>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
                         <div>

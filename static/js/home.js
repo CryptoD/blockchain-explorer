@@ -55,40 +55,63 @@
 
     const debouncedSearch = debounce(performSearch, 500);
 
-    // Hook both desktop and mobile search elements
+    const desktopSearchForm = document.querySelector('#search-form');
+    const mobileSearchForm = document.querySelector('#search-form-mobile');
     const desktopSearchInput = document.querySelector('#search-input');
     const desktopSearchButton = document.querySelector('#search-icon');
     const mobileSearchInput = document.querySelector('#search-input-mobile');
     const mobileSearchButton = document.querySelector('#search-icon-mobile');
 
-    if (desktopSearchInput) {
-        desktopSearchInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                debouncedSearch(e.target.value);
-            }
-        });
+    function submitDesktopSearch() {
+        if (!desktopSearchInput) return;
+        const query = desktopSearchInput.value;
+        debouncedSearch(query);
     }
-    if (desktopSearchButton) {
-        desktopSearchButton.addEventListener('click', function() {
-            const query = desktopSearchInput.value;
-            debouncedSearch(query);
-        });
+    function submitMobileSearch() {
+        if (!mobileSearchInput) return;
+        closeMobileMenu();
+        const query = mobileSearchInput.value;
+        debouncedSearch(query);
     }
 
-    if (mobileSearchInput) {
-        mobileSearchInput.addEventListener('keydown', function(e) {
-            if (e.key === 'Enter') {
-                debouncedSearch(e.target.value);
-            }
+    if (desktopSearchForm && desktopSearchInput) {
+        desktopSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            submitDesktopSearch();
         });
+    } else {
+        if (desktopSearchInput) {
+            desktopSearchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    debouncedSearch(e.target.value);
+                }
+            });
+        }
+        if (desktopSearchButton) {
+            desktopSearchButton.addEventListener('click', function() {
+                submitDesktopSearch();
+            });
+        }
     }
-    if (mobileSearchButton) {
-        mobileSearchButton.addEventListener('click', function() {
-            const query = mobileSearchInput.value;
-            // close mobile menu for better UX
-            closeMobileMenu();
-            debouncedSearch(query);
+
+    if (mobileSearchForm && mobileSearchInput) {
+        mobileSearchForm.addEventListener('submit', function(e) {
+            e.preventDefault();
+            submitMobileSearch();
         });
+    } else {
+        if (mobileSearchInput) {
+            mobileSearchInput.addEventListener('keydown', function(e) {
+                if (e.key === 'Enter') {
+                    debouncedSearch(e.target.value);
+                }
+            });
+        }
+        if (mobileSearchButton) {
+            mobileSearchButton.addEventListener('click', function() {
+                submitMobileSearch();
+            });
+        }
     }
 
     // Mobile menu toggling and accessibility

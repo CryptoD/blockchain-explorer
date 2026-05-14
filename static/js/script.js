@@ -203,6 +203,75 @@
             fetchAutocomplete(query, source);
         }, 250);
 
+        function getSearchInputForAutocomplete(source) {
+            return document.getElementById(source === 'mobile' ? 'search-input-mobile' : 'search-input');
+        }
+
+        function mountAutocompleteListbox(source) {
+            const listId = source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop';
+            const statusId = source === 'mobile' ? 'autocomplete-status-mobile' : 'autocomplete-status-desktop';
+            let list = document.getElementById(listId);
+            if (list) return list;
+            const input = getSearchInputForAutocomplete(source);
+            if (!input) return null;
+            let anchor = input.closest('.max-w-lg') || input.closest('form[role="search"]') || input.parentElement;
+            if (!anchor) return null;
+            if (window.getComputedStyle(anchor).position === 'static') {
+                anchor.style.position = 'relative';
+            }
+            const status = document.createElement('div');
+            status.id = statusId;
+            status.className = 'sr-only';
+            status.setAttribute('role', 'status');
+            status.setAttribute('aria-live', 'polite');
+            status.setAttribute('aria-atomic', 'true');
+            anchor.appendChild(status);
+            list = document.createElement('div');
+            list.id = listId;
+            list.className = 'autocomplete-dropdown';
+            list.setAttribute('role', 'listbox');
+            list.setAttribute('aria-label', 'Search suggestions');
+            list.hidden = true;
+            anchor.appendChild(list);
+            return list;
+        }
+
+        function bindComboboxAttrs(input, listId) {
+            if (!input || input.getAttribute('data-combobox-bound') === '1') return;
+            input.setAttribute('data-combobox-bound', '1');
+            input.setAttribute('role', 'combobox');
+            input.setAttribute('aria-autocomplete', 'list');
+            input.setAttribute('aria-expanded', 'false');
+            input.setAttribute('aria-controls', listId);
+            input.setAttribute('aria-haspopup', 'listbox');
+        }
+
+        function setComboboxExpanded(source, expanded) {
+            const input = getSearchInputForAutocomplete(source);
+            if (!input) return;
+            input.setAttribute('aria-expanded', expanded ? 'true' : 'false');
+            if (!expanded) input.removeAttribute('aria-activedescendant');
+        }
+
+        function setActiveDescendant(source, index) {
+            const input = getSearchInputForAutocomplete(source);
+            if (!input) return;
+            const prefix = source === 'mobile' ? 'autocomplete-option-mobile-' : 'autocomplete-option-desktop-';
+            if (index < 0) {
+                input.removeAttribute('aria-activedescendant');
+                return;
+            }
+            input.setAttribute('aria-activedescendant', prefix + index);
+        }
+
+        function announceSuggestionCount(source, n) {
+            const statusId = source === 'mobile' ? 'autocomplete-status-mobile' : 'autocomplete-status-desktop';
+            const el = document.getElementById(statusId);
+            if (!el) return;
+            if (!n) el.textContent = '';
+            else el.textContent = n + ' suggestion' + (n === 1 ? '' : 's');
+        }
+
         document.addEventListener('DOMContentLoaded', function() {
             // Attach search handlers if elements exist
             const searchInput = document.querySelector('#search-input');
@@ -213,129 +282,98 @@
             const mobileSearchButton = document.querySelector('#search-icon-mobile');
             const mobileSearchForm = document.querySelector('#search-form-mobile');
 
-            // Desktop: handle form submit (Enter or button submit)
+            mountAutocompleteListbox('desktop');
+            mountAutocompleteListbox('mobile');
+            if (searchInput) bindComboboxAttrs(searchInput, 'autocomplete-desktop');
+            if (mobileSearchInput) bindComboboxAttrs(mobileSearchInput, 'autocomplete-mobile');
+
+            // Desktop search + combobox autocomplete (WCAG: listbox + aria-activedescendant)
             if (searchForm) {
                 searchForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     const q = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
                     if (q) performSearch(q);
                 });
-
-                // Also attach autocomplete handlers when form exists
-                if (searchInput) {
-                    // handle Enter for search AND navigation for suggestions
-                    searchInput.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter') {
-                            if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
-                                selectSuggestion(currentSuggestions[autocompleteSelectedIndex], searchInput, 'desktop');
-                                e.preventDefault();
-                                return;
-                            }
-                            debouncedSearch(e.target.value);
-                        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
-                            handleSuggestionKey(e, 'desktop');
-                        }
-                    });
-                    // input event for autocomplete
-                    searchInput.addEventListener('input', function(e) {
-                        const q = e.target.value.trim();
-                        if (!q) {
-                            hideSuggestions('desktop');
+            }
+            if (searchInput) {
+                searchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
+                            selectSuggestion(currentSuggestions[autocompleteSelectedIndex], searchInput, 'desktop');
+                            e.preventDefault();
                             return;
                         }
-                        debouncedAutocomplete(q, 'desktop');
-                    });
-                    searchInput.addEventListener('blur', function(e) {
-                        // small delay to allow clicks
-                        setTimeout(() => hideSuggestions('desktop'), 150);
-                    });
-                }
-
-                if (searchButton) {
-                    searchButton.addEventListener('click', function() {
-                        const query = document.querySelector('#search-input').value;
-                        debouncedSearch(query);
-                    });
-                }
-            } else {
-                // If searchForm is not present (legacy layout), still wire basic handlers
-                if (searchInput) {
-                    searchInput.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter') debouncedSearch(e.target.value);
-                    });
-                }
-                if (searchButton) {
-                    searchButton.addEventListener('click', function() {
-                        const query = document.querySelector('#search-input').value;
-                        debouncedSearch(query);
-                    });
-                }
+                        if (!searchForm) {
+                            e.preventDefault();
+                            debouncedSearch(e.target.value);
+                        }
+                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape' || e.key === 'Home' || e.key === 'End') {
+                        handleSuggestionKey(e, 'desktop');
+                    }
+                });
+                searchInput.addEventListener('input', function() {
+                    const q = searchInput.value.trim();
+                    if (!q) {
+                        hideSuggestions('desktop');
+                        return;
+                    }
+                    debouncedAutocomplete(q, 'desktop');
+                });
+                searchInput.addEventListener('blur', function() {
+                    setTimeout(function() { hideSuggestions('desktop'); }, 150);
+                });
+            }
+            if (searchButton && !searchForm) {
+                searchButton.addEventListener('click', function() {
+                    const query = document.querySelector('#search-input').value;
+                    debouncedSearch(query);
+                });
             }
 
-            // Mobile: form submit
             if (mobileSearchForm) {
                 mobileSearchForm.addEventListener('submit', function(e) {
                     e.preventDefault();
                     const q = (mobileSearchInput && mobileSearchInput.value) ? mobileSearchInput.value.trim() : '';
-                    // close mobile menu for better UX
                     const mobileMenu = document.getElementById('mobile-menu');
                     if (mobileMenu) mobileMenu.classList.add('hidden');
                     if (q) performSearch(q);
                 });
-
-                // Mobile autocomplete handlers
-                if (mobileSearchInput) {
-                    mobileSearchInput.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter') {
-                            if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
-                                selectSuggestion(currentSuggestions[autocompleteSelectedIndex], mobileSearchInput, 'mobile');
-                                e.preventDefault();
-                                return;
-                            }
-                            debouncedSearch(e.target.value);
-                        } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape') {
-                            handleSuggestionKey(e, 'mobile');
-                        }
-                    });
-                    mobileSearchInput.addEventListener('input', function(e) {
-                        const q = e.target.value.trim();
-                        if (!q) {
-                            hideSuggestions('mobile');
+            }
+            if (mobileSearchInput) {
+                mobileSearchInput.addEventListener('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        if (autocompleteSelectedIndex >= 0 && currentSuggestions[autocompleteSelectedIndex]) {
+                            selectSuggestion(currentSuggestions[autocompleteSelectedIndex], mobileSearchInput, 'mobile');
+                            e.preventDefault();
                             return;
                         }
-                        debouncedAutocomplete(q, 'mobile');
-                    });
-                    mobileSearchInput.addEventListener('blur', function(e) {
-                        setTimeout(() => hideSuggestions('mobile'), 150);
-                    });
-                }
-
-                if (mobileSearchButton) {
-                    mobileSearchButton.addEventListener('click', function() {
-                        const query = document.querySelector('#search-input-mobile').value;
-                        // close mobile menu for better UX
-                        const mobileMenu = document.getElementById('mobile-menu');
-                        if (mobileMenu) mobileMenu.classList.add('hidden');
-                        debouncedSearch(query);
-                    });
-                }
-            } else {
-                if (mobileSearchInput) {
-                    mobileSearchInput.addEventListener('keydown', function(e) {
-                        if (e.key === 'Enter') {
+                        if (!mobileSearchForm) {
+                            e.preventDefault();
                             debouncedSearch(e.target.value);
                         }
-                    });
-                }
-                if (mobileSearchButton) {
-                    mobileSearchButton.addEventListener('click', function() {
-                        const query = document.querySelector('#search-input-mobile').value;
-                        // close mobile menu for better UX
-                        const mobileMenu = document.getElementById('mobile-menu');
-                        if (mobileMenu) mobileMenu.classList.add('hidden');
-                        debouncedSearch(query);
-                    });
-                }
+                    } else if (e.key === 'ArrowDown' || e.key === 'ArrowUp' || e.key === 'Escape' || e.key === 'Home' || e.key === 'End') {
+                        handleSuggestionKey(e, 'mobile');
+                    }
+                });
+                mobileSearchInput.addEventListener('input', function() {
+                    const q = mobileSearchInput.value.trim();
+                    if (!q) {
+                        hideSuggestions('mobile');
+                        return;
+                    }
+                    debouncedAutocomplete(q, 'mobile');
+                });
+                mobileSearchInput.addEventListener('blur', function() {
+                    setTimeout(function() { hideSuggestions('mobile'); }, 150);
+                });
+            }
+            if (mobileSearchButton && !mobileSearchForm) {
+                mobileSearchButton.addEventListener('click', function() {
+                    const query = document.querySelector('#search-input-mobile').value;
+                    const mobileMenu = document.getElementById('mobile-menu');
+                    if (mobileMenu) mobileMenu.classList.add('hidden');
+                    debouncedSearch(query);
+                });
             }
 
             // Mobile menu toggling and accessibility
@@ -346,7 +384,7 @@
             const mobileOverlay = mobileMenu ? mobileMenu.querySelector('.mobile-menu-overlay') : null;
 
             function openMobileMenu() {
-                if (!mobileMenu) return;
+                if (!mobileMenu || !mobileMenuButton) return;
                 // Remove hidden so element becomes part of layout, then add menu-visible to trigger CSS transition
                 mobileMenu.classList.remove('hidden');
 
@@ -378,7 +416,7 @@
 
                 // start transition by removing menu-visible
                 mobileMenu.classList.remove('menu-visible');
-                mobileMenuButton.setAttribute('aria-expanded', 'false');
+                if (mobileMenuButton) mobileMenuButton.setAttribute('aria-expanded', 'false');
                 mobileMenu.setAttribute('aria-hidden', 'true');
 
                 // restore main content visibility and scrolling
@@ -403,17 +441,19 @@
                     mobileMenu.classList.add('hidden');
                 }
 
-                mobileMenuButton.focus();
+                if (mobileMenuButton) mobileMenuButton.focus();
                 document.removeEventListener('click', onDocClick);
                 document.removeEventListener('keydown', onKeyDown);
             }
 
             function toggleMobileMenu() {
+                if (!mobileMenu || !mobileMenuButton) return;
                 const isHidden = mobileMenu.classList.contains('hidden');
                 if (isHidden) openMobileMenu(); else closeMobileMenu();
             }
 
             function onDocClick(e) {
+                if (!mobileMenu || !mobileMenuButton) return;
                 if (!mobileMenu.contains(e.target) && e.target !== mobileMenuButton) {
                     closeMobileMenu();
                 }
@@ -591,46 +631,61 @@
             const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
             if (!container) return;
             container.innerHTML = '';
+            const input = getSearchInputForAutocomplete(source);
             if (!suggestions || suggestions.length === 0) {
-                container.style.display = 'none';
+                container.hidden = true;
+                setComboboxExpanded(source, false);
+                announceSuggestionCount(source, 0);
                 return;
             }
-            suggestions.forEach((s, idx) => {
+            const optPrefix = source === 'mobile' ? 'autocomplete-option-mobile-' : 'autocomplete-option-desktop-';
+            suggestions.forEach(function(s, idx) {
                 const item = document.createElement('div');
                 item.className = 'autocomplete-item';
                 item.setAttribute('role', 'option');
+                item.id = optPrefix + idx;
                 item.setAttribute('data-idx', idx);
                 item.setAttribute('aria-selected', 'false');
+                const typeLabel = (s.type || '').toString();
+                const mainLabel = (s.label || s.value || '').toString();
+                item.setAttribute('aria-label', (typeLabel ? typeLabel + ': ' : '') + mainLabel);
 
-                // Type badge
                 const type = document.createElement('span');
                 type.className = 'autocomplete-type';
-                type.textContent = s.type || '';
-                item.appendChild(type);
+                type.setAttribute('aria-hidden', 'true');
+                type.textContent = typeLabel;
 
                 const text = document.createElement('span');
-                text.textContent = s.label || s.value || '';
+                text.textContent = mainLabel;
+
+                item.appendChild(type);
                 item.appendChild(text);
 
                 item.addEventListener('mousedown', function(e) {
-                    // mousedown so input blur doesn't hide before click
                     e.preventDefault();
-                    const idx = parseInt(item.getAttribute('data-idx'), 10);
-                    const sel = currentSuggestions[idx];
-                    const input = (source === 'mobile') ? document.getElementById('search-input-mobile') : document.getElementById('search-input');
-                    if (sel) selectSuggestion(sel, input, source);
+                    const i = parseInt(item.getAttribute('data-idx'), 10);
+                    const sel = currentSuggestions[i];
+                    const inp = getSearchInputForAutocomplete(source);
+                    if (sel && inp) selectSuggestion(sel, inp, source);
                 });
 
                 container.appendChild(item);
             });
-            container.style.display = 'block';
+            container.hidden = false;
+            setComboboxExpanded(source, true);
+            announceSuggestionCount(source, suggestions.length);
         }
 
         function hideSuggestions(source) {
             const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
-            if (container) container.style.display = 'none';
+            if (container) {
+                container.hidden = true;
+                container.innerHTML = '';
+            }
             currentSuggestions = [];
             autocompleteSelectedIndex = -1;
+            setComboboxExpanded(source, false);
+            announceSuggestionCount(source, 0);
         }
 
         function handleSuggestionKey(e, source) {
@@ -644,7 +699,16 @@
                 e.preventDefault();
                 autocompleteSelectedIndex = (autocompleteSelectedIndex - 1 + max) % max;
                 updateSuggestionHighlight(source);
+            } else if (e.key === 'Home') {
+                e.preventDefault();
+                autocompleteSelectedIndex = 0;
+                updateSuggestionHighlight(source);
+            } else if (e.key === 'End') {
+                e.preventDefault();
+                autocompleteSelectedIndex = max - 1;
+                updateSuggestionHighlight(source);
             } else if (e.key === 'Escape') {
+                e.preventDefault();
                 hideSuggestions(source);
             }
         }
@@ -653,25 +717,24 @@
             const container = document.getElementById(source === 'mobile' ? 'autocomplete-mobile' : 'autocomplete-desktop');
             if (!container) return;
             const items = Array.from(container.querySelectorAll('.autocomplete-item'));
-            items.forEach((it, i) => {
+            items.forEach(function(it, i) {
                 const sel = (i === autocompleteSelectedIndex);
                 it.setAttribute('aria-selected', sel ? 'true' : 'false');
                 if (sel) {
-                    // Keyboard nav: preview label in the input; search runs on pick/Enter, not here.
-                    const input = (source === 'mobile') ? document.getElementById('search-input-mobile') : document.getElementById('search-input');
-                    if (input && currentSuggestions[i]) input.value = currentSuggestions[i].value || currentSuggestions[i].label || input.value;
-                    // ensure visible
+                    const input = getSearchInputForAutocomplete(source);
+                    if (input && currentSuggestions[i]) {
+                        input.value = currentSuggestions[i].value || currentSuggestions[i].label || input.value;
+                    }
                     it.scrollIntoView({ block: 'nearest' });
                 }
             });
+            setActiveDescendant(source, autocompleteSelectedIndex);
         }
 
         function selectSuggestion(suggestion, inputEl, source) {
             if (!suggestion || !inputEl) return;
-            // Set the input to the selected value (use the value field if provided)
             inputEl.value = suggestion.value || suggestion.label || inputEl.value;
             hideSuggestions(source);
-            // Trigger full search for the selected suggestion
             performSearch(inputEl.value);
         }
 
