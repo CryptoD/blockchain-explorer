@@ -1,7 +1,6 @@
 package server
 
 import (
-	"net/http"
 	"net/http/pprof"
 	"os"
 	"path/filepath"
@@ -51,10 +50,7 @@ func registerStaticRoutes(r *gin.Engine) {
 	r.StaticFile("/profile", filepath.Join(htmlRoot, "profile.html"))
 	r.StaticFile("/symbols", filepath.Join(htmlRoot, "symbols.html"))
 
-	r.GET("/bitcoin", func(c *gin.Context) {
-		query := c.Query("q")
-		c.Redirect(http.StatusFound, "/bitcoin.html?q="+query)
-	})
+	r.GET("/bitcoin", bitcoinSearchPageHandler)
 }
 
 func registerHealthAndMetricsRoutes(r *gin.Engine, cfg *config.Config) {

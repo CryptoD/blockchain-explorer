@@ -1,7 +1,8 @@
         const API_BASE = '/api/v1';
 
-        /** Parses API JSON error envelopes: flat {message} or legacy {error} string/object. */
+        /** Parses API JSON error envelopes; delegates to ErrorUI when loaded. */
         function pickApiErrorMsg(d) {
+            if (window.ErrorUI && window.ErrorUI.pickApiErrorMsg) return window.ErrorUI.pickApiErrorMsg(d);
             if (!d) return '';
             if (typeof d.message === 'string' && d.message) return d.message;
             if (d.error != null) {
@@ -290,6 +291,7 @@
             // Desktop search + combobox autocomplete (WCAG: listbox + aria-activedescendant)
             if (searchForm) {
                 searchForm.addEventListener('submit', function(e) {
+                    if (!document.documentElement.classList.contains('js')) return;
                     e.preventDefault();
                     const q = (searchInput && searchInput.value) ? searchInput.value.trim() : '';
                     if (q) performSearch(q);
@@ -332,6 +334,7 @@
 
             if (mobileSearchForm) {
                 mobileSearchForm.addEventListener('submit', function(e) {
+                    if (!document.documentElement.classList.contains('js')) return;
                     e.preventDefault();
                     const q = (mobileSearchInput && mobileSearchInput.value) ? mobileSearchInput.value.trim() : '';
                     const mobileMenu = document.getElementById('mobile-menu');
@@ -550,36 +553,48 @@
         function clearError() {
             const errorEl = document.getElementById('error');
             if (!errorEl) return;
+            if (window.ErrorUI && window.ErrorUI.clear) {
+                window.ErrorUI.clear(errorEl);
+                return;
+            }
             errorEl.innerHTML = '';
             errorEl.style.display = 'none';
         }
 
         function showError(message, canRetry = false, retryCallback = null) {
             hideLoading();
-            // hide content when showing an error
             const content = document.getElementById('content');
             if (content) content.style.display = 'none';
 
             const errorEl = document.getElementById('error');
             if (!errorEl) return;
-            errorEl.innerHTML = '';
 
+            if (window.ErrorUI && window.ErrorUI.render) {
+                window.ErrorUI.render(errorEl, {
+                    message: message,
+                    canRetry: canRetry,
+                    onRetry: function () {
+                        clearError();
+                        if (typeof retryCallback === 'function') retryCallback();
+                    },
+                });
+                return;
+            }
+
+            errorEl.innerHTML = '';
             const p = document.createElement('p');
             p.textContent = message;
             errorEl.appendChild(p);
-
             if (canRetry && typeof retryCallback === 'function') {
                 const btn = document.createElement('button');
                 btn.textContent = 'Retry';
                 btn.className = 'mt-2 btn-primary';
-                btn.addEventListener('click', function() {
-                    // clear error and run retry
+                btn.addEventListener('click', function () {
                     clearError();
                     retryCallback();
                 });
                 errorEl.appendChild(btn);
             }
-
             errorEl.style.display = 'block';
             errorEl.setAttribute('role', 'alert');
             errorEl.setAttribute('aria-live', 'assertive');
@@ -765,17 +780,19 @@
                 .then(response => {
                     clearTimeout(timeoutId);
                     if (!response.ok) {
-                        // try to parse error message from JSON
-                        return response.text().then(txt => {
-                            let msg = `API request failed (${response.status})`;
-                            try {
-                                const j = JSON.parse(txt);
-                                const extracted = pickApiErrorMsg(j);
-                                if (extracted) msg = extracted;
-                            } catch (e) {
-                                if (txt) msg = txt;
-                            }
-                            throw new Error(msg);
+                        return (window.ErrorUI && window.ErrorUI.fromResponse
+                            ? window.ErrorUI.fromResponse(response)
+                            : response.text().then(function (txt) {
+                                return {
+                                    status: response.status,
+                                    message: txt || ('API request failed (' + response.status + ')'),
+                                    retryable: response.status >= 500 || response.status === 502,
+                                };
+                            })
+                        ).then(function (info) {
+                            var err = new Error(info.message || window.I18n.t('err_api_failure'));
+                            err.errorInfo = info;
+                            throw err;
                         });
                     }
                     return response.json();
@@ -793,13 +810,18 @@
                     if (txSection) txSection.style.display = 'none';
                     if (blockSection) blockSection.style.display = 'none';
 
-                    // Display data based on result type
-                    if (data.resultType === 'address') {
-                        displayAddressData(data.data);
-                    } else if (data.resultType === 'transaction') {
-                        displayTransactionData(data.data);
-                    } else if (data.resultType === 'block') {
-                        displayBlockData(data.data);
+                    // Display data based on result type (API: type/result or legacy resultType/data)
+                    const resultType = data.resultType || data.type;
+                    let resultPayload = data.result;
+                    if (resultPayload == null && data.data != null) {
+                        resultPayload = data.data.result != null ? data.data.result : data.data;
+                    }
+                    if (resultType === 'address') {
+                        displayAddressData({ result: resultPayload });
+                    } else if (resultType === 'transaction') {
+                        displayTransactionData({ result: resultPayload });
+                    } else if (resultType === 'block') {
+                        displayBlockData({ result: resultPayload });
                     } else {
                         showError(window.I18n.t('script_unknown_result'));
                     }
@@ -810,8 +832,9 @@
                         showError(window.I18n.t('script_timeout'), true, () => fetchSearch(query));
                     } else {
                         console.error('Error:', error);
-                        const msg = (error && error.message) ? error.message : 'Failed to fetch data from the API';
-                        showError(msg, true, () => fetchSearch(query));
+                        var msg = (error && error.message) ? error.message : window.I18n.t('err_api_failure');
+                        var retry = !error || !error.errorInfo || error.errorInfo.retryable !== false;
+                        showError(msg, retry, function () { fetchSearch(query); });
                     }
                 })
                 .finally(() => {

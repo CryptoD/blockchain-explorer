@@ -54,6 +54,12 @@ test-results/
 blob-report/
 
 ################################
+# Lighthouse CI                #
+################################
+
+.lighthouseci/
+
+################################
 # Logs / coverage              #
 ################################
 
@@ -101,5 +107,6 @@ build/
 # Built binaries (build from source: go build -o blockchain-explorer ./cmd/server)
 blockchain-explorer
 bitcoin-explorer
+explorer
 /server
 

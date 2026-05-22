@@ -110,7 +110,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [ ] **77. Offline / slow network** — Skeleton loaders; retry on failed fetches for news/prices.
 - [ ] **78. Progressive enhancement** — Core search works without full JS where possible (optional).
 - [ ] **79. Error boundaries (frontend)** — User-friendly error component vs raw JSON in face of 502.
-- [ ] **80. Performance budgets** — LCP/CLS targets; track in Lighthouse CI (optional).
+- [x] **80. Performance budgets** — LCP/CLS targets; track in Lighthouse CI (optional).
 
 ## Phase 18 — Operations & DevOps
 

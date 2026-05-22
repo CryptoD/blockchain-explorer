@@ -64,8 +64,18 @@
                 loadingEl.classList.add('hidden');
             }
 
-            // Show error
-            function showError(message) {
+            // Show user-friendly error (never raw JSON/HTML bodies)
+            function showError(message, canRetry, onRetry) {
+                if (window.ErrorUI && window.ErrorUI.render) {
+                    window.ErrorUI.render(errorEl, {
+                        message: message,
+                        canRetry: !!canRetry,
+                        onRetry: onRetry,
+                    });
+                    resultsContainer.classList.add('hidden');
+                    noResults.classList.add('hidden');
+                    return;
+                }
                 errorEl.textContent = message;
                 errorEl.classList.remove('hidden');
                 resultsContainer.classList.add('hidden');
@@ -116,13 +126,18 @@
                     const response = await fetch(`/api/search/advanced?${buildQueryParams()}`);
                     
                     if (!response.ok) {
-                        throw new Error(`HTTP error! status: ${response.status}`);
+                        const info = window.ErrorUI && window.ErrorUI.fromResponse
+                            ? await window.ErrorUI.fromResponse(response)
+                            : { message: window.I18n.t('symbols_fetch_fail', { detail: response.status }), retryable: response.status >= 500 };
+                        showError(info.message, info.retryable, fetchSymbols);
+                        return;
                     }
                     
                     const data = await response.json();
                     displayResults(data);
                 } catch (error) {
-                    showError(window.I18n.t('symbols_fetch_fail', { detail: error.message }));
+                    const msg = (error && error.message) ? error.message : window.I18n.t('err_network');
+                    showError(msg, true, fetchSymbols);
                 } finally {
                     hideLoading();
                 }
@@ -442,7 +457,12 @@
                     const favOnly = !!(favsOnlyEl && favsOnlyEl.checked);
                     const url = '/api/news/' + encodeURIComponent(selectedAssetSymbol) + (favOnly ? '?favorites_only=true' : '');
                     const res = await assetResilientFetch(url, { credentials: 'include' });
-                    if (!res.ok) throw new Error('HTTP ' + res.status);
+                    if (!res.ok) {
+                        const info = window.ErrorUI && window.ErrorUI.fromResponse
+                            ? await window.ErrorUI.fromResponse(res)
+                            : { message: window.I18n.t('symbols_news_fail'), retryable: res.status >= 500 };
+                        throw Object.assign(new Error(info.message), { errorInfo: info });
+                    }
                     const payload = await res.json();
                     lastFetchedArticles = Array.isArray(payload.data) ? payload.data : [];
                     lastFetchedMeta = payload.meta || {};
@@ -450,19 +470,15 @@
                 } catch (e) {
                     lastFetchedArticles = [];
                     lastFetchedMeta = null;
-                    if (newsErrorEl) {
-                        newsErrorEl.innerHTML = '';
-                        const p = document.createElement('p');
-                        p.textContent = window.I18n.t('symbols_news_fail');
-                        const btn = document.createElement('button');
-                        btn.type = 'button';
-                        btn.className = 'mt-2 text-sm font-medium text-primary hover:underline';
-                        btn.textContent = window.I18n.t('ui_retry');
-                        btn.addEventListener('click', function () {
-                            fetchAssetNews();
+                    const msg = (e && e.message) ? e.message : window.I18n.t('symbols_news_fail');
+                    if (newsErrorEl && window.ErrorUI && window.ErrorUI.render) {
+                        window.ErrorUI.render(newsErrorEl, {
+                            message: msg,
+                            canRetry: true,
+                            onRetry: fetchAssetNews,
                         });
-                        newsErrorEl.appendChild(p);
-                        newsErrorEl.appendChild(btn);
+                    } else if (newsErrorEl) {
+                        newsErrorEl.textContent = msg;
                     }
                     setNewsState({ loading: false, error: true, empty: false });
                 }

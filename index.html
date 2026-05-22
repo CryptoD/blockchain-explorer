@@ -3,6 +3,7 @@
 <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <script src="/static/js/pe.js"></script>
     <title>Blockchain Explorer</title>
     <link rel="stylesheet" href="/dist/styles.css" />
 </head>
@@ -109,6 +110,9 @@
             </div>
 
             <div id="result-container" class="mt-4"></div>
+            <noscript>
+                <p class="mt-4 text-sm text-text-secondary text-center">JavaScript is off — use the search box above; results load on a <a href="/bitcoin" class="text-primary hover:underline">server-rendered page</a>.</p>
+            </noscript>
         </div>
 
         <!-- Portfolio Management Section -->
@@ -276,6 +280,7 @@
     </section>
 
     <script src="/static/js/i18n.js" defer></script>
+    <script src="/static/js/error-ui.js" defer></script>
     <script src="/static/js/degraded-mode.js" defer></script>
     <script src="/static/js/home.js" defer></script>
 </body>

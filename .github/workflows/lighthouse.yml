@@ -1,0 +1,80 @@
+# Optional performance budgets — Lighthouse CI (LCP / CLS). Informational; does not block merge.
+name: Lighthouse
+
+on:
+  pull_request:
+    branches: [ main, master ]
+  workflow_dispatch:
+
+jobs:
+  lighthouse:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    continue-on-error: true
+
+    services:
+      redis:
+        image: redis:7
+        ports:
+          - 6379:6379
+        options: >-
+          --health-cmd "redis-cli ping"
+          --health-interval 2s
+          --health-timeout 5s
+          --health-retries 10
+
+    env:
+      APP_ENV: development
+      REDIS_HOST: localhost
+      GETBLOCK_BASE_URL: https://example.invalid/
+      GETBLOCK_ACCESS_TOKEN: lhci-ci-token
+      HTTP_LISTEN_ADDR: 127.0.0.1:18080
+      LHCI_BASE_URL: http://127.0.0.1:18080
+      CI: 'true'
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v4
+        with:
+          go-version: '1.24'
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '18'
+          cache: 'npm'
+
+      - name: Install npm dependencies
+        run: npm ci
+
+      - name: Build frontend assets
+        run: npm run build
+
+      - name: Build server binary
+        run: go build -o explorer ./cmd/server
+
+      - name: Run Lighthouse CI
+        run: npm run test:lighthouse
+
+      - name: Lighthouse summary
+        if: always()
+        run: |
+          echo "## Lighthouse CI" >> "$GITHUB_STEP_SUMMARY"
+          echo "" >> "$GITHUB_STEP_SUMMARY"
+          echo "Budgets: LCP ≤ 2.5s (warn), CLS ≤ 0.1 (error). See [docs/PERFORMANCE_BUDGETS.md](../docs/PERFORMANCE_BUDGETS.md)." >> "$GITHUB_STEP_SUMMARY"
+          if [ -d .lighthouseci ]; then
+            echo "" >> "$GITHUB_STEP_SUMMARY"
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+            find .lighthouseci -name '*.json' -maxdepth 2 2>/dev/null | head -5 >> "$GITHUB_STEP_SUMMARY" || true
+            echo '```' >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+      - name: Upload Lighthouse report
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: lighthouse-report
+          path: .lighthouseci/
+          retention-days: 14

@@ -1,5 +1,6 @@
     const API_BASE = '/api/v1';
     function pickApiErrorMsg(d) {
+        if (window.ErrorUI && window.ErrorUI.pickApiErrorMsg) return window.ErrorUI.pickApiErrorMsg(d);
         if (!d) return '';
         if (typeof d.message === 'string' && d.message) return d.message;
         if (d.error != null) {
@@ -172,27 +173,7 @@
     }
 
     const searchForm = document.getElementById('search-form');
-    function goBitcoinSearch() {
-        const input = document.getElementById('search-input');
-        if (!input) return;
-        const q = input.value.trim();
-        if (q) window.location.href = '/bitcoin?q=' + encodeURIComponent(q);
-    }
-    if (searchForm) {
-        searchForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            goBitcoinSearch();
-        });
-    } else {
-        const searchIcon = document.getElementById('search-icon');
-        const searchInput = document.getElementById('search-input');
-        if (searchIcon) searchIcon.addEventListener('click', goBitcoinSearch);
-        if (searchInput) {
-            searchInput.addEventListener('keydown', function(e) {
-                if (e.key === 'Enter') goBitcoinSearch();
-            });
-        }
-    }
+    // Native GET /bitcoin?q= when JS disabled (see static/js/pe.js).
 
     async function init() {
         const accent = getSavedAccentTheme();

@@ -816,6 +816,20 @@
     const dashFavsOnlyEl = document.getElementById('dashboard-news-filter-favs');
     const dashRefreshBtn = document.getElementById('dashboard-news-refresh');
 
+    function showPanelError(el, message, onRetry) {
+        if (!el) return;
+        if (window.ErrorUI && window.ErrorUI.render) {
+            window.ErrorUI.render(el, {
+                message: message,
+                canRetry: typeof onRetry === 'function',
+                onRetry: onRetry,
+            });
+            return;
+        }
+        el.textContent = message;
+        el.classList.remove('hidden');
+    }
+
     function dashSetNewsState({ loading, error, empty }) {
         if (dashNewsSkeletonEl) {
             dashNewsSkeletonEl.classList.toggle('hidden', !loading);
@@ -922,7 +936,12 @@
                 res = await resilientFetch('/api/news/bitcoin' + (favOnly ? '?favorites_only=true' : ''), { credentials: 'include' });
                 scope = { kind: 'market', label: 'Market (BTC)' };
             }
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!res.ok) {
+                const info = window.ErrorUI && window.ErrorUI.fromResponse
+                    ? await window.ErrorUI.fromResponse(res)
+                    : { message: window.I18n.t('dashboard_news_fail'), retryable: true };
+                throw Object.assign(new Error(info.message), { errorInfo: info });
+            }
             const payload = await res.json();
             dashboardLastArticles = Array.isArray(payload.data) ? payload.data : [];
             dashboardLastMeta = payload.meta || {};
@@ -931,20 +950,8 @@
         } catch (e) {
             dashboardLastArticles = [];
             dashboardLastMeta = null;
-            if (dashNewsErrorEl) {
-                dashNewsErrorEl.innerHTML = '';
-                const p = document.createElement('p');
-                p.textContent = window.I18n.t('dashboard_news_fail');
-                const btn = document.createElement('button');
-                btn.type = 'button';
-                btn.className = 'mt-2 text-sm font-medium text-primary hover:underline';
-                btn.textContent = window.I18n.t('ui_retry');
-                btn.addEventListener('click', function () {
-                    loadDashboardNews();
-                });
-                dashNewsErrorEl.appendChild(p);
-                dashNewsErrorEl.appendChild(btn);
-            }
+            const msg = (e && e.message) ? e.message : window.I18n.t('dashboard_news_fail');
+            showPanelError(dashNewsErrorEl, msg, loadDashboardNews);
             dashSetNewsState({ loading: false, error: true, empty: false });
         }
     }
@@ -1051,7 +1058,12 @@
         list.innerHTML = '';
         try {
             const res = await fetch('/api/v1/user/notifications?page_size=50', { credentials: 'include' });
-            if (!res.ok) throw new Error('HTTP ' + res.status);
+            if (!res.ok) {
+                const info = window.ErrorUI && window.ErrorUI.fromResponse
+                    ? await window.ErrorUI.fromResponse(res)
+                    : { message: window.I18n.t('dashboard_notif_fail'), retryable: true };
+                throw Object.assign(new Error(info.message), { errorInfo: info });
+            }
             const payload = await res.json();
             notifItems = (payload && Array.isArray(payload.data)) ? payload.data : [];
             if (notifItems.length === 0) {
@@ -1098,8 +1110,8 @@
             });
             await refreshUnreadBadge();
         } catch (e) {
-            errEl.textContent = window.I18n.t('dashboard_notif_fail');
-            errEl.classList.remove('hidden');
+            const msg = (e && e.message) ? e.message : window.I18n.t('dashboard_notif_fail');
+            showPanelError(errEl, msg, loadNotifications);
             setNotifState({ loading: false, error: true, empty: false });
         }
     }
@@ -1130,34 +1142,7 @@
         });
     }
 
-    // Search functionality
-    function performSearch(query) {
-        if (query.trim()) {
-            window.location.href = `/bitcoin?q=${encodeURIComponent(query.trim())}`;
-        }
-    }
-
-    const searchInput = document.getElementById('search-input');
-    const searchButton = document.getElementById('search-icon');
-    const mobileSearchInput = document.getElementById('search-input-mobile');
-    const mobileSearchButton = document.getElementById('search-icon-mobile');
-
-    if (searchInput) {
-        searchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') performSearch(e.target.value);
-        });
-    }
-    if (searchButton) {
-        searchButton.addEventListener('click', () => performSearch(searchInput.value));
-    }
-    if (mobileSearchInput) {
-        mobileSearchInput.addEventListener('keydown', (e) => {
-            if (e.key === 'Enter') performSearch(e.target.value);
-        });
-    }
-    if (mobileSearchButton) {
-        mobileSearchButton.addEventListener('click', () => performSearch(mobileSearchInput.value));
-    }
+    // Search forms use native GET /bitcoin?q= (progressive enhancement; see static/js/pe.js).
 
     // Dashboard export dropdown
     (function initDashboardExport() {

@@ -76,8 +76,12 @@
 
     if (desktopSearchForm && desktopSearchInput) {
         desktopSearchForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            submitDesktopSearch();
+            const validation = validateSearchQuery(desktopSearchInput.value);
+            if (!validation.isValid) {
+                e.preventDefault();
+                displayError(validation.error);
+            }
+            // Valid query: native GET /bitcoin?q= (progressive enhancement)
         });
     } else {
         if (desktopSearchInput) {
@@ -96,8 +100,14 @@
 
     if (mobileSearchForm && mobileSearchInput) {
         mobileSearchForm.addEventListener('submit', function(e) {
-            e.preventDefault();
-            submitMobileSearch();
+            const validation = validateSearchQuery(mobileSearchInput.value);
+            if (!validation.isValid) {
+                e.preventDefault();
+                displayError(validation.error);
+                return;
+            }
+            closeMobileMenu();
+            // Valid query: native GET /bitcoin?q=
         });
     } else {
         if (mobileSearchInput) {
