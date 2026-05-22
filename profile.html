@@ -9,13 +9,14 @@
 </head>
 <body class="min-h-screen bg-bg text-text">
     <header class="w-full bg-bg-secondary shadow">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <a href="/" class="flex items-center gap-3" aria-label="Homepage - Blockchain Explorer">
-                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
-                <span class="font-semibold text-lg">Blockchain Explorer</span>
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <a href="/" class="flex shrink-0 items-center gap-3 min-w-0" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain shrink-0" />
+                <span class="font-semibold text-lg truncate">Blockchain Explorer</span>
             </a>
 
-            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" aria-label="Main navigation">
+            <div class="flex flex-1 min-w-0 items-center justify-end gap-2 sm:gap-3">
+            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary shrink-0" role="navigation" aria-label="Main navigation">
                 <a href="/" class="hover:text-primary">Home</a>
                 <a href="/blocks" class="hover:text-primary">Blocks</a>
                 <a href="/transactions" class="hover:text-primary">Transactions</a>
@@ -34,7 +35,7 @@
                 </form>
             </div>
 
-            <div class="flex items-center gap-2">
+            <div class="hidden md:flex items-center gap-2 shrink-0">
                 <label for="theme-select" class="sr-only">Color theme</label>
                 <select id="theme-select" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="blue">Blue</option>
@@ -44,7 +45,7 @@
                 </select>
             </div>
 
-            <div id="auth-section" class="flex items-center gap-4">
+            <div id="auth-section" class="hidden md:flex items-center gap-4 shrink-0">
                 <div id="user-info" class="text-sm text-text-secondary">
                     <span id="username-display"></span>
                     <a href="/profile" class="ml-2 text-primary hover:underline">Profile</a>
@@ -56,8 +57,9 @@
                 </div>
             </div>
 
-            <div class="md:hidden">
-                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            <div class="md:hidden shrink-0">
+                <button id="mobile-menu-button" type="button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open menu" class="p-2 min-w-[44px] min-h-[44px] rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            </div>
             </div>
         </div>
 

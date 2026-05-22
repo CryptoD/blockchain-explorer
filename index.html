@@ -10,13 +10,14 @@
 <body class="min-h-screen bg-bg text-text">
     <!-- Header with logo, navigation and search -->
     <header class="w-full bg-bg-secondary shadow">
-        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-4">
-            <a href="/" class="flex items-center gap-3" data-i18n-aria-label="aria_homepage" aria-label="Homepage - Blockchain Explorer">
-                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain" />
-                <span class="font-semibold text-lg" data-i18n="brand_subtitle">Blockchain Explorer</span>
+        <div class="max-w-7xl mx-auto px-4 py-3 flex items-center justify-between gap-3">
+            <a href="/" class="flex shrink-0 items-center gap-3 min-w-0" data-i18n-aria-label="aria_homepage" aria-label="Homepage - Blockchain Explorer">
+                <img src="/images/btc-logo.png" alt="Bitcoin logo" class="h-10 w-10 object-contain shrink-0" />
+                <span class="font-semibold text-lg truncate" data-i18n="brand_subtitle">Blockchain Explorer</span>
             </a>
 
-            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary" role="navigation" data-i18n-aria-label="aria_main_nav" aria-label="Main navigation">
+            <div class="flex flex-1 min-w-0 items-center justify-end gap-2 sm:gap-3">
+            <nav class="hidden md:flex items-center gap-4 text-sm text-text-secondary shrink-0" role="navigation" data-i18n-aria-label="aria_main_nav" aria-label="Main navigation">
                 <a href="/" class="hover:text-primary" aria-current="page" data-i18n="nav_home">Home</a>
                 <a href="/blocks" class="hover:text-primary" data-i18n="nav_blocks">Blocks</a>
                 <a href="/transactions" class="hover:text-primary" data-i18n="nav_transactions">Transactions</a>
@@ -46,8 +47,8 @@
                 </form>
             </div>
 
-            <!-- Theme selector -->
-            <div class="flex items-center gap-2">
+            <!-- Theme selector (desktop) -->
+            <div class="hidden md:flex items-center gap-2 shrink-0">
                 <label for="theme-select" class="sr-only" data-i18n="aria_select_theme">Select theme</label>
                 <select id="theme-select" class="bg-bg-secondary border border-border rounded px-3 py-2 text-sm text-text focus:outline-none focus:ring-2 focus:ring-primary">
                     <option value="blue" data-i18n="theme_blue">Blue</option>
@@ -57,8 +58,8 @@
                 </select>
             </div>
 
-            <!-- User authentication -->
-            <div id="auth-section" class="flex items-center gap-4">
+            <!-- User authentication (desktop) -->
+            <div id="auth-section" class="hidden md:flex items-center gap-4 shrink-0">
                 <div id="user-info" class="hidden text-sm text-text-secondary">
                     <span data-i18n="home_welcome_prefix">Welcome,</span>
                     <span id="username-display"></span><span data-i18n="home_welcome_suffix">!</span>
@@ -71,8 +72,9 @@
             </div>
 
             <!-- Mobile nav toggle -->
-            <div class="md:hidden">
-                <button id="mobile-menu-button" aria-controls="mobile-menu" aria-expanded="false" data-i18n-aria-label="aria_open_main_menu" aria-label="Open main menu" class="p-2 rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            <div class="md:hidden shrink-0">
+                <button id="mobile-menu-button" type="button" aria-controls="mobile-menu" aria-expanded="false" data-i18n-aria-label="aria_open_main_menu" aria-label="Open main menu" class="p-2 min-w-[44px] min-h-[44px] rounded-md hover:bg-hover focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
+            </div>
             </div>
         </div>
 
@@ -94,8 +96,13 @@
                     <label for="search-input-mobile" class="sr-only" data-i18n="sr_search_blockchain">Search blockchain</label>
                     <form id="search-form-mobile" class="relative flex gap-2" action="/bitcoin" method="get" role="search">
                         <input id="search-input-mobile" name="q" type="search" data-i18n-aria-label="aria_search_mobile" data-i18n-placeholder="search_placeholder_mobile" aria-label="Mobile search" placeholder="Search blocks, txs, addresses" class="flex-1 p-2 border rounded bg-bg-secondary text-text border-border focus:outline-none focus:ring-2 focus:ring-primary" autocomplete="off">
-                        <button id="search-icon-mobile" type="submit" class="bg-primary text-white px-3 rounded" data-i18n-aria-label="aria_search" data-i18n="btn_go">Go</button>
+                        <button id="search-icon-mobile" type="submit" class="bg-primary text-white px-3 min-h-[44px] rounded" data-i18n-aria-label="aria_search" data-i18n="btn_go">Go</button>
                     </form>
+                </div>
+
+                <div id="auth-buttons-mobile" class="md:hidden flex flex-col gap-2 pt-2 border-t border-border">
+                    <button id="login-btn-mobile" type="button" class="text-sm text-primary hover:text-primary-dark min-h-[44px] px-3 py-2 rounded hover:bg-hover text-left" data-i18n="btn_login">Login</button>
+                    <button id="register-btn-mobile" type="button" class="text-sm bg-primary text-white px-3 py-2 min-h-[44px] rounded hover:bg-primary-dark text-left" data-i18n="btn_register">Register</button>
                 </div>
             </div>
         </div>

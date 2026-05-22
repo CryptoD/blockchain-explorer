@@ -182,23 +182,44 @@
     const switchToLogin = document.getElementById('switch-to-login');
     const userInfo = document.getElementById('user-info');
     const authButtons = document.getElementById('auth-buttons');
+    const authButtonsMobile = document.getElementById('auth-buttons-mobile');
     const usernameDisplay = document.getElementById('username-display');
 
-    if (loginBtn) loginBtn.addEventListener('click', () => {
-        searchSection.classList.add('hidden');
-        portfolioSection.classList.add('hidden');
-        authForms.classList.remove('hidden');
-        loginFormContainer.classList.remove('hidden');
-        registerFormContainer.classList.add('hidden');
-    });
+    if (loginBtn) {
+        const openLogin = () => {
+            searchSection.classList.add('hidden');
+            portfolioSection.classList.add('hidden');
+            authForms.classList.remove('hidden');
+            loginFormContainer.classList.remove('hidden');
+            registerFormContainer.classList.add('hidden');
+        };
+        loginBtn.addEventListener('click', openLogin);
+        const loginBtnMobile = document.getElementById('login-btn-mobile');
+        if (loginBtnMobile) {
+            loginBtnMobile.addEventListener('click', () => {
+                closeMobileMenu();
+                openLogin();
+            });
+        }
+    }
 
-    if (registerBtn) registerBtn.addEventListener('click', () => {
-        searchSection.classList.add('hidden');
-        portfolioSection.classList.add('hidden');
-        authForms.classList.remove('hidden');
-        loginFormContainer.classList.add('hidden');
-        registerFormContainer.classList.remove('hidden');
-    });
+    if (registerBtn) {
+        const openRegister = () => {
+            searchSection.classList.add('hidden');
+            portfolioSection.classList.add('hidden');
+            authForms.classList.remove('hidden');
+            loginFormContainer.classList.add('hidden');
+            registerFormContainer.classList.remove('hidden');
+        };
+        registerBtn.addEventListener('click', openRegister);
+        const registerBtnMobile = document.getElementById('register-btn-mobile');
+        if (registerBtnMobile) {
+            registerBtnMobile.addEventListener('click', () => {
+                closeMobileMenu();
+                openRegister();
+            });
+        }
+    }
 
     if (switchToRegister) switchToRegister.addEventListener('click', () => {
         loginFormContainer.classList.add('hidden');
@@ -285,6 +306,7 @@
                 usernameDisplay.textContent = user.username;
                 userInfo.classList.remove('hidden');
                 authButtons.classList.add('hidden');
+                if (authButtonsMobile) authButtonsMobile.classList.add('hidden');
                 if (portfoliosNav) portfoliosNav.classList.remove('hidden');
                 const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
                 if (portfoliosNavMobile) portfoliosNavMobile.classList.remove('hidden');
@@ -300,6 +322,7 @@
             } else {
                 userInfo.classList.add('hidden');
                 authButtons.classList.remove('hidden');
+                if (authButtonsMobile) authButtonsMobile.classList.remove('hidden');
                 if (portfoliosNav) portfoliosNav.classList.add('hidden');
                 const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
                 if (portfoliosNavMobile) portfoliosNavMobile.classList.add('hidden');
@@ -316,6 +339,7 @@
         } catch (err) {
             userInfo.classList.add('hidden');
             authButtons.classList.remove('hidden');
+            if (authButtonsMobile) authButtonsMobile.classList.remove('hidden');
         }
     }
 

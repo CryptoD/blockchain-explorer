@@ -48,8 +48,8 @@ jobs:
     - name: Install npm dependencies
       run: npm install
 
-    - name: Build CSS
-      run: npm run build:css
+    - name: Build frontend assets
+      run: npm run build:css && npm run stamp:assets
 
     - name: Build server binary
       run: go build -o explorer ./cmd/server

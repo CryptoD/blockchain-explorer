@@ -13,5 +13,20 @@ export default defineConfig({
     trace: 'on-first-retry',
     screenshot: 'only-on-failure',
   },
-  projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
+  projects: [
+    { name: 'chromium', use: { ...devices['Desktop Chrome'] } },
+    {
+      name: 'mobile-chrome',
+      use: {
+        browserName: 'chromium',
+        viewport: devices['iPhone 12'].viewport,
+        userAgent: devices['iPhone 12'].userAgent,
+        deviceScaleFactor: devices['iPhone 12'].deviceScaleFactor,
+        isMobile: devices['iPhone 12'].isMobile,
+        hasTouch: devices['iPhone 12'].hasTouch,
+      },
+      testMatch: /mobile\.spec\.ts/,
+      timeout: 90_000,
+    },
+  ],
 });
