@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–69**, **71**, and **72** are **done**. Task **70** (optional webhooks) and **73–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–72** and **73–80** are **done**. Task **70** (optional webhooks) and **81–100** are **open**. Update this sentence when you complete more tasks.
 
 ---
 
@@ -103,14 +103,14 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 ## Phase 17 — Frontend & UX
 
-- [ ] **73. Bundle analysis** — Split JS, tree-shake, lazy-load heavy charts.
-- [ ] **74. Accessibility audit** — WCAG 2.1 AA spot-check: keyboard nav, contrast, aria on autocomplete.
-- [ ] **75. i18n completeness** — All user-visible strings through translation maps; RTL if targeted.
-- [ ] **76. Mobile responsive audit** — Real devices for dashboard and explorer flows.
-- [ ] **77. Offline / slow network** — Skeleton loaders; retry on failed fetches for news/prices.
-- [ ] **78. Progressive enhancement** — Core search works without full JS where possible (optional).
-- [ ] **79. Error boundaries (frontend)** — User-friendly error component vs raw JSON in face of 502.
-- [x] **80. Performance budgets** — LCP/CLS targets; track in Lighthouse CI (optional).
+- [x] **73. Bundle analysis** — Split JS, tree-shake, lazy-load heavy charts. **Done:** [`scripts/build-charts.mjs`](scripts/build-charts.mjs) esbuild bundles [`dist/js/chart-metrics.js`](dist/js/chart-metrics.js) + [`chart-dashboard.js`](dist/js/chart-dashboard.js); lazy `import()` in [`static/js/script.js`](static/js/script.js) and [`static/js/dashboard.js`](static/js/dashboard.js); `npm run analyze:charts`.
+- [x] **74. Accessibility audit** — WCAG 2.1 AA spot-check: keyboard nav, contrast, aria on autocomplete. **Done:** ARIA combobox/listbox + keyboard roving focus in [`static/js/script.js`](static/js/script.js); mobile menu focus trap in [`static/js/home.js`](static/js/home.js); `:focus-visible` and skip-link styles in [`src/styles/theme.scss`](src/styles/theme.scss); labels/`aria-*` on main pages ([`index.html`](index.html), [`bitcoin.html`](bitcoin.html), etc.).
+- [x] **75. i18n completeness** — All user-visible strings through translation maps; RTL if targeted. **Done:** [`static/js/i18n.js`](static/js/i18n.js) (`en`/`es`/`ar`, `data-i18n*`, RTL via `html[dir="rtl"]`); wired across HTML + app scripts; server `ar` in [`internal/server/init.go`](internal/server/init.go).
+- [x] **76. Mobile responsive audit** — Real devices for dashboard and explorer flows. **Done:** mobile drawer + search on [`index.html`](index.html), [`bitcoin.html`](bitcoin.html), [`dashboard.html`](dashboard.html), [`symbols.html`](symbols.html), [`profile.html`](profile.html); 44px touch targets on explorer; dev [`docker-compose.yml`](docker-compose.yml) maps host **3000→8080** (see README).
+- [x] **77. Offline / slow network** — Skeleton loaders; retry on failed fetches for news/prices. **Done:** [`static/js/fetch-retry.js`](static/js/fetch-retry.js) (`fetchWithRetry`, 429/5xx backoff); skeleton loaders + retry buttons in [`static/js/dashboard.js`](static/js/dashboard.js) and symbols news; i18n `ui_retry`.
+- [x] **78. Progressive enhancement** — Core search works without full JS where possible (optional). **Done:** server-rendered [`GET /bitcoin?q=`](internal/server/search_page.go) ([`search_page_test.go`](internal/server/search_page_test.go)); [`static/js/pe.js`](static/js/pe.js) adds `html.js`; search forms use native GET when JS is off.
+- [x] **79. Error boundaries (frontend)** — User-friendly error component vs raw JSON in face of 502. **Done:** [`static/js/error-ui.js`](static/js/error-ui.js) maps gateway/HTML/JSON failures to friendly copy; wired in explorer, dashboard, symbols, profile; `.error-boundary` styles in [`src/styles/theme.scss`](src/styles/theme.scss).
+- [x] **80. Performance budgets** — LCP/CLS targets; track in Lighthouse CI (optional). **Done:** [docs/PERFORMANCE_BUDGETS.md](docs/PERFORMANCE_BUDGETS.md); [`lighthouserc.cjs`](lighthouserc.cjs) (LCP ≤2.5s warn, CLS ≤0.1 error); optional [`.github/workflows/lighthouse.yml`](.github/workflows/lighthouse.yml).
 
 ## Phase 18 — Operations & DevOps
 
