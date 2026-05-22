@@ -30,6 +30,9 @@ jobs:
       GETBLOCK_ACCESS_TOKEN: e2e-ci-token
       HTTP_LISTEN_ADDR: 127.0.0.1:18080
       PLAYWRIGHT_BASE_URL: http://127.0.0.1:18080
+      # Playwright loads HTML + static assets + API on every navigation; default 10/min/IP causes 429 HTML pages.
+      RATE_LIMIT_PER_IP: 10000
+      RATE_LIMIT_PER_USER: 10000
       CI: 'true'
 
     steps:

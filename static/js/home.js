@@ -247,7 +247,6 @@
                 authForms.classList.add('hidden');
                 searchSection.classList.remove('hidden');
                 applyAuthenticatedUI(user);
-                void checkAuth();
             } else {
                 alert(window.I18n.t('home_login_failed'));
             }

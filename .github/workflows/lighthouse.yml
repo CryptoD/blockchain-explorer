@@ -32,6 +32,8 @@ jobs:
       GETBLOCK_ACCESS_TOKEN: lhci-ci-token
       HTTP_LISTEN_ADDR: 127.0.0.1:18080
       LHCI_BASE_URL: http://127.0.0.1:18080
+      RATE_LIMIT_PER_IP: 10000
+      RATE_LIMIT_PER_USER: 10000
       CI: 'true'
 
     steps:

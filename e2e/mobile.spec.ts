@@ -21,16 +21,22 @@ test.describe('mobile viewport smoke', () => {
   });
 
   test('home → search → dashboard', async ({ page }) => {
+    const blockQuery = '10000000';
     await page.goto('/', { waitUntil: 'load', timeout: 90_000 });
     await expect(page.locator('#mobile-menu-button')).toBeVisible({ timeout: 30_000 });
     await page.locator('#mobile-menu-button').click();
     await expect(page.locator('#mobile-menu-button')).toHaveAttribute('aria-expanded', 'true');
     await expect(page.locator('#search-input-mobile')).toBeVisible();
-    await page.locator('#search-input-mobile').fill('100000');
+    await page.locator('#search-input-mobile').fill(blockQuery);
     await page.locator('#search-form-mobile').evaluate((form) => form.requestSubmit());
-    await page.waitForURL(/\/bitcoin(\?q=100000|$)/, { waitUntil: 'domcontentloaded', timeout: 90_000 });
+    await page.waitForURL(new RegExp(`/bitcoin(\\?q=${blockQuery}|$)`), {
+      waitUntil: 'domcontentloaded',
+      timeout: 90_000,
+    });
 
-    await expect(page.locator('body')).toContainText(/100000|Block|Search failed|No matching|Basic result/i);
+    await expect(page.locator('body')).toContainText(
+      new RegExp(`${blockQuery}|Block|Search failed|No matching|Basic result`, 'i'),
+    );
 
     await page.goto('/dashboard');
     await expect(page.locator('#mobile-menu-button')).toBeVisible();
