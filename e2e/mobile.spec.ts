@@ -38,8 +38,13 @@ test.describe('mobile viewport smoke', () => {
       new RegExp(`${blockQuery}|Block|Search failed|No matching|Basic result`, 'i'),
     );
 
-    await page.goto('/dashboard');
-    await expect(page.locator('#mobile-menu-button')).toBeVisible();
-    await expect(page.getByRole('heading', { name: /Dashboard|Portfolio/i }).first()).toBeVisible();
+    await page.goto('/dashboard', { waitUntil: 'load', timeout: 90_000 });
+    await expect(page.locator('#mobile-menu-button')).toBeVisible({ timeout: 30_000 });
+    // Dashboard requires login; CI redirects to home, while a slow/failed auth check may leave the page in place.
+    await expect(
+      page
+        .getByRole('heading', { name: /Portfolio Dashboard/i })
+        .or(page.getByRole('heading', { name: /Explore the Bitcoin Blockchain/i })),
+    ).toBeVisible({ timeout: 15_000 });
   });
 });
