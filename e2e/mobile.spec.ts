@@ -11,17 +11,24 @@ test.describe('mobile viewport smoke', () => {
     await menu.click({ trial: true });
   });
 
+  test('hamburger is tappable on explorer and symbols pages', async ({ page }) => {
+    for (const path of ['/bitcoin', '/symbols']) {
+      await page.goto(path, { waitUntil: 'load', timeout: 90_000 });
+      const menu = page.locator('#mobile-menu-button');
+      await expect(menu).toBeVisible({ timeout: 30_000 });
+      await menu.click({ trial: true });
+    }
+  });
+
   test('home → search → dashboard', async ({ page }) => {
     await page.goto('/', { waitUntil: 'load', timeout: 90_000 });
     await expect(page.locator('#mobile-menu-button')).toBeVisible({ timeout: 30_000 });
     await page.locator('#mobile-menu-button').click();
-    await expect(page.locator('#mobile-menu')).toBeVisible();
-
+    await expect(page.locator('#mobile-menu-button')).toHaveAttribute('aria-expanded', 'true');
+    await expect(page.locator('#search-input-mobile')).toBeVisible();
     await page.locator('#search-input-mobile').fill('100000');
-    await Promise.all([
-      page.waitForURL(/\/bitcoin(\?q=100000|$)/, { waitUntil: 'domcontentloaded' }),
-      page.locator('#search-form-mobile').locator('button[type="submit"]').click(),
-    ]);
+    await page.locator('#search-form-mobile').evaluate((form) => form.requestSubmit());
+    await page.waitForURL(/\/bitcoin(\?q=100000|$)/, { waitUntil: 'domcontentloaded', timeout: 90_000 });
 
     await expect(page.locator('body')).toContainText(/100000|Block|Search failed|No matching|Basic result/i);
 

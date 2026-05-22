@@ -39,7 +39,7 @@
                         <button type="submit" id="search-icon" class="shrink-0 px-3 py-2 text-sm font-medium bg-primary text-white hover:bg-primary-dark focus:outline-none focus:ring-2 focus:ring-inset focus:ring-offset-0 focus:ring-primary" aria-label="Search">Search</button>
                     </form>
                 </div>
-                <div class="flex items-center gap-2 shrink-0">
+                <div class="hidden md:block shrink-0">
                     <label for="theme-select" class="sr-only">Select theme</label>
                     <select id="theme-select" class="bg-white dark:bg-gray-800 border border-gray-300 dark:border-gray-600 rounded px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-primary">
                         <option value="blue">Blue</option>
@@ -47,9 +47,9 @@
                         <option value="purple">Purple</option>
                         <option value="orange">Orange</option>
                     </select>
-                    <div class="md:hidden">
-                        <button id="mobile-menu-button" type="button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 min-w-[44px] min-h-[44px] rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
-                    </div>
+                </div>
+                <div class="md:hidden shrink-0">
+                    <button id="mobile-menu-button" type="button" aria-controls="mobile-menu" aria-expanded="false" aria-label="Open main menu" class="p-2 min-w-[44px] min-h-[44px] rounded-md hover:bg-gray-100 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-primary">☰</button>
                 </div>
             </div>
         </div>

@@ -239,13 +239,15 @@
             const res = await fetch('/api/v1/login', {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
+                credentials: 'include',
                 body: JSON.stringify(data)
             });
             if (res.ok) {
                 const user = await res.json();
-                checkAuth();
                 authForms.classList.add('hidden');
                 searchSection.classList.remove('hidden');
+                applyAuthenticatedUI(user);
+                void checkAuth();
             } else {
                 alert(window.I18n.t('home_login_failed'));
             }
@@ -297,49 +299,53 @@
         }
     }
 
+    function applyAuthenticatedUI(user) {
+        if (!user || !user.username) return;
+        applyProfileToPage(user);
+        usernameDisplay.textContent = user.username;
+        userInfo.classList.remove('hidden');
+        authButtons.classList.add('hidden');
+        if (authButtonsMobile) authButtonsMobile.classList.add('hidden');
+        if (portfoliosNav) portfoliosNav.classList.remove('hidden');
+        const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
+        if (portfoliosNavMobile) portfoliosNavMobile.classList.remove('hidden');
+        const dashboardNav = document.getElementById('dashboard-nav');
+        const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
+        if (dashboardNav) dashboardNav.classList.remove('hidden');
+        if (dashboardNavMobile) dashboardNavMobile.classList.remove('hidden');
+        const profileNav = document.getElementById('profile-nav');
+        const profileNavMobile = document.getElementById('profile-nav-mobile');
+        if (profileNav) profileNav.classList.remove('hidden');
+        if (profileNavMobile) profileNavMobile.classList.remove('hidden');
+    }
+
+    function applyLoggedOutUI() {
+        userInfo.classList.add('hidden');
+        authButtons.classList.remove('hidden');
+        if (authButtonsMobile) authButtonsMobile.classList.remove('hidden');
+        if (portfoliosNav) portfoliosNav.classList.add('hidden');
+        const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
+        if (portfoliosNavMobile) portfoliosNavMobile.classList.add('hidden');
+        const dashboardNav = document.getElementById('dashboard-nav');
+        const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
+        if (dashboardNav) dashboardNav.classList.add('hidden');
+        if (dashboardNavMobile) dashboardNavMobile.classList.add('hidden');
+        const profileNav = document.getElementById('profile-nav');
+        const profileNavMobile = document.getElementById('profile-nav-mobile');
+        if (profileNav) profileNav.classList.add('hidden');
+        if (profileNavMobile) profileNavMobile.classList.add('hidden');
+    }
+
     async function checkAuth() {
         try {
             const res = await fetch('/api/v1/user/profile', { credentials: 'include' });
             if (res.ok) {
-                const user = await res.json();
-                applyProfileToPage(user);
-                usernameDisplay.textContent = user.username;
-                userInfo.classList.remove('hidden');
-                authButtons.classList.add('hidden');
-                if (authButtonsMobile) authButtonsMobile.classList.add('hidden');
-                if (portfoliosNav) portfoliosNav.classList.remove('hidden');
-                const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
-                if (portfoliosNavMobile) portfoliosNavMobile.classList.remove('hidden');
-                // Show dashboard links
-                const dashboardNav = document.getElementById('dashboard-nav');
-                const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
-                if (dashboardNav) dashboardNav.classList.remove('hidden');
-                if (dashboardNavMobile) dashboardNavMobile.classList.remove('hidden');
-                const profileNav = document.getElementById('profile-nav');
-                const profileNavMobile = document.getElementById('profile-nav-mobile');
-                if (profileNav) profileNav.classList.remove('hidden');
-                if (profileNavMobile) profileNavMobile.classList.remove('hidden');
+                applyAuthenticatedUI(await res.json());
             } else {
-                userInfo.classList.add('hidden');
-                authButtons.classList.remove('hidden');
-                if (authButtonsMobile) authButtonsMobile.classList.remove('hidden');
-                if (portfoliosNav) portfoliosNav.classList.add('hidden');
-                const portfoliosNavMobile = document.getElementById('portfolios-nav-mobile');
-                if (portfoliosNavMobile) portfoliosNavMobile.classList.add('hidden');
-                // Hide dashboard links
-                const dashboardNav = document.getElementById('dashboard-nav');
-                const dashboardNavMobile = document.getElementById('dashboard-nav-mobile');
-                if (dashboardNav) dashboardNav.classList.add('hidden');
-                if (dashboardNavMobile) dashboardNavMobile.classList.add('hidden');
-                const profileNav = document.getElementById('profile-nav');
-                const profileNavMobile = document.getElementById('profile-nav-mobile');
-                if (profileNav) profileNav.classList.add('hidden');
-                if (profileNavMobile) profileNavMobile.classList.add('hidden');
+                applyLoggedOutUI();
             }
         } catch (err) {
-            userInfo.classList.add('hidden');
-            authButtons.classList.remove('hidden');
-            if (authButtonsMobile) authButtonsMobile.classList.remove('hidden');
+            applyLoggedOutUI();
         }
     }
 
