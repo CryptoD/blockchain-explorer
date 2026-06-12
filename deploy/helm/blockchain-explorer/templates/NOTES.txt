@@ -1,0 +1,38 @@
+1. Get the application URL:
+{{- if .Values.ingress.enabled }}
+{{- range $host := .Values.ingress.hosts }}
+  {{- range .paths }}
+  http{{ if $.Values.ingress.tls }}s{{ end }}://{{ $host.host }}{{ .path }}
+  {{- end }}
+{{- end }}
+{{- else if contains "NodePort" .Values.service.type }}
+  export NODE_PORT=$(kubectl get --namespace {{ .Release.Namespace }} -o jsonpath="{.spec.ports[0].nodePort}" services {{ include "blockchain-explorer.fullname" . }})
+  export NODE_IP=$(kubectl get nodes --namespace {{ .Release.Namespace }} -o jsonpath="{.items[0].status.addresses[0].address}")
+  echo http://$NODE_IP:$NODE_PORT
+{{- else if contains "LoadBalancer" .Values.service.type }}
+  NOTE: It may take a few minutes for the LoadBalancer IP to be available.
+  kubectl get --namespace {{ .Release.Namespace }} svc -w {{ include "blockchain-explorer.fullname" . }}
+{{- else if contains "ClusterIP" .Values.service.type }}
+  kubectl --namespace {{ .Release.Namespace }} port-forward svc/{{ include "blockchain-explorer.fullname" . }} 8080:{{ .Values.service.port }}
+  echo "Visit http://127.0.0.1:8080"
+{{- end }}
+
+2. Health checks (app listens on port 8080):
+   kubectl --namespace {{ .Release.Namespace }} exec deploy/{{ include "blockchain-explorer.fullname" . }} -- wget -qO- http://127.0.0.1:8080/health || true
+
+3. Create a Kubernetes Secret before install if not using an existing one:
+   kubectl create secret generic blockchain-explorer-secrets \
+     --from-literal=GETBLOCK_ACCESS_TOKEN=... \
+     --from-literal=ADMIN_PASSWORD=... \
+     -n {{ .Release.Namespace }}
+
+   Then set existingSecret: blockchain-explorer-secrets in your values file.
+
+4. Redis:
+{{- if .Values.redis.deployInCluster.enabled }}
+   In-cluster Redis is enabled (demo/dev only). Pin redis.deployInCluster.image explicitly.
+{{- else }}
+   External Redis: {{ .Values.redis.external.host }}:{{ .Values.redis.external.port }}
+{{- end }}
+
+See deploy/README.md for full install/upgrade instructions.

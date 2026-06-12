@@ -1,0 +1,156 @@
+# Default values for blockchain-explorer.
+# Sensitive values belong in an existing Kubernetes Secret (see existingSecret below), never in values.yaml.
+
+replicaCount: 2
+
+image:
+  repository: ghcr.io/cryptod/blockchain-explorer
+  tag: ""
+  pullPolicy: IfNotPresent
+  # When set, image reference uses digest instead of tag (recommended for prod).
+  digest: ""
+
+nameOverride: ""
+fullnameOverride: ""
+
+serviceAccount:
+  create: true
+  annotations: {}
+  name: ""
+
+podAnnotations: {}
+
+podSecurityContext:
+  runAsNonRoot: true
+  runAsUser: 65532
+  runAsGroup: 65532
+  fsGroup: 65532
+  seccompProfile:
+    type: RuntimeDefault
+
+securityContext:
+  allowPrivilegeEscalation: false
+  readOnlyRootFilesystem: true
+  capabilities:
+    drop:
+      - ALL
+
+service:
+  type: ClusterIP
+  port: 8080
+
+ingress:
+  enabled: false
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/force-ssl-redirect: "true"
+    nginx.ingress.kubernetes.io/proxy-body-size: 50m
+  hosts:
+    - host: blockchain-explorer.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: blockchain-explorer-tls
+      hosts:
+        - blockchain-explorer.example.com
+
+resources:
+  requests:
+    cpu: 100m
+    memory: 256Mi
+  limits:
+    cpu: 1000m
+    memory: 512Mi
+
+autoscaling:
+  enabled: false
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 80
+
+podDisruptionBudget:
+  enabled: true
+  minAvailable: 1
+
+livenessProbe:
+  httpGet:
+    path: /health
+    port: http
+  initialDelaySeconds: 30
+  periodSeconds: 10
+  timeoutSeconds: 5
+
+readinessProbe:
+  httpGet:
+    path: /ready
+    port: http
+  initialDelaySeconds: 5
+  periodSeconds: 5
+  timeoutSeconds: 5
+
+# Writable mount when readOnlyRootFilesystem is true (coordinate with task 82 distroless).
+tmpDir:
+  enabled: true
+  sizeLimit: 64Mi
+
+# Non-sensitive environment (ConfigMap). App listens on :8080 by default.
+env:
+  APP_ENV: production
+  APP_PORT: "8080"
+  REDIS_PORT: "6379"
+  METRICS_ENABLED: "true"
+  FEATURE_NEWS_ENABLED: "true"
+  FEATURE_PRICE_ALERTS_ENABLED: "true"
+  API_KEYS_ENABLED: "true"
+  RESPONSE_COMPRESSION_ENABLED: "true"
+
+# Non-secret config (ConfigMap). Override in prod values files.
+config:
+  getblockBaseUrl: https://go.getblock.io/your-project-id
+  adminUsername: admin
+  appBaseUrl: https://blockchain-explorer.example.com
+
+# Kubernetes Secret holding sensitive env vars. Create out-of-band; never commit real values.
+# Required keys (when used): GETBLOCK_ACCESS_TOKEN, ADMIN_PASSWORD
+# Optional keys: SENTRY_DSN, SMTP_PASSWORD, METRICS_TOKEN, THENEWSAPI_API_TOKEN
+existingSecret: ""
+
+secretKeys:
+  getblockAccessToken: GETBLOCK_ACCESS_TOKEN
+  adminPassword: ADMIN_PASSWORD
+  sentryDsn: SENTRY_DSN
+  smtpPassword: SMTP_PASSWORD
+  metricsToken: METRICS_TOKEN
+  newsApiToken: THENEWSAPI_API_TOKEN
+
+# Redis — default: external/managed (recommended for production).
+redis:
+  external:
+    enabled: true
+    host: redis.example.com
+    port: 6379
+    # Optional: password from secret (key defaults to "password")
+    existingSecret: ""
+    passwordKey: password
+  # In-cluster Redis for demos/dev clusters only. Pin redis.image explicitly (no subchart).
+  deployInCluster:
+    enabled: false
+    image: redis:7
+    resources:
+      requests:
+        cpu: 50m
+        memory: 128Mi
+      limits:
+        cpu: 500m
+        memory: 256Mi
+    persistence:
+      enabled: true
+      size: 5Gi
+      storageClass: ""
+
+nodeSelector: {}
+tolerations: []
+affinity: {}

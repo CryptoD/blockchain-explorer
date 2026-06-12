@@ -1,0 +1,91 @@
+{{- if .Values.redis.deployInCluster.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "blockchain-explorer.fullname" . }}-redis
+  labels:
+    {{- include "blockchain-explorer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - port: 6379
+      targetPort: redis
+      protocol: TCP
+      name: redis
+  selector:
+    {{- include "blockchain-explorer.selectorLabels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+---
+{{- if .Values.redis.deployInCluster.persistence.enabled }}
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "blockchain-explorer.fullname" . }}-redis
+  labels:
+    {{- include "blockchain-explorer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: {{ .Values.redis.deployInCluster.persistence.size }}
+  {{- if .Values.redis.deployInCluster.persistence.storageClass }}
+  storageClassName: {{ .Values.redis.deployInCluster.persistence.storageClass | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "blockchain-explorer.fullname" . }}-redis
+  labels:
+    {{- include "blockchain-explorer.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "blockchain-explorer.selectorLabels" . | nindent 6 }}
+      app.kubernetes.io/component: redis
+  template:
+    metadata:
+      labels:
+        {{- include "blockchain-explorer.selectorLabels" . | nindent 8 }}
+        app.kubernetes.io/component: redis
+    spec:
+      containers:
+        - name: redis
+          image: {{ .Values.redis.deployInCluster.image | quote }}
+          ports:
+            - name: redis
+              containerPort: 6379
+          livenessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          readinessProbe:
+            exec:
+              command:
+                - redis-cli
+                - ping
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          resources:
+            {{- toYaml .Values.redis.deployInCluster.resources | nindent 12 }}
+          {{- if .Values.redis.deployInCluster.persistence.enabled }}
+          volumeMounts:
+            - name: redis-data
+              mountPath: /data
+          {{- end }}
+      {{- if .Values.redis.deployInCluster.persistence.enabled }}
+      volumes:
+        - name: redis-data
+          persistentVolumeClaim:
+            claimName: {{ include "blockchain-explorer.fullname" . }}-redis
+      {{- end }}
+{{- end }}
