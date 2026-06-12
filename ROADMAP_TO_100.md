@@ -6,7 +6,9 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–72** and **73–80** are **done**. Task **70** (optional webhooks) and **81–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–69**, **71–72**, and **73–80** are **done**. Task **70** (optional webhooks) and **81–100** are **open**. Update this sentence when you complete more tasks.
+
+> **For the implementing model/human:** the open tasks (70, 81–100) below were rewritten into self-contained work orders with **Goal / Approach / Steps / Files / Acceptance / Verify / Guardrails**. Read the **[Execution guide](#execution-guide-for-the-implementing-model)** before starting, then do **one task per commit**, keep CI green, and tick the box + update the progress line above when each lands.
 
 ---
 
@@ -96,7 +98,21 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **67. Pagination metadata standard** — Same shape for all list endpoints (`total`, `page`, `page_size`, `has_more`). **Done:** [`apiutil.ListPagination`](internal/apiutil/pagination.go), [`news.ListResponse`](/internal/news/types.go); handlers in explorer + user APIs; symbols UI derives page count from `total`/`page_size`; [`openapi.yaml`](openapi.yaml) `ListPagination` schema.
 - [x] **68. Public Postman/collection** — Importable collection for partners and testers. **Done:** [`postman/blockchain-explorer.postman_collection.json`](postman/blockchain-explorer.postman_collection.json); generator [`scripts/gen-postman-collection.py`](scripts/gen-postman-collection.py); import notes [`postman/README.md`](postman/README.md).
 - [x] **69. Idempotent PUT/PATCH semantics** — Document ETags or version fields for portfolios where relevant. **Done:** [docs/REST_WRITE_SEMANTICS.md](docs/REST_WRITE_SEMANTICS.md) (full `PUT`, `updated` as informational, no `If-Match` / portfolio ETag today, last-write-wins, future optimistic-locking sketch); links from [docs/API_VERSIONING.md](docs/API_VERSIONING.md) and OpenAPI `description` on portfolio/watchlist `PUT`.
-- [ ] **70. Webhooks (optional)** — Outbound events for enterprise: block confirmation, alert triggered.
+- [ ] **70. Webhooks (optional, large)** — Let integrators subscribe to outbound events (e.g. `block.confirmed`, `alert.triggered`) delivered as signed HTTP POSTs.
+  - **Why:** enterprise/automation users want push instead of polling. This is the only open item in Phase 16 and is **optional**; only do it if there is real demand. It is a multi-file feature — split it into the sub-steps below and consider one commit per sub-step.
+  - **Approach (recommended):** Redis-backed subscriptions, a background delivery worker reusing the existing outbound `http.Transport` + circuit breaker, **HMAC-SHA256** request signing, exponential-backoff retries, and a dead-letter ring mirroring the email queue pattern. Gate the whole feature behind a flag so it ships dark.
+  - **Steps:**
+    1. **Feature flag:** add `FEATURE_WEBHOOKS_ENABLED` (default `false`) to [`internal/config/config.go`](internal/config/config.go) and register a Redis override `feature:webhooks` in [`internal/featureflags`](internal/featureflags/featureflags.go) (mirror `feature:news`). Document it in [`docs/FEATURE_FLAGS.md`](docs/FEATURE_FLAGS.md) and `.env.example`.
+    2. **Storage:** add `WebhookRepo` in `internal/repos/webhook.go` (key builder in [`internal/repos/keys.go`](internal/repos/keys.go), e.g. `webhook:<userID>:<id>`), wired into [`repos.Stores`](internal/repos/stores.go). Persist: `id`, `owner`, `url`, `secret` (store only a hash for display; keep plaintext encrypted-at-rest or return once on create), `events[]`, `active`, `created`, `failure_count`.
+    3. **Delivery worker:** add `internal/webhooks/` (`dispatcher.go`) that consumes an in-process queue and POSTs JSON `{id, type, created_at, data}`. Sign with header `X-Webhook-Signature: sha256=<hmac(secret, body)>` and add `X-Webhook-Id` for idempotent receivers. Reuse `httpClient`/outbound transport from [`internal/server/outbound_wire.go`](internal/server/outbound_wire.go) so circuit breakers + retry budgets apply. On repeated failure, push to a dead-letter ring like [`internal/email/email.go`](internal/email/email.go) and disable the subscription after N consecutive failures.
+    4. **Event producers:** emit `alert.triggered` where alerts fire (see `RecordPriceAlertTick` path in [`internal/server/updatepricealerthandler.go`](internal/server/updatepricealerthandler.go)) and `block.confirmed` from the network-status/block refresh path. Keep producers cheap (enqueue only).
+    5. **Management API:** add CRUD under `/api/v1/user/webhooks` in a new `internal/server/webhooks.go`, registered in [`internal/server/routes.go`](internal/server/routes.go) `registerUserRoutesV1` (auth + CSRF + scopes, same as other user routes). Enforce a per-user quota (config `WEBHOOKS_MAX_PER_USER`, default 5). Return the signing secret **once** on create.
+    6. **Metrics:** add `explorer_webhook_deliveries_total{event,result}`, `explorer_webhook_queue_depth`, `explorer_webhook_dead_letter_entries` in [`internal/metrics/metrics.go`](internal/metrics/metrics.go); add a Prometheus alert in [`monitoring/prometheus/prometheus-alerts.yml`](monitoring/prometheus/prometheus-alerts.yml).
+    7. **Docs + spec:** new `docs/WEBHOOKS.md` (event catalog, signature verification snippet, retry/backoff schedule, security notes — SSRF: block private/loopback/link-local targets and require `https://`), add the routes to [`openapi.yaml`](openapi.yaml), and link from README **Documentation**.
+  - **Files:** create `internal/repos/webhook.go`, `internal/webhooks/dispatcher.go`, `internal/server/webhooks.go`, `docs/WEBHOOKS.md`; edit `config.go`, `featureflags.go`, `keys.go`, `stores.go`, `routes.go`, `metrics.go`, `openapi.yaml`, `.env.example`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** flag-off = zero behavior change and no new routes; flag-on = user can create/list/delete webhooks, receive a signed delivery for a fired alert, deliveries retry on 5xx, and a permanently failing endpoint lands in the dead-letter ring + metric. SSRF guard rejects private/non-HTTPS URLs.
+  - **Verify:** unit tests for HMAC signing + SSRF guard + retry/backoff; httptest receiver asserting signature; `go test ./...`, `gofmt -s -w . && goimports -w . && golangci-lint run ./...`.
+  - **Guardrails:** never log secrets or full payloads; validate target URLs every delivery (DNS rebinding); keep producers non-blocking. If demand is unclear, leave this **unchecked** and prioritize Phases 18–20.
 - [x] **71. API keys for machine access** — Separate from session cookies for automation (scoped, rotatable). **Done:** [docs/API_KEYS.md](docs/API_KEYS.md); Redis-backed keys in [`internal/repos/apikey.go`](internal/repos/apikey.go); handlers [`internal/server/apikeys.go`](internal/server/apikeys.go); [`openapi.yaml`](openapi.yaml) `apiKeyBearer`; Postman variables `apiKeyBearer` / `apiKeyPublicId`; config `API_KEYS_ENABLED`, `API_KEYS_MAX_PER_USER`.
 
 - [x] **72. Changelog** — `CHANGELOG.md` with semver for API and app releases. **Done:** [CHANGELOG.md](CHANGELOG.md) (single semver; `openapi.yaml` `info.version` tracks API doc release for 1.1.0).
@@ -112,34 +128,279 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 - [x] **79. Error boundaries (frontend)** — User-friendly error component vs raw JSON in face of 502. **Done:** [`static/js/error-ui.js`](static/js/error-ui.js) maps gateway/HTML/JSON failures to friendly copy; wired in explorer, dashboard, symbols, profile; `.error-boundary` styles in [`src/styles/theme.scss`](src/styles/theme.scss).
 - [x] **80. Performance budgets** — LCP/CLS targets; track in Lighthouse CI (optional). **Done:** [docs/PERFORMANCE_BUDGETS.md](docs/PERFORMANCE_BUDGETS.md); [`lighthouserc.cjs`](lighthouserc.cjs) (LCP ≤2.5s warn, CLS ≤0.1 error); optional [`.github/workflows/lighthouse.yml`](.github/workflows/lighthouse.yml).
 
+## Execution guide for the implementing model
+
+Read this once before starting any task below (70, 81–100). These tasks are deliberately verbose so a smaller model can execute them safely without extra context.
+
+- **One task per commit/PR.** Use a Conventional Commit message matching the repo style (see `git log`), e.g. `feat(ops): distroless runtime image (task 82)` or `docs(compliance): data processing record (task 91)`.
+- **Stay green.** Before committing Go changes run: `gofmt -s -w . && goimports -w . && golangci-lint run ./... && go test ./...`. For frontend changes run `npm run build`. Do not break existing CI jobs (lint, security, test, frontend, docker, e2e, race, lighthouse).
+- **Tech facts about this repo** (use these, do not guess): the Go app listens on **`:8080`** by default (`HTTP_LISTEN_ADDR` or `APP_PORT` override — see [`internal/server/run.go`](internal/server/run.go)); logs are **JSON via logrus** ([`internal/logging`](internal/logging/)); metrics are Prometheus at **`GET /metrics`**; health is **`GET /health`**, readiness **`GET /ready`**; config is env-driven and validated in [`internal/config/config.go`](internal/config/config.go); persistence is **Redis only** (no SQL in the app despite the legacy Postgres service in compose); existing infra lives in [`Dockerfile`](Dockerfile), [`docker-compose.yml`](docker-compose.yml), [`k8s/`](k8s/), and [`monitoring/`](monitoring/).
+- **Known inconsistencies to fix as you touch these files** (call them out, don't silently ignore): the `Dockerfile` and `k8s/deployment.yaml` use `EXPOSE`/`containerPort` **3000** but the app actually listens on **8080**; `Dockerfile` sets `WORKDIR /root/` then `USER nobody` (nobody cannot read `/root`); `k8s/deployment.yaml` has a malformed first `env:` entry (a `value: "postgres"` with no `name:`) and still wires Postgres though the app is Redis-only.
+- **When a task is documentation-only,** still cross-link it from `README.md` **Documentation** and, where relevant, from `SECURITY.md` or `openapi.yaml`. Add a `CHANGELOG.md` entry for user-facing or operational changes.
+- **Definition of done for every task:** acceptance criteria met, `Verify` commands pass locally, docs/links updated, the checkbox here ticked, and the **Progress** line near the top updated.
+- **If blocked or a task needs a real secret/cloud account** you don't have, implement everything that can be done offline (templates, workflows guarded by `if: secrets.X != ''`, docs) and clearly mark the manual follow-up rather than inventing credentials.
+
 ## Phase 18 — Operations & DevOps
 
-- [ ] **81. Helm chart or compose prod overlay** — Production-ready env template with resource limits.
-- [ ] **82. Multi-stage Docker hardening** — Distroless or minimal runtime; non-root; read-only root fs where possible.
-- [ ] **83. Image signing** — cosign for released images.
-- [ ] **84. GitHub Actions OIDC deploy** — No long-lived cloud keys in secrets where avoidable.
-- [ ] **85. Staging environment** — Parity with prod config; anonymized data.
-- [ ] **86. Log aggregation** — Ship JSON logs to Loki/ELK; retention policy.
-- [ ] **87. Cost monitoring** — Alerts on egress or Redis memory growth anomalies.
-- [ ] **88. On-call runbook** — PagerDuty/Opsgenie playbook: “Redis full”, “RPC down”, “Sentry spike”.
+- [ ] **81. Helm chart + compose prod overlay** — Production-ready, parameterized deploy with resource limits and secrets wiring.
+  - **Goal:** make the app deployable to Kubernetes via a versioned Helm chart, and to a single host via a hardened compose overlay, without hand-editing raw manifests.
+  - **Approach:** add `deploy/helm/blockchain-explorer/` (Helm v3 chart) as the primary path; add `docker-compose.prod.yml` as the lightweight path. Drive both from env/values, never bake secrets.
+  - **Steps:**
+    1. Create the Helm chart: `Chart.yaml`, `values.yaml`, and templates for `Deployment`, `Service`, `Ingress` (reuse intent from [`k8s/ingress.yaml`](k8s/ingress.yaml) + [`k8s/cluster-issuer.yaml`](k8s/cluster-issuer.yaml)), `HorizontalPodAutoscaler`, `PodDisruptionBudget`, and `ServiceAccount`. **Default to external/managed Redis** via a `redis.external` value block (host/port/auth `secretRef`) rather than bundling a subchart — Bitnami changed its catalog/image policy in 2025 (free Docker Hub images moved to a `bitnamilegacy` repo), so a hard `bitnami/redis` dependency is fragile. If you want an in-cluster Redis for demos, gate it behind `redis.deployInCluster=false` (default off) and document the image source the operator must pin; do not make CI/`helm lint` depend on a remote chart repo.
+    2. In `values.yaml` expose: image repo/tag/digest, replica count, `resources.requests/limits` (sensible defaults, e.g. 100m/256Mi requests), liveness `/health` + readiness `/ready` on **port 8080** (fix the 3000 mismatch), env block for `APP_ENV`, `REDIS_HOST/PORT`, `GETBLOCK_*`, `ADMIN_*`, feature flags, and a `secretRef` for sensitive values. Set `securityContext` (runAsNonRoot, readOnlyRootFilesystem, drop ALL caps) — coordinate with task 82.
+    3. Add `docker-compose.prod.yml`: app image (built artifact, not `golang:1.21` live-mount), `redis` with persistence, `restart: unless-stopped`, `deploy.resources.limits`, read-only FS + tmpfs, healthchecks hitting `:8080/health`. Drop the Postgres/Adminer services (app is Redis-only) or clearly mark them optional/legacy.
+    4. Fix `k8s/deployment.yaml` while here: correct port to 8080, remove the malformed `env:` entry, and either drop Postgres or annotate it as legacy.
+    5. Document install/upgrade in a new `deploy/README.md` and link from `README.md`.
+  - **Files:** create `deploy/helm/blockchain-explorer/**`, `docker-compose.prod.yml`, `deploy/README.md`; edit `k8s/deployment.yaml`, `README.md`, `CHANGELOG.md`, `.env.example` (note prod-only vars).
+  - **Acceptance criteria:** `helm lint deploy/helm/blockchain-explorer` passes; `helm template ... | kubectl apply --dry-run=client -f -` succeeds; `docker compose -f docker-compose.prod.yml config` is valid; no secrets committed; probes/ports reference 8080.
+  - **Verify:** `helm lint`, `helm template`, `docker compose -f docker-compose.prod.yml config`.
+  - **Guardrails:** secrets only via `valuesFrom`/`secretRef`/env — never literals. Keep dev `docker-compose.yml` working unchanged.
+- [ ] **82. Multi-stage Docker hardening** — Distroless, non-root, read-only root filesystem.
+  - **Goal:** shrink and harden the runtime image; eliminate shell/package manager; run unprivileged with a read-only FS.
+  - **Approach:** keep the existing multi-stage [`Dockerfile`](Dockerfile) (node frontend stage + golang builder) but replace the `alpine:latest` runtime with **`gcr.io/distroless/static-debian12:nonroot`** (the Go binary is already `CGO_ENABLED=0`). Optionally add a `chainguard/static` variant.
+  - **Steps:**
+    1. Change the final stage to `FROM gcr.io/distroless/static-debian12:nonroot`. Set `WORKDIR /app` (not `/root`), copy artifacts to `/app`, and `COPY --chown=nonroot:nonroot`. Distroless already provides CA certs, so drop the `apk add ca-certificates` step.
+    2. Fix `EXPOSE 8080` (the real listen port) and keep `USER nonroot` (numeric `65532` works with read-only FS).
+    3. Ensure the binary and static assets are world-readable and the process needs **no writable paths**; if any temp write is required, mount a `tmpfs`/`emptyDir` at runtime instead of writing into the image (document in chart/compose `readOnlyRootFilesystem: true` + `tmpDir`).
+    4. Add a `.dockerignore` review so build context stays minimal (it already exists — extend if needed).
+    5. Add a `HEALTHCHECK` note: distroless has no shell, so rely on the orchestrator probe (`/health`) rather than a container `HEALTHCHECK` that needs `curl`.
+    6. Wire read-only root FS + non-root into the Helm chart and `docker-compose.prod.yml` `securityContext`/`read_only` (coordinate with task 81).
+  - **Files:** edit `Dockerfile`, `.dockerignore`; update `deploy/helm/.../values.yaml` + `docker-compose.prod.yml` security settings; `CHANGELOG.md`.
+  - **Acceptance criteria:** `docker build` succeeds; `docker run` serves `/health` on 8080; image runs as non-root (`docker inspect` shows user `65532`/`nonroot`); container starts with `--read-only`; Trivy image scan (CI) stays green; final image is smaller than the alpine version.
+  - **Verify:** `docker build -t blockchain-explorer:hardened . && docker run --rm --read-only -p 8080:8080 -e APP_ENV=development -e GETBLOCK_BASE_URL=https://example.invalid/ -e GETBLOCK_ACCESS_TOKEN=test blockchain-explorer:hardened` then `curl -fsS localhost:8080/health`.
+  - **Guardrails:** do not reintroduce a shell or package manager into the runtime stage. Keep the frontend stamping stage intact (task 49 depends on `build/stamped/`).
+> **Phase 18 dependency map (read first):** do these in order where noted. **83** creates the release/publish workflow (build + push image to **GHCR**) and signs it; **84** adds an optional cloud-deploy job onto that same workflow. **86** stands up log shipping; **87** (cost/Redis-memory alerts) reuses the Prometheus stack from earlier tasks and the `redis_exporter` introduced here. **85** and **88** are mostly docs/config and can be done any time. Tasks 83–88 are infra/CI; if you cannot push to GHCR or a cloud from this environment, still commit the workflows/configs guarded by `if: ...` and document the manual follow-up (per the Execution guide).
+
+- [ ] **83. Image signing + provenance** — Sign released container images and attach SBOM + build provenance so consumers can verify authenticity.
+  - **Goal:** every image we publish for a tagged release is cryptographically signed and carries a Software Bill of Materials and SLSA build provenance, all verifiable with no long-lived signing key to manage.
+  - **Approach:** publish to **GitHub Container Registry (GHCR)** on git tags, then sign with **[cosign](https://github.com/sigstore/cosign) keyless (Sigstore OIDC)** — no stored private key. Generate an SBOM with **[syft](https://github.com/anchore/syft)** and attest it; add SLSA provenance via GitHub's [`actions/attest-build-provenance`](https://github.com/actions/attest-build-provenance). This is the **publish** half of the pipeline that task 84 extends.
+  - **Steps:**
+    1. Add `.github/workflows/release.yml` triggered on `push: tags: ['v*']` (and `workflow_dispatch`). Permissions block must include `contents: read`, `packages: write`, `id-token: write` (for keyless cosign + provenance), `attestations: write`.
+    2. Build the existing multi-stage [`Dockerfile`](Dockerfile) with `docker/build-push-action`, push to `ghcr.io/${{ github.repository }}` tagged with the git tag and `sha`. Capture the pushed image **digest** (`outputs.digest`) and always reference images by digest downstream.
+    3. Install cosign (`sigstore/cosign-installer`) and run `cosign sign --yes ghcr.io/<repo>@<digest>` using the workflow OIDC token (keyless). Document verification: `cosign verify --certificate-identity-regexp '.*' --certificate-oidc-issuer https://token.actions.githubusercontent.com ghcr.io/<repo>@<digest>`.
+    4. Generate SBOM with `anchore/sbom-action` (syft, SPDX-JSON), then `cosign attest --predicate sbom.spdx.json --type spdxjson <image@digest>` (keyless). Also call `actions/attest-build-provenance` with the image `subject-digest`.
+    5. Keep the existing CI **Trivy image scan** (in [`.github/workflows/ci.yml`](.github/workflows/ci.yml)) as the gate; optionally add a Trivy scan of the pushed digest in the release workflow too.
+    6. Document the publish + verify flow in a new `docs/IMAGE_SIGNING.md` (how to find the digest, how to verify signature/SBOM/provenance, what the OIDC identity is) and link it from README **Documentation**. Add a CHANGELOG entry.
+  - **Files:** create `.github/workflows/release.yml`, `docs/IMAGE_SIGNING.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** pushing a `v*` tag builds and pushes an image to GHCR, produces a cosign signature, an attached SPDX SBOM attestation, and a provenance attestation; `cosign verify` and `cosign verify-attestation` succeed against the published digest; the doc shows the exact verify commands; no signing secrets are stored (keyless only).
+  - **Verify:** `actionlint .github/workflows/release.yml` (or `yamllint`); dry-run by reading workflow logs on a test tag if registry push is available; otherwise validate workflow syntax and document the manual tag-push step.
+  - **Guardrails:** never commit a cosign private key — keyless OIDC only. Do not sign `:latest`; sign immutable digests. Keep `release.yml` separate from `ci.yml` so PR CI stays fast and unprivileged.
+- [ ] **84. Keyless / OIDC deploy (no long-lived cloud keys)** — Deploy from CI using short-lived OIDC-federated credentials instead of stored cloud secrets.
+  - **Goal:** a tagged release can deploy the signed image (from task 83) to the target environment without any long-lived cloud access keys committed to GitHub secrets.
+  - **Approach:** extend `release.yml` with a `deploy` job that runs **after** publish+sign, gated so it is a no-op until an operator opts in. Use cloud-native OIDC federation (`aws-actions/configure-aws-credentials` with a role ARN, or `google-github-actions/auth` with Workload Identity Federation, or `azure/login` with federated creds). Pick **one** based on a repo/Org **variable** (`vars.DEPLOY_TARGET`); ship all three as commented/guarded templates so the repo is cloud-agnostic.
+  - **Steps:**
+    1. Add a `deploy` job to `release.yml` with `needs: [publish]`, `permissions: id-token: write, contents: read`, and a guard `if: ${{ vars.DEPLOY_TARGET != '' }}` so it never runs until configured.
+    2. Implement the AWS path as the default example: `configure-aws-credentials` with `role-to-assume: ${{ vars.AWS_DEPLOY_ROLE_ARN }}` and `aws-region`, then a `helm upgrade --install` (chart from task 81) or `kubectl set image ... @<digest>`. Reference the **digest** output from the publish job, not a mutable tag.
+    3. Provide GCP and Azure variants as commented blocks (or `if: vars.DEPLOY_TARGET == 'gcp'` branches) with the exact OIDC config, so an operator only fills in variables.
+    4. Optionally verify the cosign signature **inside** the deploy job before rolling out (policy gate), failing if verification fails.
+    5. Document the cloud-side trust setup (OIDC provider thumbprint/audience, the IAM role trust policy scoped to this repo + `ref:refs/tags/v*`) in `docs/CI_OIDC_DEPLOY.md`; link from README and the operator manual (task 93). Add CHANGELOG entry.
+  - **Files:** edit `.github/workflows/release.yml`; create `docs/CI_OIDC_DEPLOY.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** with `vars.DEPLOY_TARGET` unset the deploy job is skipped (zero behavior change); the workflow contains no static cloud keys; the doc fully describes the trust relationship and the least-privilege role; deploy references the image by digest.
+  - **Verify:** `actionlint`; confirm the `if:` guard skips deploy on a tag when no deploy variables are set.
+  - **Guardrails:** no long-lived `AWS_ACCESS_KEY_ID`/service-account JSON in secrets. Scope the cloud trust policy to this repository and tag refs only. Treat deploy as opt-in; never break the publish job if deploy is unconfigured.
+- [ ] **85. Staging environment** — Define a prod-parity staging deploy with non-production data so changes can be validated before release.
+  - **Goal:** a reproducible staging target that mirrors production config (same image, same Helm chart/compose overlay) but uses isolated, anonymized/seeded data and clearly-marked non-prod settings.
+  - **Approach:** add a staging **values overlay** for the Helm chart (task 81) and/or a `docker-compose.staging.yml`, plus a small **seed/anonymize** script that populates Redis with synthetic users/portfolios/watchlists (never a copy of production PII).
+  - **Steps:**
+    1. Create `deploy/helm/blockchain-explorer/values-staging.yaml` (lower replicas/resources, `APP_ENV=staging`, staging hostnames, feature flags as desired, `robots`/noindex if applicable) layered over the base `values.yaml`.
+    2. Add `scripts/seed-staging.sh` (or a small Go helper under `scripts/`) that writes synthetic data to Redis using the existing key builders in [`internal/repos/keys.go`](internal/repos/keys.go) — fabricated emails (`user+stagingN@example.invalid`), fake portfolios/watchlists. Make it idempotent and refuse to run unless `APP_ENV=staging` (loud guard).
+    3. If production data ever needs to seed staging, document an **anonymization** pass (hash/replace emails and usernames, drop API-key hashes) — but prefer fully synthetic data to avoid GDPR exposure (ties to task 91).
+    4. Document the staging promotion flow (tag → publish/sign 83 → deploy 84 to staging → smoke test `/health` + a search → promote to prod) in `docs/STAGING.md`; link from README and operator manual.
+  - **Files:** create `deploy/helm/blockchain-explorer/values-staging.yaml`, `scripts/seed-staging.sh`, `docs/STAGING.md`; edit `README.md`, `CHANGELOG.md`, possibly `.env.example` (staging notes).
+  - **Acceptance criteria:** `helm template -f values.yaml -f values-staging.yaml ...` renders valid manifests with `APP_ENV=staging`; the seed script refuses to run outside staging and only writes synthetic data; docs describe how to stand up and tear down staging; no real PII anywhere.
+  - **Verify:** `helm template` with the staging overlay; `bash -n scripts/seed-staging.sh`; run the seed script against a local/miniredis-like target if available.
+  - **Guardrails:** never copy real user data into staging without anonymization. Keep staging credentials/secrets separate from prod. The seed script must hard-fail outside `APP_ENV=staging`.
+- [ ] **86. Log aggregation** — Ship the existing JSON logs to a central store with a retention policy.
+  - **Goal:** structured logs from all replicas are collected centrally, queryable, and retained for a defined window — without changing the app's logging code (logs are already JSON via logrus, see [`internal/logging`](internal/logging/)).
+  - **Approach:** recommend **Grafana Loki + Grafana Alloy** as the primary path (Alloy is Grafana's current collector; Promtail/Grafana Agent are deprecated/EOL as of 2025), with a short ELK alternative. Collect container stdout, parse the JSON, promote useful labels (`level`, `component`, `event`, `correlation_id`), and set Loki retention.
+  - **Steps:**
+    1. Add `monitoring/logging/alloy-config.alloy` with a `loki.source.*` (container/file) → `loki.process` (stage.json extracting `level`, `component`, `event`, `correlation_id`) → `loki.write` to a Loki endpoint. Keep label cardinality low (do **not** label by `correlation_id` — keep it as a structured field for filtering).
+    2. Add `monitoring/logging/loki-config.yaml` (or a values snippet) showing `limits_config`/`compactor` retention (e.g. 14–30 days) and a note on object-store backends.
+    3. Document the full pipeline in `docs/LOG_AGGREGATION.md`: how Alloy discovers the container, the JSON parse stages, recommended retention, PII caution (the app already scrubs/hashes — reaffirm no secrets in logs), and example LogQL queries (`{component="server"} | json | level="error"`).
+    4. Add the ELK alternative as a short appendix (Filebeat/Fluent Bit → Elasticsearch, JSON decode) so operators on that stack aren't blocked.
+    5. Cross-link from `monitoring/README.md` and README **Documentation**.
+  - **Files:** create `monitoring/logging/alloy-config.alloy`, `monitoring/logging/loki-config.yaml`, `docs/LOG_AGGREGATION.md`; edit `monitoring/README.md`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** Alloy config parses the app's JSON log line shape correctly (validate against a real sample from running the app); retention is explicitly configured; docs include working LogQL examples; no app code changes required.
+  - **Verify:** `alloy fmt monitoring/logging/alloy-config.alloy` if Alloy is installed; otherwise validate config syntax and confirm the JSON stage keys match actual fields emitted by [`internal/logging`](internal/logging/) (capture a sample with `go run ./cmd/server` briefly).
+  - **Guardrails:** keep label cardinality low (no per-request/per-user labels). Reaffirm secret/PII scrubbing — never add a stage that logs raw bodies or tokens.
+- [ ] **87. Cost & resource-growth monitoring** — Alert on Redis memory growth and egress anomalies before they become incidents/bills.
+  - **Goal:** Prometheus alerts fire when Redis memory approaches its limit or grows abnormally, and when outbound network/egress spikes — catching cost and capacity problems early.
+  - **Approach:** add **[redis_exporter](https://github.com/oliver006/redis_exporter)** to the monitoring stack for `redis_memory_used_bytes` / `redis_memory_max_bytes`, and add alert rules to the existing [`monitoring/prometheus/prometheus-alerts.yml`](monitoring/prometheus/prometheus-alerts.yml). For egress, use cAdvisor/node-exporter `container_network_transmit_bytes_total` where available, plus the app's own outbound metrics if present.
+  - **Steps:**
+    1. Document/redis_exporter wiring (scrape config snippet in `monitoring/prometheus/prometheus-scrape-example.yml`) and add it to any compose/helm monitoring stack notes.
+    2. Add alert rules: `RedisMemoryNearMaxmemory` (`redis_memory_used_bytes / redis_memory_max_bytes > 0.8` for 10m, when maxmemory is set), `RedisMemoryGrowthHigh` (`deriv(redis_memory_used_bytes[1h]) > <bytes/s>` sustained), `RedisKeyspaceGrowthHigh` (sum of `redis_db_keys` rising), and `OutboundEgressSpike` (rate of `container_network_transmit_bytes_total` or app outbound counter above a baseline). Use `for:` windows to avoid flapping and set `severity` labels consistent with existing rules.
+    3. Reuse existing app metrics where they exist (e.g. blockchain RPC / outbound counters from [`internal/metrics`](internal/metrics/)) to alert on call-volume cost drivers.
+    4. Write `docs/COST_MONITORING.md`: what drives cost (Redis memory, outbound RPC/news/pricing calls, egress), the alerts and their thresholds/tuning, and a monthly review checklist. Link from `monitoring/README.md` + README.
+  - **Files:** edit `monitoring/prometheus/prometheus-alerts.yml`, `monitoring/prometheus/prometheus-scrape-example.yml`, `monitoring/README.md`; create `docs/COST_MONITORING.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** new alert rules pass `promtool check rules` (and the existing [`monitoring/scripts/check-alert-rules.sh`](monitoring/scripts/check-alert-rules.sh)); thresholds are documented and tunable; redis_exporter scrape config is provided; doc lists the main cost drivers and the monthly review.
+  - **Verify:** run [`monitoring/scripts/check-alert-rules.sh`](monitoring/scripts/check-alert-rules.sh) (uses `promtool`); confirm metric names exist in your exporter/version.
+  - **Guardrails:** thresholds are environment-specific — document defaults as starting points, not absolutes. Don't alert on metrics no exporter emits; mark optional ones clearly.
+- [ ] **88. On-call runbook** — A single playbook for the most likely incidents with concrete diagnosis/mitigation steps.
+  - **Goal:** an on-call engineer can resolve common incidents (Redis full/down, upstream RPC down, error/Sentry spike, rate-limit storm, email queue backlog) by following a checklist, with links to the relevant existing docs.
+  - **Approach:** write `docs/ONCALL_RUNBOOK.md` keyed by **alert name** (matching [`monitoring/prometheus/prometheus-alerts.yml`](monitoring/prometheus/prometheus-alerts.yml) and tasks 63/87), each with Symptoms → Diagnose → Mitigate → Verify → Escalate. Reference, don't duplicate, the deep docs (backup/restore, circuit breakers, degraded mode, feature flags).
+  - **Steps:**
+    1. Enumerate scenarios: **Redis near maxmemory / down** (link [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md), degraded-mode UX, readiness `/ready`), **upstream RPC/pricing/news down** (link [docs/CIRCUIT_BREAKERS.md](docs/CIRCUIT_BREAKERS.md), [docs/RETRY_BUDGET.md](docs/RETRY_BUDGET.md), feature flags to shed load), **error/latency/Sentry spike** (correlation IDs, `/metrics`, SLO doc), **rate-limit storm** ([docs/RATE_LIMITS.md](docs/RATE_LIMITS.md)), **email queue backlog/dead-letter** (admin status, queue alerts).
+    2. For each: exact commands/queries (e.g. `redis-cli info memory`, LogQL from task 86, the Grafana panel, the admin `GET /api/v1/admin/status` fields), the feature flag to flip ([docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md)), and rollback (image digest / `helm rollback`).
+    3. Add a generic incident lifecycle header (severity levels, who to page, comms channel — ties to tasks 98/99) and an escalation table. PagerDuty/Opsgenie wiring is referenced from the Alertmanager example ([monitoring/prometheus/alertmanager-escalation-example.yml](monitoring/prometheus/alertmanager-escalation-example.yml)).
+    4. Link from `monitoring/README.md`, README **Documentation**, and the operator manual (task 93).
+  - **Files:** create `docs/ONCALL_RUNBOOK.md`; edit `monitoring/README.md`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** every alert in `prometheus-alerts.yml` has a matching runbook entry with concrete Diagnose/Mitigate steps and a working cross-link; rollback and feature-flag mitigations are spelled out; no secrets in the doc.
+  - **Verify:** cross-check each alert name in `prometheus-alerts.yml` appears in the runbook (a simple grep diff); ensure all doc links resolve.
+  - **Guardrails:** keep it actionable, not theoretical — every step is a command or a link. Don't include real credentials, hostnames, or contact details (use placeholders).
 
 ## Phase 19 — Documentation & compliance
 
-- [ ] **89. Architecture Decision Records** — `docs/adr/` for major choices (Redis-only, session model).
-- [ ] **90. CONTRIBUTING.md** — PR checklist, local dev, security disclosure pointer.
-- [ ] **91. DATA_PROCESSING.md** — GDPR-style: what PII stored, retention, deletion path.
-- [ ] **92. LICENSE and third-party notices** — `NOTICE` file for bundled assets/fonts if any.
-- [ ] **93. Operator manual** — One PDF or doc: install, upgrade, backup, rollback.
-- [ ] **94. API deprecation communications** — Template for email/changelog when breaking changes loom.
-- [ ] **95. Security.txt** — `/.well-known/security.txt` pointing to [SECURITY.md](SECURITY.md).
+- [ ] **89. Architecture Decision Records** — Capture the major architectural choices as immutable, dated ADRs.
+  - **Goal:** future contributors understand *why* the big decisions were made (Redis-only, session auth, Gin, distroless) without archaeology.
+  - **Approach:** use the lightweight **[MADR](https://adr.github.io/madr/)** format under `docs/adr/`, with a numbered template and an index. One ADR per decision; ADRs are append-only (supersede, don't rewrite).
+  - **Steps:**
+    1. Create `docs/adr/0000-template.md` (MADR: Context, Decision, Status, Consequences, Alternatives considered) and `docs/adr/README.md` (index + how to add a new ADR).
+    2. Backfill the decisions already visible in the codebase/docs as ADRs: `0001-redis-only-persistence.md` (no SQL; cross-link [docs/SQL_AND_REDIS_SAFETY.md](docs/SQL_AND_REDIS_SAFETY.md) + [docs/POSTGRES_MIGRATION_SKETCH.md](docs/POSTGRES_MIGRATION_SKETCH.md)), `0002-session-cookie-auth-with-csrf.md` (vs JWT; cross-link [docs/CSRF_AND_SESSIONS.md](docs/CSRF_AND_SESSIONS.md)), `0003-gin-web-framework.md`, `0004-distroless-nonroot-runtime.md` (ties to task 82), `0005-machine-api-keys.md` (cross-link [docs/API_KEYS.md](docs/API_KEYS.md)).
+    3. Keep each ADR short (≈1 page) and mark Status `Accepted` with the approximate date.
+    4. Link `docs/adr/README.md` from README **Documentation** and from [docs/BOUNDED_CONTEXTS.md](docs/BOUNDED_CONTEXTS.md)/[docs/INTERNAL_APIS.md](docs/INTERNAL_APIS.md).
+  - **Files:** create `docs/adr/0000-template.md`, `docs/adr/README.md`, and `docs/adr/0001..0005-*.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** ADR index lists all ADRs; each ADR follows the MADR template with Status/Context/Decision/Consequences; the five backfilled decisions match what the code actually does; all cross-links resolve.
+  - **Verify:** markdown link check (e.g. `npx markdown-link-check docs/adr/*.md` if available, else manual); confirm claims against the code (Redis-only, session model).
+  - **Guardrails:** ADRs are immutable once Accepted — supersede with a new ADR rather than editing history. Don't invent decisions the code contradicts.
+- [ ] **90. CONTRIBUTING.md** — A contributor guide that mirrors the real CI gates and local workflow.
+  - **Goal:** a new contributor can set up, build, test, and open a PR that passes CI on the first try, and knows how to report security issues.
+  - **Approach:** root-level `CONTRIBUTING.md` (GitHub auto-surfaces it on PRs/issues). Mirror the exact CI commands from [`.github/workflows/ci.yml`](.github/workflows/ci.yml) so the checklist is truthful.
+  - **Steps:**
+    1. Sections: **Local setup** (Go 1.24, Node 18+ for frontend, Redis via [`docker-compose.yml`](docker-compose.yml), required env from [`.env.example`](.env.example)); **Run** (`go run ./cmd/server`, app on `:8080`); **Build frontend** (`npm ci && npm run build`).
+    2. **PR checklist** matching CI exactly: `gofmt -s -w . && goimports -w . && golangci-lint run ./... && go test ./...`, `npm run build`, OpenAPI (`./scripts/check-openapi.sh`), Postman JSON validation; note Gitleaks/gosec/Trivy gates.
+    3. **Commit style:** Conventional Commits (point to `git log` for examples), one logical change per PR.
+    4. **Security disclosures:** do not file public issues; point to [`SECURITY.md`](SECURITY.md). **Conduct/licensing:** note MIT ([`LICENSE`](LICENSE)) and that contributions are under the same license.
+    5. Link from README **Contributing** (replace/extend the current prose) and optionally add `.github/PULL_REQUEST_TEMPLATE.md` reflecting the checklist.
+  - **Files:** create `CONTRIBUTING.md` (and optionally `.github/PULL_REQUEST_TEMPLATE.md`); edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** every command in the PR checklist matches an actual CI step; security disclosure points to `SECURITY.md`; local setup is sufficient to build + test from a clean clone; README links to it.
+  - **Verify:** run each listed command locally to confirm it's correct and passes on a clean tree.
+  - **Guardrails:** keep the checklist in sync with `ci.yml` — if commands diverge, fix the doc. Don't introduce a CLA/DCO requirement unless the maintainer asks.
+- [ ] **91. DATA_PROCESSING.md (privacy/GDPR)** — Document what personal data is stored, why, how long, and how it's deleted.
+  - **Goal:** a clear data-processing record covering PII inventory, legal basis, retention, sub-processors, and the data-subject deletion path — and an honest callout of any missing self-service deletion.
+  - **Approach:** inventory PII directly from the Redis repos and config, then document flows. Where a capability (e.g. account self-deletion) is missing, **document the gap and sketch the endpoint** rather than claiming it exists.
+  - **Steps:**
+    1. Inventory PII from [`internal/repos`](internal/repos/) and handlers: email + password hash + role ([`UserRepo`](internal/repos/user.go)), profile prefs (theme/language/notification settings), portfolios/watchlists, sessions + CSRF ([`SessionRepo`](internal/repos/session.go)), API-key hashes ([`internal/repos/apikey.go`](internal/repos/apikey.go)), feedback, and any IP/identifier used in rate limiting/logs.
+    2. For each: purpose, legal basis (e.g. legitimate interest / contract), storage location (Redis), and **retention** (session TTL, log retention from task 86, cache TTLs).
+    3. **Sub-processors / data flows:** outbound to GetBlock (RPC), CoinGecko (pricing), TheNewsAPI (news), SMTP provider (email), Sentry (error data — note the `BeforeSend` scrubbing). State what PII (if any) leaves the system.
+    4. **Data-subject rights:** export (portfolios already export via existing endpoints — link), and **deletion**. Today there is **no self-service account deletion endpoint** — document this gap and sketch a proposed `DELETE /api/v1/user/account` (purge user, sessions, portfolios, watchlists, alerts, API keys via the repos) as a future task. Reference [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) for backup-retention implications of deletion.
+    5. Cross-link [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), [docs/CSRF_AND_SESSIONS.md](docs/CSRF_AND_SESSIONS.md), and `SECURITY.md`; add to README **Documentation**.
+  - **Files:** create `docs/DATA_PROCESSING.md`; edit `README.md`, `SECURITY.md` (link), `CHANGELOG.md`.
+  - **Acceptance criteria:** PII inventory matches what the repos actually persist; retention windows are stated; sub-processors and what data they receive are listed; the deletion gap is clearly flagged with a concrete proposed endpoint; links resolve.
+  - **Verify:** cross-check the inventory against [`internal/repos/keys.go`](internal/repos/keys.go) and the repo structs; confirm no claimed deletion endpoint that doesn't exist.
+  - **Guardrails:** be accurate, not aspirational — if a right isn't implemented, say so and file it as future work. This is documentation only; do **not** implement the deletion endpoint in this task.
+- [ ] **92. Third-party notices (NOTICE)** — Generate attribution for bundled Go/npm dependencies and any fonts/assets.
+  - **Goal:** a maintainable `NOTICE` file (and a regeneration script) listing third-party licenses for shipped dependencies, satisfying attribution obligations alongside the MIT [`LICENSE`](LICENSE).
+  - **Approach:** auto-generate from the dependency manifests with **[go-licenses](https://github.com/google/go-licenses)** (Go) and a license checker for npm (e.g. `license-checker-rseidelsohn` or `npm`'s own data), then hand-add any bundled fonts/images that aren't covered by a package manager.
+  - **Steps:**
+    1. Add `scripts/gen-notices.sh` that runs `go-licenses report ./cmd/server` (and key `internal/...` if needed) and an npm license summary, concatenating into `NOTICE` with a generated-on header. Pin tool versions.
+    2. Run it to produce `NOTICE`; manually review for any `unknown`/restrictive licenses (go-licenses flags forbidden/unknown — investigate, don't suppress).
+    3. Add a short **third-party assets** section for anything not from go.mod/package.json (Tailwind output, fonts, icons, images in [`images/`](images/)).
+    4. Reference `NOTICE` from `LICENSE`/README and note in CONTRIBUTING (task 90) that adding a dependency means regenerating notices. Optionally add a CI check (non-blocking) that `NOTICE` isn't stale.
+  - **Files:** create `NOTICE`, `scripts/gen-notices.sh`; edit `README.md`, `CHANGELOG.md`; optionally `.github/workflows/ci.yml` (advisory check).
+  - **Acceptance criteria:** `NOTICE` lists Go + npm dependency licenses; the generation script reproduces it; no forbidden/unknown licenses are silently included (any flagged ones are resolved or explained); fonts/assets are attributed.
+  - **Verify:** `bash scripts/gen-notices.sh` regenerates `NOTICE` with no diff; `go-licenses check ./cmd/server` reports no forbidden licenses (or documents exceptions).
+  - **Guardrails:** don't hand-edit `NOTICE` content that the script produces (only the curated assets section). Investigate, never suppress, a forbidden/unknown license finding.
+- [ ] **93. Operator manual** — One consolidated operations doc: install, configure, upgrade, backup, restore, rollback.
+  - **Goal:** a single entry-point document an operator can follow end-to-end, stitching together the deploy (81/82), config, backup/restore (59), and rollback procedures — so they don't have to assemble it from scattered docs.
+  - **Approach:** `docs/OPERATOR_MANUAL.md` as a hub that *links* the deep docs and adds the connective tissue (full config reference table, upgrade/rollback runbook). Generate a PDF only as an optional convenience.
+  - **Steps:**
+    1. Sections: **Install** (Helm chart from task 81 and `docker-compose.prod.yml`; ports = **8080**), **Configure** (a complete env-var reference table sourced from [`internal/config/config.go`](internal/config/config.go) + [`.env.example`](.env.example) — required vs optional, defaults), **Operate** (health `/health`, readiness `/ready`, metrics `/metrics`, feature flags), **Upgrade** (bump image digest, `helm upgrade`, watch readiness), **Backup/Restore** (link [docs/REDIS_BACKUP_AND_RESTORE.md](docs/REDIS_BACKUP_AND_RESTORE.md) + [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md)), **Rollback** (`helm rollback` or redeploy previous signed digest from task 83), **Incidents** (link the on-call runbook task 88).
+    2. Build the env table directly from the `Config` struct so it's complete and accurate; mark prod-critical vars (admin password, secrets, TLS).
+    3. Optional: a `make docs-pdf` / pandoc note to render the manual to PDF (don't commit a binary PDF).
+    4. Link from README **Documentation** as the top operations entry point.
+  - **Files:** create `docs/OPERATOR_MANUAL.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** the env reference matches `internal/config/config.go` (no missing/renamed vars); install/upgrade/rollback/backup each have concrete commands or resolve to a linked doc; ports reference 8080; PDF generation (if included) is a documented command, not a committed binary.
+  - **Verify:** diff the env table against `config.go` field-by-field; confirm all linked docs exist.
+  - **Guardrails:** don't duplicate deep content — link it. Keep the config table in sync with `config.go`. No committed PDFs/binaries (per the no-binary rule).
+- [ ] **94. API deprecation communications** — Reusable templates for announcing breaking/deprecated API changes.
+  - **Goal:** when a `/api/v1` endpoint or field is deprecated, maintainers have ready templates (changelog entry, email/notice, and the HTTP headers) consistent with the existing policy.
+  - **Approach:** `docs/API_DEPRECATION_TEMPLATE.md` operationalizing [docs/API_VERSIONING.md](docs/API_VERSIONING.md) (RFC 9745 `Deprecation`, RFC 8594 `Sunset`, `Link` successor; 90-day minimum notice).
+  - **Steps:**
+    1. Provide fill-in-the-blank templates: a **CHANGELOG** `Deprecated` entry, a **customer email/notice**, and a **status-page/blog** note (ties to task 98).
+    2. Show the exact response headers to set (`Deprecation`, `Sunset`, `Link rel="successor-version"`) and a minimal Go middleware snippet sketch for emitting them on a deprecated route (illustrative — implementation is a separate future task).
+    3. Include a **timeline checklist** (T-90 announce, T-30 reminder, T-0 sunset) and where each comms artifact goes.
+    4. Link from [docs/API_VERSIONING.md](docs/API_VERSIONING.md), README, and the operator manual.
+  - **Files:** create `docs/API_DEPRECATION_TEMPLATE.md`; edit `docs/API_VERSIONING.md` (link), `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** templates exist for changelog + email + status note; header examples match the RFCs and the versioning doc; the 90-day timeline is concrete; links resolve.
+  - **Verify:** confirm header names/semantics against [docs/API_VERSIONING.md](docs/API_VERSIONING.md); markdown links resolve.
+  - **Guardrails:** documentation/templates only — do not change runtime behavior or add deprecation headers to live routes in this task.
+- [ ] **95. security.txt (RFC 9116)** — Serve `/.well-known/security.txt` so researchers can find the disclosure process.
+  - **Goal:** the app serves a valid RFC 9116 `security.txt` at `/.well-known/security.txt` (with the legacy `/security.txt` alias) pointing to [`SECURITY.md`](SECURITY.md). This is the one open task with a small code change (a static route).
+  - **Approach:** add a static file under [`static/.well-known/`](static/) and serve it via a route in [`internal/server/routes.go`](internal/server/routes.go) (`registerStaticRoutes`). Add a smoke test.
+  - **Steps:**
+    1. Create `static/.well-known/security.txt` with RFC 9116 fields: `Contact:` (the `security@example.com` from `SECURITY.md` — keep consistent), `Expires:` (a future ISO 8601 timestamp; document that it must be refreshed), `Policy:` (URL to `SECURITY.md`/security policy), `Preferred-Languages: en`. Optionally `Canonical:`.
+    2. In `registerStaticRoutes` ([`internal/server/routes.go`](internal/server/routes.go)) add `r.StaticFile("/.well-known/security.txt", filepath.Join("static", ".well-known", "security.txt"))` and an alias `r.StaticFile("/security.txt", ...)`. (Note: the broad `r.Static("/static", "./static")` does not cover `/.well-known`, so the explicit route is required.) Ensure it serves `text/plain`.
+    3. Confirm the [`Dockerfile`](Dockerfile) copies `static/` into the image (it does — `COPY --from=builder /app/static ./static`), so the dotfile ships. Verify no `.dockerignore` rule excludes dotfiles under `static/`.
+    4. Add a handler/route test (mirror [`internal/server/route_groups_v1_test.go`](internal/server/route_groups_v1_test.go) style) asserting `GET /.well-known/security.txt` → 200, `Contact:` present, body references the policy. Keep CSP/security-header middleware compatibility (plain text response).
+    5. Cross-link from `SECURITY.md` ("machine-readable policy at `/.well-known/security.txt`") and README.
+  - **Files:** create `static/.well-known/security.txt`, a test (e.g. `internal/server/security_txt_test.go`); edit [`internal/server/routes.go`](internal/server/routes.go), `SECURITY.md`, `README.md`, `CHANGELOG.md`; check `.dockerignore`.
+  - **Acceptance criteria:** `GET /.well-known/security.txt` and `GET /security.txt` return 200 `text/plain` with valid RFC 9116 fields including a future `Expires`; the file ships in the Docker image; `SECURITY.md` references it; tests pass.
+  - **Verify:** `go test ./internal/server -run SecurityTxt`; `gofmt -s -w . && goimports -w . && golangci-lint run ./...`; manual `curl -fsS localhost:8080/.well-known/security.txt`.
+  - **Guardrails:** `Expires` must be a future date — note in the file/CHANGELOG that it needs periodic refresh. Keep the contact consistent with `SECURITY.md`. Don't expose any other dotfiles via the new route.
 
 ## Phase 20 — Product & competitive parity
 
-- [ ] **96. Real provider credentials path** — Complete Phase 10 roadmap item: production RPC and pricing keys with key rotation doc.
-- [ ] **97. Feature parity matrix** — Table vs 2–3 named competitors: blocks, mempool, fees, RBF, Lightning (honest gaps).
-- [ ] **98. Public status page** — Uptime history for API and explorer (external service or self-hosted).
-- [ ] **99. Community channel** — Discussions, Discord, or forum linked from README for feedback loop.
-- [ ] **100. Release certification checklist** — Pre-1.0 or GA: security review, load test, DR drill, legal review of ToS/Privacy.
+- [ ] **96. Real provider credentials path** — Document obtaining, configuring, and rotating production RPC/pricing/news/email credentials (closes the open Phase 10 item).
+  - **Goal:** an operator can move from dev placeholders to real provider credentials with data fidelity, and knows the rotation cadence for each secret. This completes the open Phase 10 item in [ROADMAP.md](ROADMAP.md).
+  - **Approach:** documentation that maps each external dependency to its env vars (from [`internal/config/config.go`](internal/config/config.go) + [`.env.example`](.env.example)), how to obtain a key, dev vs prod values, and a rotation procedure — with secrets supplied only via secret manager/env (ties to tasks 81/84).
+  - **Steps:**
+    1. Enumerate providers and their env vars: **GetBlock** RPC (`GETBLOCK_BASE_URL`, `GETBLOCK_ACCESS_TOKEN`), **CoinGecko** pricing, **TheNewsAPI** news, **SMTP** email, **Sentry** DSN, **admin** credentials, **METRICS_TOKEN**, **API keys** salts/pepper if any.
+    2. For each: where to get the key, free vs paid tier limits, the exact env var(s), the dev placeholder (e.g. `https://example.invalid/`), and behavior when absent (feature flags / degraded mode).
+    3. **Rotation:** cadence per secret, zero-downtime rotation steps (rolling restart picks up new env), and how this interacts with the Helm `secretRef`/OIDC deploy.
+    4. Update [ROADMAP.md](ROADMAP.md) Phase 10 (tick "Replace placeholder RPC/pricing keys…") and ensure `.env.example` documents every var with a comment.
+    5. Cross-link [docs/SMTP_TLS.md](docs/SMTP_TLS.md), [docs/FEATURE_FLAGS.md](docs/FEATURE_FLAGS.md), the operator manual (task 93), and `SECURITY.md` (treat keys like passwords).
+  - **Files:** create `docs/PROVIDER_CREDENTIALS.md`; edit `.env.example`, `ROADMAP.md`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** every external provider has a documented env var, acquisition path, and rotation cadence matching `config.go`/`.env.example`; the Phase 10 roadmap item is ticked; degraded behavior on missing keys is described.
+  - **Verify:** diff documented vars against `internal/config/config.go` and `.env.example`; confirm placeholders match what the app/tests expect.
+  - **Guardrails:** never commit real credentials or example-but-valid keys. Use `*.invalid` placeholders. Document, don't change, app behavior in this task.
+- [ ] **97. Feature parity matrix** — Honest capability comparison vs leading public explorers.
+  - **Goal:** a maintained table comparing this explorer to 2–3 named competitors so users and stakeholders see real strengths and gaps.
+  - **Approach:** `docs/FEATURE_PARITY.md` comparing against e.g. **mempool.space**, **blockstream.info (esplora)**, and **blockchain.com**, across capability rows, with sourced/honest ✓/partial/✗ marks and notes.
+  - **Steps:**
+    1. Rows: block lookup, transaction lookup, address lookup, **mempool view**, **fee estimation**, **RBF/CPFP awareness**, **Lightning**, multi-currency pricing, portfolios/watchlists, news, public REST API + OpenAPI, machine API keys, self-host, i18n, accessibility.
+    2. Columns: this project + the chosen competitors. Be candid where this app is read-only/lacks live mempool or Lightning (it relies on an RPC provider). Add a short note per gap and whether it's on the roadmap.
+    3. Add a "Where we win" summary (self-host, API/OpenAPI/Postman, portfolios/watchlists, observability, i18n/accessibility) and "Known gaps" list feeding future product tasks.
+    4. Date the matrix and note it needs periodic refresh; link from README **Documentation** (and a short summary in README intro if desired).
+  - **Files:** create `docs/FEATURE_PARITY.md`; edit `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** ≥3 explorers compared across the capability rows; marks are honest (gaps acknowledged, not hidden); each gap has a note; matrix is dated.
+  - **Verify:** spot-check competitor capabilities against their public docs/sites at time of writing; confirm this project's marks against actual features in the repo.
+  - **Guardrails:** be honest about gaps — overstating parity erodes trust. Cite competitor capabilities from current public sources; note the as-of date.
+- [ ] **98. Public status page** — Externally visible uptime/health history for the API and explorer.
+  - **Goal:** users can see current status and uptime history; incidents are communicated. Reuses the existing `/health`, `/ready`, and `/api/v1/network-status` endpoints.
+  - **Approach:** recommend **config-as-code** self-hosting with **[Gatus](https://github.com/TwiN/gatus)** (YAML config, fits this repo's style, scrapes HTTP endpoints, built-in history + badges) as the primary path, with a hosted SaaS (Better Stack / Statuspage / Instatus) as the alternative for those who don't want to self-host the status page itself.
+  - **Steps:**
+    1. Add `monitoring/status/gatus-config.yaml` defining endpoints to probe: `GET /health` (liveness), `GET /ready` (readiness, expect 200/503 semantics), `GET /api/v1/network-status` (functional), with intervals, conditions (`[STATUS] == 200`, latency thresholds tied to the SLO doc), and alerting integration placeholders.
+    2. Add `docs/STATUS_PAGE.md`: how to run Gatus (container), how to point it at prod, how it differs from internal Prometheus alerting (external vantage point), and the SaaS alternative with tradeoffs. Note it should run **outside** the app's own infra so it can detect full outages.
+    3. Add an incident-communication note tying to the on-call runbook (task 88) and deprecation comms (task 94).
+    4. Link a "Status" entry from README (placeholder URL) and the operator manual.
+  - **Files:** create `monitoring/status/gatus-config.yaml`, `docs/STATUS_PAGE.md`; edit `monitoring/README.md`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** Gatus config is valid YAML probing the three endpoints with sensible conditions/intervals; doc explains self-host vs SaaS and why the status page runs off-infra; SLO-aligned latency thresholds; links resolve.
+  - **Verify:** YAML lint the Gatus config; if Gatus is available, run it against a locally-running app and confirm it reports up.
+  - **Guardrails:** the status page must observe from outside the app's failure domain. Don't expose `/metrics` or admin endpoints publicly via the status config. Use placeholder hostnames.
+- [ ] **99. Community channel** — A documented feedback/discussion channel linked from the project.
+  - **Goal:** users and contributors have an obvious place to ask questions and give feedback, lowering friction and feeding the roadmap.
+  - **Approach:** prefer **GitHub Discussions** (zero extra infra, ties to issues/PRs); document enabling it and optionally a Discord/forum. Mostly README/.github changes.
+  - **Steps:**
+    1. Add a **Community** section to README linking GitHub Discussions (note the maintainer must enable it in repo settings — flag as a manual step), the issue tracker for bugs, and `SECURITY.md` for vulnerabilities.
+    2. Optionally add `.github/DISCUSSION_TEMPLATE/` or issue-form templates (`.github/ISSUE_TEMPLATE/`) to route feedback (bug / feature / question).
+    3. Cross-link from `CONTRIBUTING.md` (task 90) and the on-call/incident comms (status page task 98) so users know where outage updates appear.
+    4. If a Discord/Matrix is desired, add a placeholder invite the maintainer fills in; don't fabricate a live link.
+  - **Files:** edit `README.md`; optionally create `.github/ISSUE_TEMPLATE/*.yml`, `.github/DISCUSSION_TEMPLATE/*`; edit `CHANGELOG.md`.
+  - **Acceptance criteria:** README has a Community section pointing to Discussions/issues/security; any external chat link is a clearly-marked placeholder; issue templates (if added) are valid GitHub issue forms.
+  - **Verify:** validate any `.github/ISSUE_TEMPLATE/*.yml` against GitHub's issue-forms schema (or render preview); confirm README links resolve.
+  - **Guardrails:** enabling Discussions is a manual repo-settings step — call it out, don't claim it's done. No fabricated invite links.
+- [ ] **100. Release certification checklist** — A go/no-go gate consolidating all quality signals before a GA/1.0 release.
+  - **Goal:** a single checklist that must pass before a major/GA release, tying together security, load, DR, accessibility, performance, SLO, and legal review — superseding/extending the existing [`launch_checklist.md`](launch_checklist.md).
+  - **Approach:** `docs/RELEASE_CERTIFICATION.md` as the authoritative pre-release gate, each item linking to the doc/process that proves it. Reconcile with the existing root `launch_checklist.md` (extend it or mark it superseded and link).
+  - **Steps:**
+    1. Sections with checkboxes + evidence links: **Security** (threat model [docs/THREAT_MODEL.md](docs/THREAT_MODEL.md), security headers, external pen test [docs/PENETRATION_TESTING.md](docs/PENETRATION_TESTING.md), gitleaks/gosec/Trivy green, image signing task 83), **Performance/Load** (load test baselines [scripts/loadtest/BASELINE.md](scripts/loadtest/BASELINE.md), performance budgets [docs/PERFORMANCE_BUDGETS.md](docs/PERFORMANCE_BUDGETS.md)/Lighthouse), **Reliability** (SLO [docs/SLO_AND_ERROR_BUDGET.md](docs/SLO_AND_ERROR_BUDGET.md), DR drill [docs/DISASTER_RECOVERY_DRILL.md](docs/DISASTER_RECOVERY_DRILL.md), backups), **Accessibility/i18n**, **Ops** (operator manual task 93, on-call runbook task 88, status page task 98, log aggregation task 86), **Compliance/Legal** (data processing task 91, third-party notices task 92, and **ToS/Privacy policy** — note these likely **don't exist yet**; flag as a prerequisite to GA), **API** (OpenAPI validated, versioning/deprecation policy, changelog updated).
+    2. Reconcile with [`launch_checklist.md`](launch_checklist.md): fold its items in and either redirect it to this doc or keep it as the lightweight pre-deploy subset.
+    3. Define the **sign-off** model (who approves each area) and a release-tag procedure that triggers the signed-image release workflow (task 83).
+    4. Link from README **Documentation** and the operator manual.
+  - **Files:** create `docs/RELEASE_CERTIFICATION.md`; edit `launch_checklist.md`, `README.md`, `CHANGELOG.md`.
+  - **Acceptance criteria:** every checklist item links to concrete evidence/process; gaps (e.g. missing ToS/Privacy) are explicitly flagged as GA prerequisites rather than checked off; relationship to `launch_checklist.md` is unambiguous; sign-off model defined.
+  - **Verify:** confirm every linked doc exists; ensure no item is pre-checked without real evidence.
+  - **Guardrails:** this is a gate, not a formality — don't pre-tick items. Flag legal artifacts (ToS/Privacy) that don't yet exist as blockers, and recommend creating them as follow-up product/legal work.
 
 ---
 
