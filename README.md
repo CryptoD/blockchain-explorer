@@ -241,6 +241,7 @@ bitcoin-explorer/
 - **Cache**: Redis
 - **Blockchain Integration**: Bitcoin Core RPC
 - **Deployment**: Docker, Kubernetes (optional)
+- **Production deploy**: [Helm chart](deploy/helm/blockchain-explorer/) and [docker-compose.prod.yml](docker-compose.prod.yml) — see [deploy/README.md](deploy/README.md)
 
 ### Development Setup
 
@@ -390,6 +391,7 @@ docker run --rm -v /var/run/docker.sock:/var/run/docker.sock aquasec/trivy:lates
 
 ## Documentation
 
+- [Production deployment (Helm & Compose)](deploy/README.md) - install, upgrade, secrets wiring
 - [Changelog (semver)](CHANGELOG.md) - single app + API release notes
 - [Roadmap (phases 1–10)](ROADMAP.md) - shipped features and Phase 10 follow-ups
 - [Roadmap to 100/100](ROADMAP_TO_100.md) - extended quality backlog (see checklist in that file)

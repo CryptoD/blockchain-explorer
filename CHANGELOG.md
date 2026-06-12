@@ -4,6 +4,14 @@ All notable changes to this project are documented in this file. The project use
 
 ## [Unreleased]
 
+### Added
+
+- **Production deployment:** Helm chart at [`deploy/helm/blockchain-explorer/`](deploy/helm/blockchain-explorer/) and single-host overlay [`docker-compose.prod.yml`](docker-compose.prod.yml). Install/upgrade guide: [`deploy/README.md`](deploy/README.md).
+
+### Changed
+
+- **Kubernetes manifests:** [`k8s/deployment.yaml`](k8s/deployment.yaml) probes and service port corrected to **8080**; unused Postgres resources moved to [`k8s/legacy-postgres.yaml`](k8s/legacy-postgres.yaml). [`k8s/ingress.yaml`](k8s/ingress.yaml) backend port **8080**.
+
 ### Documentation
 
 - Aligned CSRF/session, threat model, bounded contexts, Redis key safety, internal package inventory, `SECURITY.md`, and `readme.md` with **machine API keys** (`Bearer bkx_*`).

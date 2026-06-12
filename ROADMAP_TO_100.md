@@ -6,7 +6,7 @@ This document continues [ROADMAP.md](ROADMAP.md). It lists **100 concrete tasks*
 
 **How to use:** work top-to-bottom within each phase where dependencies exist, or pick tasks by theme. Check boxes as you complete items.
 
-**Progress (checklist in this file):** tasks **1–69**, **71–72**, and **73–80** are **done**. Task **70** (optional webhooks) and **81–100** are **open**. Update this sentence when you complete more tasks.
+**Progress (checklist in this file):** tasks **1–69**, **71–72**, **73–80**, and **81** are **done**. Task **70** (optional webhooks) and **82–100** are **open**. Update this sentence when you complete more tasks.
 
 > **For the implementing model/human:** the open tasks (70, 81–100) below were rewritten into self-contained work orders with **Goal / Approach / Steps / Files / Acceptance / Verify / Guardrails**. Read the **[Execution guide](#execution-guide-for-the-implementing-model)** before starting, then do **one task per commit**, keep CI green, and tick the box + update the progress line above when each lands.
 
@@ -142,19 +142,7 @@ Read this once before starting any task below (70, 81–100). These tasks are de
 
 ## Phase 18 — Operations & DevOps
 
-- [ ] **81. Helm chart + compose prod overlay** — Production-ready, parameterized deploy with resource limits and secrets wiring.
-  - **Goal:** make the app deployable to Kubernetes via a versioned Helm chart, and to a single host via a hardened compose overlay, without hand-editing raw manifests.
-  - **Approach:** add `deploy/helm/blockchain-explorer/` (Helm v3 chart) as the primary path; add `docker-compose.prod.yml` as the lightweight path. Drive both from env/values, never bake secrets.
-  - **Steps:**
-    1. Create the Helm chart: `Chart.yaml`, `values.yaml`, and templates for `Deployment`, `Service`, `Ingress` (reuse intent from [`k8s/ingress.yaml`](k8s/ingress.yaml) + [`k8s/cluster-issuer.yaml`](k8s/cluster-issuer.yaml)), `HorizontalPodAutoscaler`, `PodDisruptionBudget`, and `ServiceAccount`. **Default to external/managed Redis** via a `redis.external` value block (host/port/auth `secretRef`) rather than bundling a subchart — Bitnami changed its catalog/image policy in 2025 (free Docker Hub images moved to a `bitnamilegacy` repo), so a hard `bitnami/redis` dependency is fragile. If you want an in-cluster Redis for demos, gate it behind `redis.deployInCluster=false` (default off) and document the image source the operator must pin; do not make CI/`helm lint` depend on a remote chart repo.
-    2. In `values.yaml` expose: image repo/tag/digest, replica count, `resources.requests/limits` (sensible defaults, e.g. 100m/256Mi requests), liveness `/health` + readiness `/ready` on **port 8080** (fix the 3000 mismatch), env block for `APP_ENV`, `REDIS_HOST/PORT`, `GETBLOCK_*`, `ADMIN_*`, feature flags, and a `secretRef` for sensitive values. Set `securityContext` (runAsNonRoot, readOnlyRootFilesystem, drop ALL caps) — coordinate with task 82.
-    3. Add `docker-compose.prod.yml`: app image (built artifact, not `golang:1.21` live-mount), `redis` with persistence, `restart: unless-stopped`, `deploy.resources.limits`, read-only FS + tmpfs, healthchecks hitting `:8080/health`. Drop the Postgres/Adminer services (app is Redis-only) or clearly mark them optional/legacy.
-    4. Fix `k8s/deployment.yaml` while here: correct port to 8080, remove the malformed `env:` entry, and either drop Postgres or annotate it as legacy.
-    5. Document install/upgrade in a new `deploy/README.md` and link from `README.md`.
-  - **Files:** create `deploy/helm/blockchain-explorer/**`, `docker-compose.prod.yml`, `deploy/README.md`; edit `k8s/deployment.yaml`, `README.md`, `CHANGELOG.md`, `.env.example` (note prod-only vars).
-  - **Acceptance criteria:** `helm lint deploy/helm/blockchain-explorer` passes; `helm template ... | kubectl apply --dry-run=client -f -` succeeds; `docker compose -f docker-compose.prod.yml config` is valid; no secrets committed; probes/ports reference 8080.
-  - **Verify:** `helm lint`, `helm template`, `docker compose -f docker-compose.prod.yml config`.
-  - **Guardrails:** secrets only via `valuesFrom`/`secretRef`/env — never literals. Keep dev `docker-compose.yml` working unchanged.
+- [x] **81. Helm chart + compose prod overlay** — Production-ready, parameterized deploy with resource limits and secrets wiring. **Done:** Helm chart [`deploy/helm/blockchain-explorer/`](deploy/helm/blockchain-explorer/) (Deployment, Service, Ingress, HPA, PDB, ServiceAccount; external Redis default, optional in-cluster Redis gated off); prod overlay [`docker-compose.prod.yml`](docker-compose.prod.yml); guide [`deploy/README.md`](deploy/README.md); fixed [`k8s/deployment.yaml`](k8s/deployment.yaml) (port **8080**, malformed env removed, Postgres moved to [`k8s/legacy-postgres.yaml`](k8s/legacy-postgres.yaml)); [`k8s/ingress.yaml`](k8s/ingress.yaml) service port **8080**.
 - [ ] **82. Multi-stage Docker hardening** — Distroless, non-root, read-only root filesystem.
   - **Goal:** shrink and harden the runtime image; eliminate shell/package manager; run unprivileged with a read-only FS.
   - **Approach:** keep the existing multi-stage [`Dockerfile`](Dockerfile) (node frontend stage + golang builder) but replace the `alpine:latest` runtime with **`gcr.io/distroless/static-debian12:nonroot`** (the Go binary is already `CGO_ENABLED=0`). Optionally add a `chainguard/static` variant.

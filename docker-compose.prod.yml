@@ -1,0 +1,80 @@
+# Production overlay for single-host deployment.
+# Build the image first: docker build -t blockchain-explorer:latest .
+# Configure secrets via .env (never commit real values).
+#
+# Usage:
+#   docker compose -f docker-compose.prod.yml up -d
+#
+# The app listens on :8080 inside the container (see internal/server/run.go).
+# Postgres/Adminer from docker-compose.yml are omitted — the app is Redis-only.
+
+services:
+  app:
+    image: blockchain-explorer:latest
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: blockchain-explorer-prod
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    ports:
+      - "${APP_PUBLISH_PORT:-8080}:8080"
+    environment:
+      APP_ENV: ${APP_ENV:-production}
+      APP_PORT: "8080"
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      GETBLOCK_BASE_URL: ${GETBLOCK_BASE_URL:?set GETBLOCK_BASE_URL}
+      GETBLOCK_ACCESS_TOKEN: ${GETBLOCK_ACCESS_TOKEN:?set GETBLOCK_ACCESS_TOKEN}
+      ADMIN_USERNAME: ${ADMIN_USERNAME:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?set ADMIN_PASSWORD}
+      METRICS_ENABLED: ${METRICS_ENABLED:-true}
+      FEATURE_NEWS_ENABLED: ${FEATURE_NEWS_ENABLED:-true}
+      FEATURE_PRICE_ALERTS_ENABLED: ${FEATURE_PRICE_ALERTS_ENABLED:-true}
+      SENTRY_DSN: ${SENTRY_DSN:-}
+      METRICS_TOKEN: ${METRICS_TOKEN:-}
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+    deploy:
+      resources:
+        limits:
+          cpus: "1.0"
+          memory: 512M
+        reservations:
+          cpus: "0.1"
+          memory: 256M
+    # HTTP probe: requires wget or curl in the runtime image. Current Alpine runtime
+    # has neither; use Kubernetes/Helm HTTP probes for production, or add wget until task 82 (distroless).
+    # Uncomment after your runtime image includes wget/curl, or override in a local compose override file.
+    # healthcheck:
+    #   test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8080/health >/dev/null 2>&1 || exit 1"]
+    #   interval: 10s
+    #   timeout: 5s
+    #   retries: 5
+    #   start_period: 30s
+    security_opt:
+      - no-new-privileges:true
+
+  redis:
+    image: redis:7
+    container_name: blockchain-explorer-redis-prod
+    restart: unless-stopped
+    command: ["redis-server", "--appendonly", "yes"]
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    deploy:
+      resources:
+        limits:
+          cpus: "0.5"
+          memory: 256M
+
+volumes:
+  redis-data:
